@@ -771,6 +771,7 @@ async function api(request, env, path) {
     if (path.startsWith('plus/anki/') && !flags.includes('plus.anki')) throw new Fail(404, 'not_found', 'Not found.');
     if (path === 'plus/anki/pull') return anki.pull(env, Number(q.get('since')) || 0);
     if (path === 'plus/anki/check') return anki.check(env);
+    if (path === 'plus/anki/media-map') return json(await anki.mediaMap(env));
     if (path === 'plus/taste') return taste.board(env);
     if (path === 'plus/taste/results') return taste.results(env);
     if (path === 'plus/taste/img') return taste.img(env, q.get('item') ?? '', Number(q.get('n')));
@@ -1048,7 +1049,7 @@ const STORES = {
   chrome: 'https://chromewebstore.google.com/detail/chinese-brain/pdhgpdlkjdkehlpoomonehbnhiplgaao',
 };
 
-const PLUS_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://upload.wikimedia.org https://thumb.wikimedia.org; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; media-src 'self' blob: data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+const PLUS_CSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://upload.wikimedia.org https://thumb.wikimedia.org; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; media-src 'self' blob: data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
 
 /** Addresses from before the extension's pages moved under /brain. */
 const MOVED = { '/welcome': '/brain/guide#welcome', '/brain/welcome': '/brain/guide#welcome', '/privacy': '/brain/privacy', '/dashboard': '/brain/dashboard', '/guide': '/brain/guide', '/whats-new': '/brain/whats-new' };
@@ -1110,10 +1111,12 @@ export default {
       const h = new Headers(res.headers);
       h.set('Content-Security-Policy', "default-src 'self'; connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com");
       h.set('Cache-Control', 'no-cache');
-      h.set('Service-Worker-Allowed', '/plus/');
+      h.set('Service-Worker-Allowed', '/plus');
       return new Response(res.body, { status: res.status, headers: h });
     }
-    if (path === '/plus' || path === '/plus/taste' || path === '/plus/review') {
+    // the reviews were a page of their own (Stage 4, Nov 22); now they are a tab of the board
+    if (path === '/plus/review') return Response.redirect(`${url.origin}/plus#reviews`, 302);
+    if (path === '/plus' || path === '/plus/taste') {
       const res = await pageFile(env, request, path);
       const h = new Headers(res.headers);
       h.set('Content-Security-Policy', PLUS_CSP);

@@ -110,5 +110,12 @@ html.rv-dragging,html.rv-dragging *{cursor:grabbing!important;user-select:none;-
   .rv-tile[aria-pressed=true]:hover{box-shadow:0 0 0 2.5px var(--ink)}.rv-f img:hover{outline:none}.rv-mt:hover:not(:disabled){background:none;color:var(--ink-2);box-shadow:inset 0 0 0 1.5px var(--hair)}}
 
 /* the way to his reviews (Stage 4, /plus/review), in the bar */
-.rv-go { color: inherit; text-decoration: none; font-weight: 600; padding: 6px 10px; border-radius: 8px; margin-right: 4px; }
-@media (hover: hover) { .rv-go:hover { background: rgba(0, 0, 0, 0.05); } }
+
+/* the note type: Word (his Chinese note), Phrase (picture → phrase only), Radical (a Mnemonic instead of the Word) */
+.rv-type{display:inline-flex;justify-self:start;gap:2px;padding:3px;border-radius:10px;background:var(--wash)}
+.rv-type button{border:0;background:none;border-radius:8px;padding:6px 12px;font:500 14px/1 var(--latin);color:var(--ink-3);cursor:pointer}
+.rv-type button[aria-checked="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px var(--shade)}
+.rv-type button:active{scale:.97}
+.rv[data-type="Chinese radicals"] .rv-word{display:none}
+.rv:not([data-type="Chinese radicals"]) .rv-mnemonic{display:none}
+.rv-mnemonic .rv-f{font-size:20px}

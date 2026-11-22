@@ -128,31 +128,46 @@ Chinese punctuation in Chinese, English punctuation in English.`;
 }
 
 // ---------- a note made on the Cards page ----------
-type NoteType = { id: number; fields: { name: string; ord: number }[]; templates: { ord: number; qfmt: string }[] };
-const BOARD_FIELDS: Record<string, string> = { Chinese: 'chinese', Word: 'word', Picture: 'picture', Notes: 'notes', Pinyin: 'pinyin' };
+type NoteType = { id: number; name: string; fields: { name: string; ord: number }[]; templates: { ord: number; qfmt: string }[] };
+const BOARD_FIELDS: Record<string, string> = { Chinese: 'chinese', Word: 'word', Mnemonic: 'mnemonic', Picture: 'picture', Notes: 'notes', Pinyin: 'pinyin' };
+const put = (env: Env, kind: string, rid: string | number, data: unknown, now: number) =>
+  env.CBP.prepare('INSERT INTO anki (kind, id, data, mod, usn) VALUES (?, ?, ?, ?, ?) ON CONFLICT (kind, id) DO UPDATE SET data = excluded.data, mod = excluded.mod, usn = excluded.usn').bind(kind, String(rid), data === null ? null : JSON.stringify(data), now, nextUsn());
 
-/** Once Anki has moved here (meta `live`), a note saved on /plus (db notes/<id>) becomes a note of his "Chinese" note
- *  type with its cards, new, at the end of the new queue; saving it again updates the fields and leaves the cards be. */
+/** Once Anki has moved here (meta `live`), a note saved on /plus (db notes/<id>) becomes a note of the type he picked
+ *  there (Chinese, Chinese phrases or Chinese radicals; by name) with its cards, new, at the end of the new queue.
+ *  Saving it again updates the fields and leaves the cards be; switching its type before any review makes it anew. */
 export async function fromBoard(env: Env, id: string, n: Record<string, unknown> | null) {
   if (!n || !(await meta(env, 'live'))) return null;
   const col = await meta<ColMeta>(env, 'col');
   if (!col) return null;
-  const nt = (await env.CBP.prepare("SELECT data FROM anki WHERE kind = 'notetype' AND id = ?").bind(String(col.notetype)).first<{ data: string }>())?.data;
-  if (!nt) return null;
-  const type = JSON.parse(nt) as NoteType;
+  const { results } = await env.CBP.prepare("SELECT data FROM anki WHERE kind = 'notetype' AND data IS NOT NULL").all<{ data: string }>();
+  const types = results.map((r) => JSON.parse(r.data) as NoteType);
+  const type = types.find((t) => t.name === n.type) ?? types.find((t) => t.id === col.notetype);
+  if (!type) return null;
   const link = await meta<{ nid: number }>(env, 'board:' + id);
   const now = Date.now();
-  const flds = type.fields.sort((a, b) => a.ord - b.ord).map((f) => (f.name === 'Audio' ? (n.audio ? `[sound:${n.audio}]` : '') : String(n[BOARD_FIELDS[f.name]] ?? '')));
-  const put = (kind: string, rid: string | number, data: unknown) =>
-    env.CBP.prepare('INSERT INTO anki (kind, id, data, mod, usn) VALUES (?, ?, ?, ?, ?) ON CONFLICT (kind, id) DO UPDATE SET data = excluded.data, mod = excluded.mod, usn = excluded.usn').bind(kind, String(rid), JSON.stringify(data), now, nextUsn());
+  const flds = type.fields.slice().sort((a, b) => a.ord - b.ord).map((f) => (f.name === 'Audio' ? (n.audio ? `[sound:${n.audio}]` : '') : String(n[BOARD_FIELDS[f.name]] ?? '')));
+  const stmts: Stmt[] = [];
   if (link) {
     const old = (await env.CBP.prepare("SELECT data FROM anki WHERE kind = 'note' AND id = ?").bind(String(link.nid)).first<{ data: string | null }>())?.data;
-    if (!old) return null; // he deleted it in Browse: leave it gone
-    await put('note', link.nid, { ...JSON.parse(old), flds, mod: now }).run();
-    return { nid: link.nid, updated: true };
+    if (!old) return null; // he deleted it while reviewing: leave it gone
+    const note = JSON.parse(old);
+    if (note.mid === type.id) {
+      await put(env, 'note', link.nid, { ...note, flds, mod: now }, now).run();
+      return { nid: link.nid, updated: true };
+    }
+    // another type: anew, unless he has already reviewed one of its cards (then only the fields that share a name move)
+    const { results: cs } = await env.CBP.prepare("SELECT id, data FROM anki WHERE kind = 'card' AND data LIKE ?").bind(`%"nid":${link.nid},%`).all<{ id: string; data: string }>();
+    if (cs.some((c) => (JSON.parse(c.data).revs ?? []).length)) {
+      const was = types.find((t) => t.id === note.mid);
+      const by = new Map(type.fields.map((f) => [f.name, flds[f.ord]]));
+      await put(env, 'note', link.nid, { ...note, flds: note.flds.map((v: string, i: number) => by.get(was?.fields.find((f) => f.ord === i)?.name ?? '') ?? v), mod: now }, now).run();
+      return { nid: link.nid, updated: true };
+    }
+    stmts.push(put(env, 'note', link.nid, null, now), ...cs.map((c) => put(env, 'card', c.id, null, now)));
   }
   const nid = now;
-  const stmts = [put('note', nid, { id: nid, guid: 'cbp:' + id, mid: type.id, mod: now, tags: [], flds }), put('meta', 'board:' + id, { nid })];
+  stmts.push(put(env, 'note', nid, { id: nid, guid: 'cbp:' + id, mid: type.id, mod: now, tags: [], flds }, now), put(env, 'meta', 'board:' + id, { nid }, now));
   const byName = new Map(type.fields.map((f) => [f.name, flds[f.ord] ?? '']));
   // new cards go to the end of the new queue in the order they were made (Anki positions are just numbers)
   const pos = Math.floor(now / 1000);
@@ -161,7 +176,7 @@ export async function fromBoard(env: Env, id: string, n: Record<string, unknown>
     const used = [...t.qfmt.matchAll(/\{\{(?:[#^/]|[a-z]+:)?([^}]+)\}\}/g)].map((m) => m[1].trim());
     if (!used.some((f) => (byName.get(f) ?? '').replace(/<(?!img)[^>]+>|&nbsp;/g, '').trim())) return;
     const c: Card = { id: nid + 1 + i, nid, did: col.deck, ord: t.ord, type: 0, queue: 0, due: pos, ivl: 0, reps: 0, lapses: 0, left: 0, flags: 0, mod: now, revs: [] };
-    stmts.push(put('card', c.id, c));
+    stmts.push(put(env, 'card', c.id, c, now));
   });
   await env.CBP.batch(stmts);
   return { nid, created: true };

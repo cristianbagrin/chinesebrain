@@ -108,3 +108,20 @@ test('his templates render the way Anki renders them', () => {
   assert.ok(t({ card: fresh(), note, type }));
   assert.ok(!search('is:suspended', 945, () => 900)({ card: fresh(), note, type }));
 });
+
+test('historyOf starts at the last learning start after a reset', async () => {
+  const { historyOf } = await import('../site/src/cbp/sched.ts');
+  const day = (n: number) => Date.UTC(2026, 0, 1 + n);
+  const c = { revs: [[day(0), 3, -600, 0, 0, 0, 0], [day(3), 3, 5, 0, 0, 0, 1], [day(9), 0, 0, 5, 0, 0, 4], [day(10), 1, -60, 0, 0, 0, 0], [day(12), 3, 3, 0, 0, 0, 1]] } as any;
+  const h = historyOf(c, (ms) => Math.floor(ms / 864e5));
+  assert.deepEqual(h?.map((r) => r.g), [1, 3]);
+});
+
+test('optimize never predicts worse than where it starts', async () => {
+  const { optimize, DEFAULT_W } = await import('../site/src/cbp/fsrs.ts');
+  // a learner who remembers almost everything a week later
+  const hs = Array.from({ length: 60 }, (_, i) => [{ day: 0, g: 3 }, { day: 7, g: i % 10 ? 3 : 1 }, { day: 30, g: 3 }]);
+  const r = await optimize(DEFAULT_W, hs, 40);
+  assert.ok(r.after <= r.before, `${r.after} > ${r.before}`);
+  assert.equal(r.w.length, 21);
+});

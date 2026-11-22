@@ -104,3 +104,58 @@ export function seedRand(cid: number, reps: number) {
   h ^= h >>> 16;
   return (h >>> 0) / 2 ** 32;
 }
+
+// ---------- tuning the weights to his reviews (Anki's "Optimize") ----------
+/** The range each FSRS-6 weight may take (fsrs-rs parameter clipping). */
+export const BOUNDS: [number, number][] = [
+  [0.001, 100], [0.001, 100], [0.001, 100], [0.001, 100], [1, 10], [0.001, 4], [0.001, 4], [0.001, 0.75], [0, 4.5], [0, 0.8], [0.001, 3.5],
+  [0.001, 5], [0.001, 0.25], [0.001, 0.9], [0, 4], [0, 1], [1, 6], [0, 2], [0, 2], [0, 0.8], [0.1, 0.8],
+];
+export type History = { day: number; g: number }[];
+
+/** How well weights `w` predict his recall: the mean log loss over every review that came a day or more after the last
+ *  one (same-day steps only move the memory, as in fsrs-rs). Lower is better. */
+export function loss(w: number[], hs: History[]) {
+  const f = new Fsrs(w);
+  let sum = 0, n = 0;
+  for (const h of hs) {
+    let m: Memory | null = null, last = 0;
+    for (const r of h) {
+      const t = m ? r.day - last : 0;
+      if (m && t > 0) {
+        const p = Math.min(1 - 1e-6, Math.max(1e-6, f.r(t, m.s)));
+        sum -= r.g > 1 ? Math.log(p) : Math.log(1 - p);
+        n++;
+      }
+      m = f.step(m, t, r.g);
+      last = r.day;
+    }
+  }
+  return n ? sum / n : Infinity;
+}
+
+/** Adam on the loss, from his current weights, kept within BOUNDS. Gives back the new weights and both losses; the
+ *  caller keeps them only if they predict better. `tick` lets a page breathe between steps. */
+export async function optimize(w0: number[], hs: History[], steps = 160, tick?: () => Promise<void>) {
+  const w = new Fsrs(w0).w.slice();
+  const clip = (x: number[]) => x.map((v, i) => Math.min(BOUNDS[i][1], Math.max(BOUNDS[i][0], v)));
+  const before = loss(w, hs);
+  let cur = clip(w), m = Array(21).fill(0), v = Array(21).fill(0);
+  const lr = 0.02, b1 = 0.9, b2 = 0.999;
+  for (let s = 1; s <= steps; s++) {
+    const g = cur.map((x, i) => {
+      const h = Math.max(1e-4, Math.abs(x) * 1e-3);
+      const up = cur.slice(), dn = cur.slice();
+      up[i] = x + h;
+      dn[i] = x - h;
+      return (loss(up, hs) - loss(dn, hs)) / (2 * h);
+    });
+    m = m.map((mi, i) => b1 * mi + (1 - b1) * g[i]);
+    v = v.map((vi, i) => b2 * vi + (1 - b2) * g[i] * g[i]);
+    // each weight moves in proportion to its own size, so small and large weights learn at the same pace
+    cur = clip(cur.map((x, i) => x - lr * Math.max(0.05, Math.abs(x)) * (m[i] / (1 - b1 ** s)) / (Math.sqrt(v[i] / (1 - b2 ** s)) + 1e-8)));
+    if (tick && s % 4 === 0) await tick();
+  }
+  const after = loss(cur, hs);
+  return { w: cur.map((x) => Math.round(x * 1e4) / 1e4), before, after };
+}

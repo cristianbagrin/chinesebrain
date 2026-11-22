@@ -212,3 +212,16 @@ export const right3 = (c: Card) => {
   const g = grades(c, 3);
   return g.length === 3 && g.every((x) => x >= 2) && g[2] >= 3;
 };
+
+/** The reviews FSRS learns from on a card, as Anki picks them (scripts/anki-read.ts fsrsHistory): rated reviews only,
+ *  from the last time it was reset, starting at its first learning step; null when that start is missing. */
+export function historyOf(c: Card, dayOf: (ms: number) => number): { day: number; g: number }[] | null {
+  const revs = c.revs;
+  const kept = revs.filter((r) => r[1] >= 1 && r[1] <= 4 && r[6] !== 4 && r[6] !== 5 && !(r[6] === 3 && r[2] === 0 && r[4] === 0));
+  let reset = -1;
+  revs.forEach((r, i) => r[6] === 4 && r[1] === 0 && r[2] === 0 && (reset = i));
+  const after = reset >= 0 ? kept.filter((r) => r[0] > revs[reset][0]) : kept;
+  let start = -1;
+  for (let i = 0; i < after.length; i++) if (after[i][6] === 0 && (i === 0 || after[i - 1][6] !== 0)) start = i;
+  return start < 0 ? null : after.slice(start).map((r) => ({ day: dayOf(r[0]), g: r[1] }));
+}

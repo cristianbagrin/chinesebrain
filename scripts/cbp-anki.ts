@@ -3,7 +3,7 @@
 Chris's Anki collection into Chinese Brain Plus (Stage 4), and the check against Anki. Node 24+, nothing to install.
 Reads the .colpkg only; never touches Anki or its folder.
 
-  node scripts/cbp-anki.ts import <file.colpkg> [--staging] [--site URL]
+  node scripts/cbp-anki.ts import <file.colpkg | collection.anki2> [--staging] [--site URL]
       Media first (each file once, kept under an unguessable name; pictures linked from the web are fetched and kept
       too), then the whole collection, replacing what the site held: note types with their templates and styling, deck
       options with the FSRS weights, notes, cards with their FSRS memory and every review. What Anki showed at that
@@ -18,12 +18,12 @@ Reads the .colpkg only; never touches Anki or its folder.
 
 The key is CBP_PUSH_KEY in ~/.cbp-push.env, as for cbp-push.py.
 */
-import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync, existsSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
-import { readPackage, mediaBytes, fsrsHistory, dayIndex, type Collection } from './anki-read.ts';
+import { readPackage, readDb, mediaBytes, fsrsHistory, dayIndex, type Collection } from './anki-read.ts';
 import { Fsrs } from '../site/src/cbp/fsrs.ts';
 import { clock, forecast, type Card, type Rev } from '../site/src/cbp/sched.ts';
 
@@ -104,13 +104,30 @@ function used(col: Collection) {
   return { names, web };
 }
 
-async function importPkg(file: string) {
+/** A .colpkg, or Anki's own collection.anki2 (read from a copy, with its collection.media folder beside it). */
+function open(file: string) {
+  if (file.endsWith('.anki2')) {
+    const dir = mkdtempSync(join(tmpdir(), 'cbp-col-'));
+    try {
+      for (const ext of ['', '-wal']) if (existsSync(file + ext)) copyFileSync(file + ext, join(dir, 'c.anki2' + ext));
+      const col = readDb(join(dir, 'c.anki2'));
+      const media = join(dirname(file), 'collection.media');
+      return { col, has: (n: string) => existsSync(join(media, n)), bytesOf: (n: string) => readFileSync(join(media, n)) };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
   const { col, zip } = readPackage(file);
-  const { names, web } = used(col);
   const inZip = new Map(col.media.map((m) => [m.name, m.zip]));
+  return { col, has: (n: string) => inZip.has(n), bytesOf: (n: string) => mediaBytes(zip, inZip.get(n)!) };
+}
+
+async function importPkg(file: string) {
+  const { col, bytesOf, has } = open(file);
+  const { names, web } = used(col);
   let map = (await call('/api/plus/push/anki-map')) as Record<string, string>;
-  const todo = [...names].filter((n) => !map[n] && inZip.has(n));
-  const missing = [...names].filter((n) => !inZip.has(n));
+  const todo = [...names].filter((n) => !map[n] && has(n));
+  const missing = [...names].filter((n) => !has(n));
   console.log(`Media: ${names.size} used, ${names.size - todo.length - missing.length} already there, ${todo.length} to send, ${missing.length} missing from the package.`);
   let i = 0, mb = 0;
   const send = async (name: string, bytes: Buffer) => {
@@ -137,7 +154,7 @@ async function importPkg(file: string) {
       }
     }));
   };
-  await pool(todo, (n) => send(n, mediaBytes(zip, inZip.get(n)!)));
+  await pool(todo, (n) => send(n, bytesOf(n)));
   // pictures linked from the web: kept here, since the page shows only its own
   const webTodo = [...web].filter((u) => !map[u]);
   await pool(webTodo, async (u) => {
@@ -234,7 +251,7 @@ async function check() {
 }
 
 function fsrs(file: string) {
-  const { col } = readPackage(file);
+  const { col } = open(file);
   const conf = col.confs.find((c) => c.w.length) ?? col.confs[0];
   const f = new Fsrs(conf.w);
   const offset = -Number(col.config.localOffset ?? -480), roll = Number(col.config.rollover ?? 4);

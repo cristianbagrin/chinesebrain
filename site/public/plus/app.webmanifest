@@ -1,11 +1,11 @@
 {
-  "name": "Chinese Brain Reviews",
-  "short_name": "Reviews",
-  "start_url": "/plus/review",
-  "scope": "/plus/",
+  "name": "Chinese Brain",
+  "short_name": "Chinese",
+  "start_url": "/plus",
+  "scope": "/plus",
   "display": "standalone",
-  "background_color": "#f7f5f0",
-  "theme_color": "#f7f5f0",
+  "background_color": "#FAFAFC",
+  "theme_color": "#FAFAFC",
   "icons": [
     { "src": "/plus/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/plus/icon-512.png", "sizes": "512x512", "type": "image/png" }

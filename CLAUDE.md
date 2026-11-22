@@ -45,12 +45,15 @@
   `plus/review.js` adds his review card beside the study card on the Cards page (`site/src/cbp/cards.ts`: pictures from Wikimedia Commons or drawn on
   Pollinations, Azure voices, media in R2; a daily sweep, `cards.clean`, drops media nothing points to). Staging has no AI keys: it borrows production's through the `Brains` entrypoint. Claude
   sessions read it through the connector at `/mcp/<CBP_MCP_KEY>`.
-- **CBP reviews (Stage 4, Anki rebuilt)**: `/plus/review`, behind the `plus.anki` switch; an offline PWA (`plus/sw.js`) that keeps
-  the whole collection in IndexedDB and syncs rows with the D1 table `anki` (`site/src/cbp/anki.ts`, `review/`). The scheduler is
-  `sched.ts` + `fsrs.ts`, FSRS-6 written to match Anki's own (`node scripts/cbp-anki.ts fsrs <colpkg>` replays his reviews against
-  Anki's stored memory). His `.colpkg` comes in with `node scripts/cbp-anki.ts import <file> [--staging]` (media to R2, the
-  collection replaced; devices start over on their own) and `check` compares with Anki. `cbp-anki.ts live` is switch day: from
-  then on notes saved on the Cards page join the collection (`anki.fromBoard`) and `cbp-push.py --anki` stops. Never touch his Anki.
+- **CBP reviews (Stage 4, Anki rebuilt)**: the Reviews tab of `/plus` (`/plus/review` redirects there), behind the `plus.anki`
+  switch; `plus.js` loads `plus/anki.js` (from `site/src/cbp/review/`) before the board's `boot.js`, and it adds the tab itself.
+  Class names in `plus/anki.css` must not collide with the board's or `review.css` (`.rv` is the Cards page's). Offline: `plus/sw.js`
+  (scope `/plus`) and the whole collection in IndexedDB, synced with the D1 table `anki` (`site/src/cbp/anki.ts`). The scheduler is
+  `sched.ts` + `fsrs.ts`, FSRS-6 written to match Anki's own (`node scripts/cbp-anki.ts fsrs <colpkg>`); the tab refits the weights
+  monthly (`optimize`). Every change goes through `change()` so Cmd+Z / Shift+Cmd+Z undo it. Settings › Download for Anki writes a
+  legacy `.colpkg` in the browser (`review/export.ts`, sql.js in `plus/vendor`, hence `'wasm-unsafe-eval'` in PLUS_CSP). Since Nov 23
+  it is `live`: notes saved on the Cards page join the collection (`anki.fromBoard`, the note type he picks there) and
+  `cbp-push.py --anki` stops. A new import (`cbp-anki.ts import <file>`) replaces the collection. Never touch his Anki.
 - **Durable Objects free tier: 5 million rows read a day across all Account objects**, and past it every page that
   touches accounts fails until 00:00 UTC. Anything called per request (auth checks, polling, each image) reads one row
   (`_who`), never a count or a scan; `_me` is for pages that show the counts.

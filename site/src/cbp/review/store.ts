@@ -95,18 +95,25 @@ export async function put(kind: Kind, id: number | string, data: any, drop?: num
   if (data) data.mod = mod;
   place(kind, String(id), data);
   const prev = S.outbox.get(key);
-  S.outbox.set(key, { kind, id: String(id), data, mod, drop: [...(prev?.drop ?? []), ...(drop ?? [])] });
+  S.outbox.set(key, { kind, id: String(id), data, mod, drop: dropped(prev?.drop, drop, data) });
   await tx('rows', 'readwrite', (s) => (data == null ? s.delete(key) : s.put(data, key)));
   await saveOutbox();
   emit(kind);
   soon();
 }
-export async function putMany(items: [Kind, number | string, any][]) {
+/** The reviews a queued change takes out: what was queued, plus these, minus any the card holds again (a redo). */
+const dropped = (a: number[] = [], b: number[] = [], data: any) => {
+  const back = new Set<number>((data?.revs ?? []).map((r: number[]) => r[0]));
+  const out = [...new Set([...a, ...b])].filter((x) => !back.has(x));
+  return out.length ? out : undefined;
+};
+export async function putMany(items: [Kind, number | string, any, number[]?][]) {
   const mod = Date.now();
-  for (const [kind, id, data] of items) {
+  for (const [kind, id, data, drop] of items) {
     if (data) data.mod = mod;
     place(kind, String(id), data);
-    S.outbox.set(`${kind}:${id}`, { kind, id: String(id), data, mod });
+    const prev = S.outbox.get(`${kind}:${id}`);
+    S.outbox.set(`${kind}:${id}`, { kind, id: String(id), data, mod, drop: dropped(prev?.drop, drop, data) });
   }
   await tx('rows', 'readwrite', (s) => items.forEach(([kind, id, data]) => (data == null ? s.delete(`${kind}:${id}`) : s.put(data, `${kind}:${id}`))));
   await saveOutbox();

@@ -13,7 +13,9 @@
    here (Stage 4), the Mac's nightly hands new notes to Anki (scripts/cbp-push.py --anki). */
 (() => {
   const RV = { notes: {}, st: {}, pics: {}, busy: {}, saving: false, shown: '', kept: {}, pending: new Set() };
-  const FIELDS = [['chinese', 'Sentence'], ['word', 'Word'], ['picture', 'Picture'], ['notes', 'Notes']];
+  const FIELDS = [['chinese', 'Sentence'], ['word', 'Word'], ['mnemonic', 'Mnemonic'], ['picture', 'Picture'], ['notes', 'Notes']];
+  // his three note types (Anki's names): Phrase makes only the picture → phrase card; Radical has a Mnemonic, no Word
+  const TYPES = [['Chinese', 'Word'], ['Chinese phrases', 'Phrase'], ['Chinese radicals', 'Radical']];
   const token = () => {
     try {
       return localStorage.getItem('cb-token') ?? '';
@@ -55,7 +57,7 @@
     },
     set(w, st) {
       try {
-        localStorage.setItem(draftKey(w), JSON.stringify({ v: 1, at: Date.now(), ...Object.fromEntries(FIELDS.map(([k]) => [k, st[k]])), audio: st.audio }));
+        localStorage.setItem(draftKey(w), JSON.stringify({ v: 1, at: Date.now(), ...Object.fromEntries(FIELDS.map(([k]) => [k, st[k]])), audio: st.audio, type: st.type }));
       } catch {}
     },
     drop(w) {
@@ -91,14 +93,14 @@
       // the first notes (2026-11-21) kept the picture as one address and the notes as plain text
       const picture = /^\/api\/plus\/media\/[^<\s]+$/.test(n.picture || '') ? `<img src="${esc(n.picture)}">` : n.picture || '';
       const notes = /</.test(n.notes || '') ? n.notes : esc(n.notes || '').replace(/\n/g, '<br>');
-      return (RV.st[w] = { chinese: n.chinese || '', word: n.word || w, picture, notes, audio: n.audio || '', py: n.pinyin || '', pyFor: plain(n.chinese || ''), saved: true });
+      return (RV.st[w] = { chinese: n.chinese || '', word: n.word || w, mnemonic: n.mnemonic || '', type: n.type || 'Chinese', picture, notes, audio: n.audio || '', py: n.pinyin || '', pyFor: plain(n.chinese || ''), saved: true });
     }
     const d = cardOf(w);
     if (!cardOK(d)) return null;
     const c = parseCard(d.text), first = c.mine[0] || c.ex[0], s = first ? fromSentence(first, c.word || w) : { chinese: '', py: '' };
-    const st = { chinese: s.chinese, word: esc(c.word || w), picture: '', notes: '', audio: '', py: s.py, pyFor: plain(s.chinese), saved: false };
+    const st = { chinese: s.chinese, word: esc(c.word || w), mnemonic: '', type: 'Chinese', picture: '', notes: '', audio: '', py: s.py, pyFor: plain(s.chinese), saved: false };
     const dr = draft.get(w);
-    if (dr) Object.assign(st, Object.fromEntries(FIELDS.map(([k]) => [k, dr[k] ?? st[k]])), { audio: dr.audio || '', dirty: true });
+    if (dr) Object.assign(st, Object.fromEntries(FIELDS.map(([k]) => [k, dr[k] ?? st[k]])), { audio: dr.audio || '', type: dr.type || st.type, dirty: true });
     return (RV.st[w] = st);
   }
 
@@ -214,7 +216,7 @@
   const EL = document.createElement('section');
   EL.className = 'rv';
   EL.hidden = true;
-  EL.innerHTML = `<div class="rv-fields">${FIELDS.map(([k, label]) => `<div class="rv-field rv-${k}${k === 'word' ? ' opt' : ''}"><span class="rv-l" id="rv-l-${k}">${label}</span><div class="rv-f${k === 'chinese' || k === 'word' ? ' zh' : ''}" data-f="${k}" contenteditable="true" spellcheck="false" lang="${k === 'notes' ? 'en' : 'zh-Hant'}" role="textbox" aria-multiline="true" aria-labelledby="rv-l-${k}"></div>${k === 'chinese' ? '<button type="button" class="rv-say" data-rv="say" aria-label="Read it aloud (V)">V</button>' : ''}</div>`).join('')}</div>
+  EL.innerHTML = `<div class="rv-type" role="radiogroup" aria-label="Note type">${TYPES.map(([t, l]) => `<button type="button" role="radio" data-rv="type" data-t="${t}" aria-checked="false">${l}</button>`).join('')}</div><div class="rv-fields">${FIELDS.map(([k, label]) => `<div class="rv-field rv-${k}${k === 'word' ? ' opt' : ''}"><span class="rv-l" id="rv-l-${k}">${label}</span><div class="rv-f${k === 'chinese' || k === 'word' ? ' zh' : ''}" data-f="${k}" contenteditable="true" spellcheck="false" lang="${k === 'notes' ? 'en' : 'zh-Hant'}" role="textbox" aria-multiline="true" aria-labelledby="rv-l-${k}"></div>${k === 'chinese' ? '<button type="button" class="rv-say" data-rv="say" aria-label="Read it aloud (V)">V</button>' : ''}</div>`).join('')}</div>
   <div class="rv-strip" aria-label="Pictures to choose from"></div>
   <div class="rv-bar"><button type="button" class="rv-add" data-rv="add" data-cardit></button></div>`;
   CD_EL.querySelector('.cd-side').appendChild(EL);
@@ -293,10 +295,16 @@
     const p = $('.rv-word'), plainWord = plain(st.word);
     p.classList.toggle('kept', !!plainWord && plainWord !== w && plainWord !== (parseCard(cardOf(w)?.text).word || w));
   }
+  function paintType(st) {
+    EL.dataset.type = st.type || 'Chinese';
+    EL.querySelectorAll('[data-rv="type"]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.t === EL.dataset.type)));
+    $('#rv-l-chinese').textContent = EL.dataset.type === 'Chinese radicals' ? 'Character' : EL.dataset.type === 'Chinese phrases' ? 'Phrase' : 'Sentence';
+  }
   function paint() {
     const w = CD.cur, st = w && state(w);
     EL.hidden = !st;
     if (!st) return;
+    paintType(st);
     if (RV.shown !== w) {
       // the fields only when the word changes, so typing is never interrupted
       RV.shown = w;
@@ -448,6 +456,8 @@
         pinyin: esc(py).replace(/\n/g, '<br>'),
         picture: st.picture,
         notes: st.notes,
+        type: st.type || 'Chinese',
+        mnemonic: st.mnemonic || '',
         audio: st.audio,
         made: prev?.made || new Date().toISOString(),
         edited: new Date().toISOString(),
@@ -748,6 +758,16 @@
     e.stopPropagation();
     const k = b.dataset.rv;
     if (k === 'add') add();
+    else if (k === 'type') {
+      const st = state(w);
+      readFields();
+      st.type = b.dataset.t;
+      st.dirty = true;
+      draft.set(w, st);
+      paintType(st);
+      paintBar();
+      sfx('tap');
+    }
     else if (k === 'say') speak();
     else if (k === 'pick') pick(b.dataset.full);
     else if (k === 'more-img') {
