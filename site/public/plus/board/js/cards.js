@@ -420,7 +420,7 @@ function CD_paintAll(){
   CD.at=at;
   CD_SH.setAttribute('aria-label','Card: '+w);
   if(CD_SH.dataset.w!==w) CD_EL.querySelectorAll('.opt.kept').forEach(x=>x.classList.remove('kept'));
-  CD_EL.querySelector('.cd-tabs').innerHTML=words.map(x=>{const dx=cardOf(x)||{};return `<button type="button" role="tab" class="cd-tab${dx.text||CD.busy[cardId(x)]?'':' todo'}" data-tab="${esc(x)}" aria-selected="${x===w}"><span class="zh" lang="zh-Hant">${esc(x)}</span>${dx.carded?'<i class="cd-tick" aria-label="carded">✓</i>':x===w&&!nu.has(x)&&dx.word?`<i class="cd-tx" data-drop="${esc(x)}" role="button" aria-label="Drop ${esc(x)}">×</i>`:''}</button>`;}).join('');
+  CD_EL.querySelector('.cd-tabs').innerHTML=words.map(x=>{const dx=cardOf(x)||{};return `<button type="button" role="tab" class="cd-tab${dx.text||CD.busy[cardId(x)]?'':' todo'}" data-tab="${esc(x)}" aria-selected="${x===w}"><span class="zh" lang="zh-Hant">${esc(x)}</span>${dx.carded?'<i class="cd-tick" aria-label="carded">✓</i>':x===w&&(nu.has(x)||dx.word)?`<i class="cd-tx" data-drop="${esc(x)}" role="button" aria-label="${nu.has(x)?'Have it already':'Drop'} ${esc(x)}">×</i>`:''}</button>`;}).join('');
   const sel=CD_EL.querySelector('.cd-tab[aria-selected="true"]'); if(sel&&CD.tabT!==w){CD.tabT=w;sel.scrollIntoView({block:'nearest',inline:'nearest'});}
   const img=CD_EL.querySelector('[data-act="img"]'); img.href=imgURL(w);
   const done=CD_EL.querySelector('.cd-done'); done.setAttribute('aria-pressed',String(!!d.carded)); done.textContent=d.carded?'Carded':'Card it'; done.disabled=!d.text;
@@ -527,8 +527,10 @@ function CD_cardIt(){
     if(nx&&nx!==w) CD_go(nx);
   },650);
 }
-// × on a tab: the card leaves the tabs (Undo and Cmd+Z bring it back); the 10 pm task ignores it
+// × on a tab: the card leaves the tabs (Undo and Cmd+Z bring it back); the 10 pm task ignores it. On a Next up word it
+// means "I have this card already" (his call, 2026-11-23): carded with no card written, so the 10 pm task files it.
 function CD_drop(w){
+  if(CD_pool().has(w)) return CD_have(w);
   const d=cardOf(w); if(!d) return;
   if(w===CD.cur){const L=CD_words(), i=L.indexOf(w), nx=L[i+1]||L[i-1];if(nx&&nx!==w)CD_go(nx);}
   record({card:{word:w,field:'dropped',before:d.dropped||null,after:localStamp()}});
@@ -536,6 +538,22 @@ function CD_drop(w){
   hideToast(true);
   const el=document.createElement('div');el.className='toast';el.setAttribute('role','status');
   el.innerHTML=`<span>Dropped <span class="zh">${esc(w)}</span></span><button type="button">Undo</button>`;document.body.appendChild(el);
+  el.querySelector('button').onclick=()=>{undo();hideToast();};
+  TOAST={el,t:setTimeout(hideToast,6000)};
+}
+async function CD_have(w){
+  const id=cardId(w), stamp=localStamp();
+  if(w===CD.cur){const L=CD_words(), i=L.indexOf(w), nx=L[i+1]||L[i-1];if(nx&&nx!==w)CD_go(nx);}
+  if(!CD.docs[id]){
+    const doc={word:w,src:'next',parent:null,chat:[],carded:null,filed:null,knows:{},text:'',made:null,model:null,making:null,had:true};
+    CD.docs[id]=doc;
+    try{await DBH.doc('cards/'+id).set(doc);}catch(e){console.error(e);}
+  }
+  record({card:{word:w,field:'carded',before:cardOf(w).carded||null,after:stamp}});
+  await CD_write(w,{carded:stamp}); sfx('stamp-known');
+  hideToast(true);
+  const el=document.createElement('div');el.className='toast';el.setAttribute('role','status');
+  el.innerHTML=`<span>Have <span class="zh">${esc(w)}</span> already</span><button type="button">Undo</button>`;document.body.appendChild(el);
   el.querySelector('button').onclick=()=>{undo();hideToast();};
   TOAST={el,t:setTimeout(hideToast,6000)};
 }
