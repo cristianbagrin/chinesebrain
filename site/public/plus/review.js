@@ -2,7 +2,7 @@
    board's Cards page (plus/board/js/cards.js, copied from life/chinese/board) and fills its side column (.cd-side).
    His Anki note type "Chinese", as an editor that behaves like Anki's: every field takes anything (bold, italics, Cmd+U
    to mark the word, which shows as a highlight, pictures pasted, dropped or dragged in from anywhere, as many as he
-   likes). Fields: Sentence, Word (shown while Option is held, or once he has changed it), Picture, Notes; Pinyin is done for him from the sentence (src/cbp/cards.ts pinyin) and
+   likes). Fields: Sentence, Word (shown while Cmd is held, or once he has changed it), Picture, Notes; Pinyin is done for him from the sentence (src/cbp/cards.ts pinyin) and
    never shown; Audio comes when he presses V (Azure, YunJhe or HsiaoChen).
    Pictures to choose from sit in one strip under the fields: drawings in his flashcard style, then photos from
    Wikimedia Commons (straight from Commons, so they show fast); a click puts one in Picture (again takes it out), a drag
@@ -214,11 +214,10 @@
   EL.className = 'rv';
   EL.hidden = true;
   EL.innerHTML = `<div class="rv-fields">${FIELDS.map(([k, label]) => `<div class="rv-field rv-${k}${k === 'word' ? ' opt' : ''}"><span class="rv-l" id="rv-l-${k}">${label}</span><div class="rv-f${k === 'chinese' || k === 'word' ? ' zh' : ''}" data-f="${k}" contenteditable="true" spellcheck="false" lang="${k === 'notes' ? 'en' : 'zh-Hant'}" role="textbox" aria-multiline="true" aria-labelledby="rv-l-${k}"></div>${k === 'chinese' ? '<button type="button" class="rv-say" data-rv="say" aria-label="Read it aloud (V)">V</button>' : ''}</div>`).join('')}</div>
-  <div class="rv-pics"><div class="rv-more"><span class="rv-l">Pictures</span><button type="button" class="rv-mb" data-rv="more-img">More images</button><button type="button" class="rv-mb" data-rv="more-draw">More drawings</button></div>
-  <div class="rv-strip" aria-label="Pictures to choose from"></div></div>
+  <div class="rv-strip" aria-label="Pictures to choose from"></div>
   <div class="rv-bar"><button type="button" class="rv-add" data-rv="add" data-cardit></button></div>`;
   CD_EL.querySelector('.cd-side').appendChild(EL);
-  // on /plus the strip finds the pictures: DuckDuckGo's Images is there only while Option is held
+  // on /plus the strip finds the pictures: DuckDuckGo's Images is there only while Cmd is held
   CD_EL.querySelector('.cd-img')?.classList.add('opt');
   const $ = (s) => EL.querySelector(s);
   const field = (k) => EL.querySelector(`.rv-f[data-f="${k}"]`);
@@ -254,12 +253,20 @@
         : `<div class="rv-tile${x.drawn ? ' drawn' : ''}" role="button" tabindex="0" data-rv="pick" data-full="${esc(x.full)}" aria-pressed="${inPic.has(x.full)}"><img src="${esc(x.thumb)}" alt="" draggable="true" data-full="${esc(x.full)}" loading="lazy"></div>`,
     );
     if (busy.photos && !(p.photos || []).length) tiles.push(...Array(4).fill('<div class="rv-tile wait" aria-hidden="true"></div>'));
-    $('.rv-strip').innerHTML = tiles.join('');
-    $('[data-rv="more-img"]').disabled = !!busy.photos;
-    $('[data-rv="more-draw"]').disabled = !!busy.draw;
-    $('.rv-strip').querySelectorAll('img').forEach((im) => (im.onerror = () => im.closest('.rv-tile')?.remove()));
+    // More images and More drawings close the strip, as tiles of their own
+    const more = (k, label, on) => `<button type="button" class="rv-tile rv-mt" data-rv="${k}"${on ? ' disabled' : ''}><span>${label}</span></button>`;
+    tiles.push(more('more-img', 'More images', busy.photos), more('more-draw', 'More drawings', busy.draw));
+    // rebuilt only when the tiles themselves change: typing elsewhere must not reload the pictures
+    const html = tiles.join(''), strip = $('.rv-strip');
+    if (RV.stripHTML !== html || strip.dataset.w !== w) {
+      RV.stripHTML = html;
+      strip.dataset.w = w;
+      strip.innerHTML = html;
+      strip.querySelectorAll('img').forEach((im) => (im.onerror = () => im.closest('.rv-tile')?.remove()));
+    }
+    for (const t of strip.querySelectorAll('[data-rv="pick"]')) t.setAttribute('aria-pressed', inPic.has(t.dataset.full));
   }
-  // the Word field stays out of sight until Option shows it, or it holds something other than the word itself
+  // the Word field stays out of sight until Cmd shows it, or it holds something other than the word itself
   function wordShown(w, st) {
     const p = $('.rv-word'), plainWord = plain(st.word);
     p.classList.toggle('kept', !!plainWord && plainWord !== w && plainWord !== (parseCard(cardOf(w)?.text).word || w));
@@ -523,7 +530,7 @@
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'u') {
       e.preventDefault();
       e.stopPropagation();
-      document.execCommand('underline');
+      mark(e.target.closest('.rv-f'));
       changed();
       return;
     }
@@ -539,6 +546,24 @@
       add();
     }
   });
+  /** Cmd+U: marks the selection, or takes the mark off again if any of it is marked. Done with insertHTML so Cmd+Z undoes
+   *  it (the browser's own underline can't see a mark drawn as a highlight, so it nested a new one each time). */
+  function mark(f) {
+    const sel = getSelection();
+    if (!f || !sel.rangeCount || sel.isCollapsed) return;
+    const r = sel.getRangeAt(0);
+    const up = (n) => { for (; n && n !== f; n = n.parentNode) if (n.nodeName === 'U') return n; return null; };
+    const us = [...f.querySelectorAll('u')].filter((u) => r.intersectsNode(u));
+    const html = (frag) => { const d = document.createElement('div'); d.appendChild(frag); return d.innerHTML; };
+    if (us.length) {
+      const a = up(r.startContainer), b = up(r.endContainer);
+      if (a) r.setStartBefore(a);
+      if (b) r.setEndAfter(b);
+      sel.removeAllRanges();
+      sel.addRange(r);
+      document.execCommand('insertHTML', false, html(r.cloneContents()).replace(/<\/?u>/g, ''));
+    } else document.execCommand('insertHTML', false, `<u>${html(r.cloneContents())}</u>`);
+  }
   // a picture in a field: a click picks it (a ring shows it), Backspace takes it out, a drag moves it
   function unselectImg() {
     RV.selImg?.classList.remove('rv-sel');

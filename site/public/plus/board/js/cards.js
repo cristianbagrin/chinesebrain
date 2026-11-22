@@ -561,27 +561,18 @@ document.addEventListener('keydown',e=>{
   else if(e.key==='Enter'&&e.shiftKey&&t&&t.classList&&t.classList.contains('cd-sent')){e.preventDefault();CD_py(t);}
 });
 
-/* ---------- Next up: carded words leave at once; the "any word" box ---------- */
+/* ---------- Next up: carded words leave at once ("Any word" is on the Cards page's bar) ---------- */
 // the queue without what he has carded (the 10 pm task files them, then the list itself moves on)
 const CD_src=w=>NU_pool().some(r=>r[0]===w)?'next':null;
 function NU_pool(){return (STATE&&STATE.nextUp||[]).filter(r=>!cardCarded(r[0]));}
-function NU_refresh(){if(STATE){renderNext(STATE);NU_extras();}}
-function NU_extras(){
-  let f=document.getElementById('cd-any');
-  if(!f&&document.querySelector('#next .nu-top')){
-    f=document.createElement('form'); f.id='cd-any'; f.className='cd-any';
-    f.innerHTML='<input type="text" autocomplete="off" lang="zh-Hant" aria-label="Card any word" placeholder="Any word">';
-    f.addEventListener('submit',e=>{e.preventDefault();const i=f.querySelector('input'),w=i.value.trim();if(w){i.value='';i.blur();openCard(w,'any');}});
-    document.querySelector('#next .nu-top').after(f);
-  }
-}
+function NU_refresh(){if(STATE)renderNext(STATE);}
 document.getElementById('next').addEventListener('click',e=>{
   const t=e.target.closest('.nu-row'); if(!t) return;
   const q=NU.list[+t.dataset.i]; if(!q) return;
   e.stopPropagation(); NU_hide(); openCard(q.w,'next');
 },true);
 
-BUS.on('data',()=>{NU_extras();writeAhead();});
+BUS.on('data',writeAhead);
 BUS.on('lab',id=>{if(id==='card-ahead')writeAhead();});
 (function wait(n){
   if(DBH){

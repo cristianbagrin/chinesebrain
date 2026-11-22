@@ -1,13 +1,8 @@
 /* ---------- cards: the Cards page (a window over the board until 2026-11-22). Owner: card maker.
    Its parts are blocks (data-area: head, ex, chars, story, know, plus the follow-up thread), read top to bottom in one
-   column; the card he adds sits beside it (.cd-side). Type is reading size: English 16.5px (his pick, 2026-11-19),
+   column; the card he adds sits beside it (.cd-side). Type is reading size: English 17.5px (his pick, 2026-11-22),
    Chinese lines 22px, the word itself the one big thing. ---------- */
 .nu-row{cursor:pointer}
-.cd-any{margin-top:var(--s4)}
-.cd-any input{width:100%;max-width:16em;font:inherit;font-size:var(--fs-l);font-family:var(--zh);color:var(--ink);background:transparent;
-  border:0;border-bottom:1.5px solid var(--hair);padding:var(--s1) 0;outline:none;transition:border-color .2s var(--ease)}
-.cd-any input::placeholder{color:var(--ink-4);font-family:var(--ui)}
-.cd-any input:focus{border-bottom-color:var(--ink-3)}
 
 /* ---------- the page: the word tabs on a bar that stays under the app bar; the card, and beside it the card he adds ---------- */
 #view-cards{--k:1}
@@ -68,12 +63,12 @@ html:has(#view-cards:not([hidden])) .appbar.lift{box-shadow:none}
 .cd-done[aria-pressed="true"]::before{content:"✓ "}
 
 /* ---------- the blocks (shared by every layout) ---------- */
-.cd-main{flex:1;min-height:0;color:var(--ink);font-size:16.5px;line-height:1.6}
+.cd-main{flex:1;min-height:0;color:var(--ink);font-size:17.5px;line-height:1.6}
 .cd-main p{margin:0}
 .cd-main b{font-weight:600}
 .cd-main .zh{font-family:var(--zh)}
 .cd-blk{min-width:0}
-.cd-h{font-family:var(--ui);font-size:16.5px;font-weight:500;color:var(--ink-3);margin:0 0 6px}
+.cd-h{font-family:var(--ui);font-size:17.5px;font-weight:500;color:var(--ink-3);margin:0 0 6px}
 
 .cd-head{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
 .cd-w{font-family:var(--zh);font-weight:700;font-size:46px;line-height:1;letter-spacing:.02em;margin:0}
@@ -100,8 +95,8 @@ html:has(#view-cards:not([hidden])) .appbar.lift{box-shadow:none}
 .cd-szh{font-size:22px;line-height:1.5}
 .cd-t{color:inherit}
 .cd-szh .cd-sp{font-style:normal;font-family:var(--ui);font-size:15.5px;color:var(--ink-3);display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--wash);margin-right:8px;vertical-align:3px}
-.cd-spy{font-size:16.5px;line-height:1.45;color:var(--ink-3);margin-top:2px !important}
-.cd-sen{font-size:16.5px;line-height:1.45;color:var(--ink-2)}
+.cd-spy{font-size:17.5px;line-height:1.45;color:var(--ink-3);margin-top:2px !important}
+.cd-sen{font-size:17.5px;line-height:1.45;color:var(--ink-2)}
 
 /* characters: one container each */
 .cd-chars{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;align-items:start}
@@ -110,30 +105,30 @@ html:has(#view-cards:not([hidden])) .appbar.lift{box-shadow:none}
 .cd-chtop{display:flex;align-items:center;gap:14px}
 .cd-big{font-size:40px;line-height:1;font-weight:700}
 .cd-ch.known .cd-big{font-size:34px;font-weight:400;color:var(--ink-2)}
-.cd-chm{font-size:16.5px;line-height:1.35}
+.cd-chm{font-size:17.5px;line-height:1.35}
 .cd-ch.known .cd-chm{color:var(--ink-2)}
 .cd-parts,.cd-subs{list-style:none;margin:0;padding:0}
 .cd-parts{display:grid;gap:8px;margin-top:14px}
 .cd-part{display:grid;grid-template-columns:40px minmax(0,1fr);column-gap:12px;align-items:center}
 .cd-pc{display:grid;place-items:center;width:40px;height:40px;border-radius:10px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--hair);font-size:24px;line-height:1}
-.cd-pm{font-size:16.5px;line-height:1.4}
+.cd-pm{font-size:17.5px;line-height:1.4}
 .cd-part.known .cd-pc,.cd-subs li.known .cd-pc{background:none;box-shadow:none;color:var(--ink-3)}
 .cd-part.known .cd-pm,.cd-subs li.known .cd-pm{color:var(--ink-3)}
 .cd-part.ask .cd-pc{box-shadow:inset 0 0 0 1.5px var(--gold-edge);background:var(--gold-wash)}
 .cd-q2{grid-column:2;display:flex;gap:6px;margin-top:6px}
-.cd-q2 button{font:inherit;font-size:16.5px;line-height:1;border:0;border-radius:999px;padding:7px 12px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--hair);color:var(--ink-2);cursor:pointer}
+.cd-q2 button{font:inherit;font-size:17.5px;line-height:1;border:0;border-radius:999px;padding:7px 12px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--hair);color:var(--ink-2);cursor:pointer}
 .cd-q2 button:hover{box-shadow:inset 0 0 0 1px var(--ink-4);color:var(--ink)}
 .cd-q2 button[aria-pressed="true"]{background:var(--ink);box-shadow:none;color:var(--on-ink)}
 .cd-subs{grid-column:2;display:grid;gap:4px;margin-top:6px;padding-left:10px;border-left:2px solid var(--wash-2)}
 .cd-subs li{display:flex;align-items:center;gap:10px}
 .cd-subs .cd-pc{width:32px;height:32px;font-size:19px;border-radius:8px}
 
-.cd-logic{margin-top:12px !important;padding-top:10px;border-top:1px solid var(--hair);font-size:16.5px;line-height:1.6;color:var(--ink-2)}
+.cd-logic{margin-top:12px !important;padding-top:10px;border-top:1px solid var(--hair);font-size:17.5px;line-height:1.6;color:var(--ink-2)}
 
-.cd-story{font-size:16.5px;line-height:1.6}
-.cd-hook{margin-top:10px !important;font-size:16.5px;line-height:1.5;font-weight:500}
+.cd-story{font-size:17.5px;line-height:1.6}
+.cd-hook{margin-top:10px !important;font-size:17.5px;line-height:1.5;font-weight:500}
 .cd-know{margin:0;padding:0;list-style:none;display:grid;gap:12px}
-.cd-know li{font-size:16.5px;line-height:1.6}
+.cd-know li{font-size:17.5px;line-height:1.6}
 .cd-know .zh,.cd-story .zh,.cd-hook .zh,.cd-logic .zh,.cd-a .zh{font-size:1.1em}
 
 /* the follow-ups */
@@ -141,7 +136,7 @@ html:has(#view-cards:not([hidden])) .appbar.lift{box-shadow:none}
 .cd-thread[hidden]{display:none}
 .cd-turn{display:grid;gap:10px}
 .cd-me{justify-self:start;font-size:19px;line-height:1.45;background:var(--wash);padding:7px 14px;border-radius:14px 14px 14px 4px}
-.cd-a{display:grid;gap:8px;font-size:16.5px;line-height:1.6}
+.cd-a{display:grid;gap:8px;font-size:17.5px;line-height:1.6}
 .cd-a ul{margin:0;padding-left:1.2em;display:grid;gap:6px}
 .cd-wait{color:var(--ink-3)}
 .cd-wait::after{content:"";display:inline-block;width:.5em;height:.5em;margin-left:.5em;border-radius:50%;background:var(--ink-4);vertical-align:middle;animation:cd-pulse 1s ease-in-out infinite}

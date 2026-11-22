@@ -41,6 +41,8 @@ links = '\n'.join(f'<link rel="stylesheet" href="/plus/board/{f}">' for f in css
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Chinese Brain Plus</title>
 <link rel="icon" href="/icon.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Chinese Brain">
 <meta name="robots" content="noindex">
 <style>:root{{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}}html{{scroll-padding-top:env(safe-area-inset-top,0px)}}body{{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}}img{{max-width:100%}}[hidden]:not([hidden=until-found i]){{display:none!important}}html.locked body{{visibility:hidden}}</style>
 <link rel="preconnect" href="https://fonts.googleapis.com">

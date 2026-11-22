@@ -609,7 +609,7 @@ async function listFlags(env) {
 // as usual, /staging trades the session for a 30-day cookie, and every request checks that cookie
 // and the switch. Signing in and the account pages stay open, so there's a way in.
 
-const STAGING_OPEN = /^\/(staging(\.js)?|account(\.js)?|reset|cb\.js|site\.js|style\.css|icon\.png|chris\.webp|acct\/.*|fonts\/.*|api\/.*|mcp\/.*)$/;
+const STAGING_OPEN = /^\/(staging(\.js)?|account(\.js)?|reset|cb\.js|site\.js|style\.css|icon\.png|apple-touch-icon\.png|chris\.webp|acct\/.*|fonts\/.*|api\/.*|mcp\/.*)$/;
 const STAGING_DAYS = 30;
 
 async function hmac(env, text) {

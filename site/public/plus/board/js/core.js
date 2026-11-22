@@ -211,13 +211,18 @@ addEventListener('resize',moveThumb);
 try{document.fonts&&document.fonts.ready.then(moveThumb);}catch(e){}
 
 
-/* ---------- hold Option (Alt) to see more, as on a Mac: anything marked .opt shows only while the key is down. A click
-   on one (or into it) keeps it on screen after the key goes up (.kept), until the page that holds it moves on (the owner
-   removes .kept). Typing with Option for a character doesn't count: only the key alone, or held with the pointer. ---------- */
+/* ---------- hold Cmd (Ctrl off a Mac) to see more: anything marked .opt shows only while the key is down (his pick
+   2026-11-22, was Option). A click on one (or into it) keeps it on screen after the key goes up (.kept), until the page
+   that holds it moves on (the owner removes .kept). A shortcut (Cmd+C…) doesn't count: only the key alone, or held with
+   the pointer. ---------- */
+const OPT_KEY=/Mac|iPhone|iPad/.test(navigator.platform||navigator.userAgent)?'Meta':'Control';
 const OPT={on:false};
 function optSet(on){if(OPT.on===on)return;OPT.on=on;document.documentElement.classList.toggle('opt-on',on);}
-addEventListener('keydown',e=>{if(e.key==='Alt'&&!e.repeat)optSet(true);else if(OPT.on&&e.key!=='Alt')optSet(false);},true);
-addEventListener('keyup',e=>{if(e.key==='Alt')optSet(false);},true);
-addEventListener('blur',()=>optSet(false));
+// Cmd starts most shortcuts, so the extras wait a moment (a quick Cmd+U never flashes them)
+let OPT_T=0;
+const optOff=()=>{clearTimeout(OPT_T);optSet(false);};
+addEventListener('keydown',e=>{if(e.key===OPT_KEY){if(!e.repeat){clearTimeout(OPT_T);OPT_T=setTimeout(()=>optSet(true),180);}}else optOff();},true);
+addEventListener('keyup',e=>{if(e.key===OPT_KEY)optOff();},true);
+addEventListener('blur',optOff);
 addEventListener('pointerdown',e=>{if(!OPT.on)return;const o=e.target.closest&&e.target.closest('.opt');if(o)o.classList.add('kept');},true);
 addEventListener('focusin',e=>{if(!OPT.on)return;const o=e.target.closest&&e.target.closest('.opt');if(o)o.classList.add('kept');});
