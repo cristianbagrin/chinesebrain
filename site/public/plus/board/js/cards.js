@@ -420,7 +420,7 @@ function CD_paintAll(){
   CD.at=at;
   CD_SH.setAttribute('aria-label','Card: '+w);
   if(CD_SH.dataset.w!==w) CD_EL.querySelectorAll('.opt.kept').forEach(x=>x.classList.remove('kept'));
-  CD_EL.querySelector('.cd-tabs').innerHTML=words.map(x=>{const dx=cardOf(x)||{};return `<button type="button" role="tab" class="cd-tab${dx.text||CD.busy[cardId(x)]?'':' todo'}" data-tab="${esc(x)}" aria-selected="${x===w}"><span class="zh" lang="zh-Hant">${esc(x)}</span>${dx.carded?'<i class="cd-tick" aria-label="carded">✓</i>':!nu.has(x)&&dx.word?`<i class="cd-tx" data-drop="${esc(x)}" role="button" aria-label="Drop ${esc(x)}">×</i>`:''}</button>`;}).join('');
+  CD_EL.querySelector('.cd-tabs').innerHTML=words.map(x=>{const dx=cardOf(x)||{};return `<button type="button" role="tab" class="cd-tab${dx.text||CD.busy[cardId(x)]?'':' todo'}" data-tab="${esc(x)}" aria-selected="${x===w}"><span class="zh" lang="zh-Hant">${esc(x)}</span>${dx.carded?'<i class="cd-tick" aria-label="carded">✓</i>':x===w&&!nu.has(x)&&dx.word?`<i class="cd-tx" data-drop="${esc(x)}" role="button" aria-label="Drop ${esc(x)}">×</i>`:''}</button>`;}).join('');
   const sel=CD_EL.querySelector('.cd-tab[aria-selected="true"]'); if(sel&&CD.tabT!==w){CD.tabT=w;sel.scrollIntoView({block:'nearest',inline:'nearest'});}
   const img=CD_EL.querySelector('[data-act="img"]'); img.href=imgURL(w);
   const done=CD_EL.querySelector('.cd-done'); done.setAttribute('aria-pressed',String(!!d.carded)); done.textContent=d.carded?'Carded':'Card it'; done.disabled=!d.text;
@@ -482,6 +482,37 @@ function CD_step(dir){
   if(i<0||i>=L.length) return;
   CD_go(L[i]); sfx('tap');
 }
+/* a finger swipes the card sideways to the next or previous word, as through photos: the card follows 1:1 (resisting at
+   the ends), and on letting go it goes where the throw was heading (its speed counts, not only how far it went) */
+(()=>{
+  const sheet=CD_EL.querySelector('.cd-sheet'); let g=null;
+  const rubber=(x,d)=>x*d*.55/(d+.55*Math.abs(x));
+  const set=(x,t)=>{sheet.style.transition=t||'none';sheet.style.translate=x?`${x}px 0`:'';};
+  sheet.addEventListener('pointerdown',e=>{
+    if(e.pointerType!=='touch'||e.target.closest('input,textarea,[contenteditable=true],button,a'))return;
+    g={id:e.pointerId,x:e.clientX,y:e.clientY,on:false,h:[[e.timeStamp,e.clientX]]};
+  });
+  addEventListener('pointermove',e=>{
+    if(!g||e.pointerId!==g.id)return;
+    const dx=e.clientX-g.x, dy=e.clientY-g.y;
+    if(!g.on){if(Math.hypot(dx,dy)<10)return; if(Math.abs(dx)<Math.abs(dy)*1.4){g=null;return;} g.on=true;g.x0=dx;}
+    g.h.push([e.timeStamp,e.clientX]); if(g.h.length>6)g.h.shift();
+    const L=CD_words(), i=L.indexOf(CD.cur), x=dx-g.x0, w=sheet.offsetWidth;
+    const end=(x>0&&i<=0)||(x<0&&i>=L.length-1);
+    set(end?rubber(x,w):x); g.cur=x;
+  },{passive:true});
+  const up=e=>{
+    if(!g||e.pointerId!==g.id)return; const st=g; g=null; if(!st.on)return;
+    const [a,b]=[st.h[0],st.h[st.h.length-1]], v=(b[1]-a[1])/Math.max(1,b[0]-a[0]); // px per ms
+    const w=sheet.offsetWidth, x=st.cur||0, proj=x+v*200, L=CD_words(), i=L.indexOf(CD.cur);
+    const dir=proj<-w/3?1:proj>w/3?-1:0, ok=dir&&L[i+dir];
+    if(!ok){set(0,'translate .38s cubic-bezier(.2,.9,.3,1)');return;}
+    const ease='cubic-bezier(.3,.7,.4,1)';
+    set(-dir*w*1.05,`translate .2s ${ease}`);
+    setTimeout(()=>{CD_step(dir);set(dir*w*.35);sheet.getBoundingClientRect();set(0,'translate .34s cubic-bezier(.2,.9,.3,1)');},190);
+  };
+  addEventListener('pointerup',up); addEventListener('pointercancel',e=>{if(g&&e.pointerId===g.id){g=null;set(0,'translate .3s ease');}});
+})();
 // Card it (the button or Enter): stamped, confetti, a toast with Undo; a moment later the next tab comes up
 function CD_cardIt(){
   const w=CD.cur, d=cardOf(w); if(!d||!d.text) return;
@@ -524,7 +555,8 @@ CD_EL.addEventListener('contextmenu',e=>{
 });
 CD_EL.addEventListener('click',e=>{
   const w=CD.cur, a=e.target.closest('[data-act]'), k=e.target.closest('[data-know]'), t=e.target.closest('[data-tab]');
-  const dr=e.target.closest('[data-drop]'); if(dr){e.stopPropagation();CD_drop(dr.dataset.drop);return;}
+  // × closes only the tab he is on (it shows on no other), so a stray click on a neighbour never drops a word
+  const dr=e.target.closest('[data-drop]'); if(dr&&dr.dataset.drop===CD.cur){e.stopPropagation();CD_drop(dr.dataset.drop);return;}
   if(t){CD_go(t.dataset.tab);sfx('tap');if(e.detail)t.blur();return;}
   const sn=e.target.closest('.cd-sent');
   if(sn){if(CD_HOLD.fired){CD_HOLD.fired=false;return;}CD_copy(sn);return;}

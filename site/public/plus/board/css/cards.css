@@ -26,8 +26,7 @@ html:has(#view-cards:not([hidden])) .appbar.lift{box-shadow:none}
 .cd-tick{font-style:normal;font-size:15.5px;color:var(--green)}
 .cd-tab.todo .zh{color:var(--ink-4)}
 .cd-tab.todo[aria-selected="true"] .zh{color:var(--ink-3)}
-.cd-tx{font-style:normal;font-size:18px;line-height:1;width:20px;height:20px;display:grid;place-items:center;border-radius:50%;margin-right:-6px;color:var(--ink-4);opacity:0;transition:opacity .15s,background .15s}
-.cd-tab:hover .cd-tx,.cd-tab[aria-selected="true"] .cd-tx{opacity:1}
+.cd-tx{font-style:normal;font-size:18px;line-height:1;width:20px;height:20px;display:grid;place-items:center;border-radius:50%;margin-right:-6px;color:var(--ink-4);transition:background .15s,color .15s}
 .cd-tx:hover{background:var(--wash-2);color:var(--ink)}
 .cd-anyw{flex:none;margin-left:6px}
 .cd-anyw input{width:7.5em;font:inherit;font-size:19px;font-family:var(--zh);background:transparent;border:0;border-radius:12px;padding:8px 12px;outline:none;color:var(--ink);
@@ -168,8 +167,12 @@ html:has(#view-cards:not([hidden])) .appbar.lift{box-shadow:none}
   .cd-body{grid-template-columns:minmax(0,1fr);gap:40px}
   .cd-side{position:static;max-height:none;overflow:visible}
 }
+@media (pointer:coarse){.cd-sheet{touch-action:pan-y}}
 @media (max-width:640px){
   .cd-nav,.cd-img{display:none}
   .cd-w{font-size:46px}
   .cd-anyw input{width:5.5em}
 }
+
+/* a finger leaves no hover behind (iPhone keeps :hover on what was last tapped) */
+@media (hover:none){.cd-tab:hover:not([aria-selected=true]){background:none;color:var(--ink-3)}.cd-tx:hover{background:none;color:var(--ink-4)}.cd-ib:hover{background:none}}

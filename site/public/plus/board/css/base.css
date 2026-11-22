@@ -62,7 +62,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .zh{font-family:var(--zh);font-weight:400}
 .pen{font-family:var(--pen);-webkit-text-stroke:var(--pen-stroke) currentColor}
 button,input,textarea{font:inherit;color:inherit}
-button{-webkit-tap-highlight-color:transparent}
+button,a,[role=button],[role=tab],.cd-sent{-webkit-tap-highlight-color:transparent}
 :focus-visible{outline:2px solid var(--ink);outline-offset:3px;border-radius:6px}
 h1,h2,h3{font-weight:500;margin:0;text-wrap:balance}
 .wrap{max-width:var(--page);margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px),4vw);padding-right:max(16px,env(safe-area-inset-right,0px),4vw);padding-block:var(--s7) var(--s9)}
@@ -117,6 +117,7 @@ h1,h2,h3{font-weight:500;margin:0;text-wrap:balance}
 .toast.out{opacity:0;transform:translate(-50%,12px);transition:opacity .2s,transform .2s}
 .toast button{border:0;background:rgba(255,255,255,.14);color:var(--on-ink);border-radius:999px;padding:5px 14px;font-weight:600;cursor:pointer}
 .toast button:hover{background:rgba(255,255,255,.24)}
+.toast:not(:has(button)){padding-right:18px}
 @keyframes toastin{from{opacity:0;transform:translate(-50%,16px) scale(.96)}to{opacity:1;transform:translate(-50%,0)}}
 
 .note{margin:var(--s7) 0 0;font-size:var(--fs-s);color:var(--ink-3)}

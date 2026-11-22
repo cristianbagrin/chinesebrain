@@ -27,12 +27,13 @@
     if (!r.ok) throw Object.assign(new Error(j.error || 'It didn’t come through.'), { code: j.code });
     return j;
   };
-  const say = (msg) => {
+  const say = (msg, act) => {
     hideToast(true);
     const el = document.createElement('div');
     el.className = 'toast';
     el.setAttribute('role', 'status');
-    el.innerHTML = `<span>${esc(msg)}</span>`;
+    el.innerHTML = `<span>${esc(msg)}</span>${act ? `<button type="button">${esc(act[0])}</button>` : ''}`;
+    if (act) el.querySelector('button').onclick = () => (hideToast(), act[1]());
     document.body.appendChild(el);
     TOAST = { el, t: setTimeout(hideToast, 5000) };
   };
@@ -120,7 +121,7 @@
           n.replaceWith(...n.childNodes);
           continue;
         }
-        const src = n.tagName === 'IMG' ? n.getAttribute('src') || '' : '';
+        const src = n.tagName === 'IMG' ? (n.getAttribute('src') || '').replace(location.origin + '/api/plus/media/', '/api/plus/media/') : '';
         const color = n.style?.color, bg = n.style?.backgroundColor, fw = n.style?.fontWeight;
         for (const a of [...n.attributes]) n.removeAttribute(a.name);
         if (n.tagName === 'IMG') {
@@ -217,6 +218,27 @@
   <div class="rv-strip" aria-label="Pictures to choose from"></div>
   <div class="rv-bar"><button type="button" class="rv-add" data-rv="add" data-cardit></button></div>`;
   CD_EL.querySelector('.cd-side').appendChild(EL);
+  // a narrow screen (a phone) shows one side at a time: the card, or the card he adds; a switch at the foot flips them
+  const NARROW = matchMedia('(max-width:1100px)');
+  const SEG = document.createElement('div');
+  SEG.className = 'rv-seg';
+  SEG.setAttribute('role', 'tablist');
+  SEG.innerHTML = '<i aria-hidden="true"></i><button type="button" role="tab" data-pane="card" aria-selected="true">Card</button><button type="button" role="tab" data-pane="add" aria-selected="false">Add</button>';
+  // on the page itself, not in the view: a view that slid in keeps a transform, and that would pin it to the view instead
+  document.body.appendChild(SEG);
+  SEG.hidden = typeof VIEW === 'undefined' || VIEW !== 'cards';
+  BUS.on('view', (v) => (SEG.hidden = v !== 'cards'));
+  function pane(p) {
+    if (CD_EL.dataset.pane === p) return;
+    CD_EL.dataset.pane = SEG.dataset.pane = p;
+    SEG.querySelectorAll('button').forEach((b) => b.setAttribute('aria-selected', b.dataset.pane === p));
+    if (NARROW.matches) scrollTo({ top: 0 });
+  }
+  CD_EL.dataset.pane = SEG.dataset.pane = 'card';
+  SEG.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-pane]');
+    if (b) (pane(b.dataset.pane), sfx('tap'));
+  });
   // on /plus the strip finds the pictures: DuckDuckGo's Images is there only while Cmd is held
   CD_EL.querySelector('.cd-img')?.classList.add('opt');
   const $ = (s) => EL.querySelector(s);
@@ -250,7 +272,7 @@
     ].map((x) =>
       typeof x === 'string'
         ? x
-        : `<div class="rv-tile${x.drawn ? ' drawn' : ''}" role="button" tabindex="0" data-rv="pick" data-full="${esc(x.full)}" aria-pressed="${inPic.has(x.full)}"><img src="${esc(x.thumb)}" alt="" draggable="true" data-full="${esc(x.full)}" loading="lazy"></div>`,
+        : `<div class="rv-tile${x.drawn ? ' drawn' : ''}" role="button" tabindex="0" data-rv="pick" data-full="${esc(x.full)}" aria-pressed="false"><img src="${esc(x.thumb)}" alt="" draggable="true" data-full="${esc(x.full)}" loading="lazy"></div>`,
     );
     if (busy.photos && !(p.photos || []).length) tiles.push(...Array(4).fill('<div class="rv-tile wait" aria-hidden="true"></div>'));
     // More images and More drawings close the strip, as tiles of their own
@@ -349,8 +371,14 @@
     const f = field('picture');
     const there = [...f.querySelectorAll('img')].find((i) => (i.getAttribute('data-from') || i.getAttribute('src')) === full);
     if (there) there.remove();
-    else {
-      f.focus();
+    else if (document.activeElement !== f) {
+      // not typing in it (a tap on a phone): no focus, so no keyboard springs up
+      const im = document.createElement('img');
+      im.src = full;
+      im.dataset.from = full;
+      f.appendChild(im);
+      keepPictures(f);
+    } else {
       const r = document.createRange();
       r.selectNodeContents(f);
       r.collapse(false);
@@ -576,11 +604,139 @@
     if (!im) return;
     RV.selImg = im;
     im.classList.add('rv-sel');
+    im.closest('.rv-f').focus({ preventScroll: true });
     const r = document.createRange();
     r.selectNode(im);
     getSelection().removeAllRanges();
     getSelection().addRange(r);
   });
+  // ---------- pictures in a field move like icons on a Home Screen: grab one (press and hold, on a phone) and it lifts and
+  // follows the pointer, the others make room as it passes; let go anywhere on the card and it settles there; let go
+  // outside the card and it's taken out (Undo brings it back). The browser's own drag is off for them: it copied them
+  // into the field as new pictures from the full address, which then failed to keep. ----------
+  const DRAG = { on: false, eat: 0 };
+  const SPRING = 'cubic-bezier(.2,.9,.3,1)';
+  /** The other pictures glide from where they were to where the move put them (from what's on screen, so mid-glide is fine). */
+  function flip(mutate) {
+    const ims = [...EL.querySelectorAll('.rv-f img')].filter((i) => i !== DRAG.im);
+    const was = new Map(ims.map((i) => [i, i.getBoundingClientRect()]));
+    mutate();
+    for (const i of ims) {
+      const a = was.get(i), b = i.getBoundingClientRect(), dx = a.left - b.left, dy = a.top - b.top;
+      if (Math.abs(dx) + Math.abs(dy) < 1) continue;
+      i.style.transition = 'none';
+      i.style.translate = `${dx}px ${dy}px`;
+      i.getBoundingClientRect();
+      i.style.transition = `translate .32s ${SPRING}`;
+      i.style.translate = '';
+    }
+  }
+  // where a picture sits without any glide on it: its own place in the layout
+  const home = (i) => {
+    const o = i.offsetParent.getBoundingClientRect();
+    return { x: o.left + i.offsetLeft + i.offsetWidth / 2, y: o.top + i.offsetTop + i.offsetHeight / 2, w: i.offsetWidth, h: i.offsetHeight };
+  };
+  function lift(x, y) {
+    const im = DRAG.p.im, r = im.getBoundingClientRect();
+    clearTimeout(DRAG.p.t);
+    Object.assign(DRAG, { on: true, im, r, dx: x - r.left, dy: y - r.top, x, y, moved: false });
+    unselectImg();
+    getSelection().removeAllRanges();
+    const g = document.createElement('img');
+    g.src = im.src;
+    g.className = 'rv-ghost';
+    Object.assign(g.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
+    document.body.appendChild(g);
+    DRAG.g = g;
+    requestAnimationFrame(() => g.classList.add('up'));
+    im.classList.add('rv-hole');
+    document.documentElement.classList.add('rv-dragging');
+    navigator.vibrate?.(8);
+  }
+  function move(x, y) {
+    Object.assign(DRAG, { x, y });
+    DRAG.g.style.translate = `${x - DRAG.dx - DRAG.r.left}px ${y - DRAG.dy - DRAG.r.top}px`;
+    const b = EL.getBoundingClientRect(), out = x < b.left || x > b.right || y < b.top || y > b.bottom;
+    DRAG.g.classList.toggle('out', out);
+    DRAG.im.classList.toggle('rv-away', out);
+    if (out) return;
+    const field = document.elementFromPoint(x, y)?.closest?.('.rv-f') || DRAG.im.closest('.rv-f');
+    let best = null, bd = Infinity;
+    for (const i of field.querySelectorAll('img')) {
+      if (i === DRAG.im) continue;
+      const h = home(i), d = Math.hypot((x - h.x) / h.w, (y - h.y) / h.h);
+      if (d < bd) (bd = d), (best = [i, h]);
+    }
+    let parent, next;
+    if (best) {
+      const [i, h] = best;
+      parent = i.parentNode;
+      next = x < h.x ? i : i.nextSibling;
+    } else if (DRAG.im.closest('.rv-f') !== field) (parent = field), (next = null);
+    else return;
+    if (next === DRAG.im || (DRAG.im.parentNode === parent && DRAG.im.nextSibling === next)) return;
+    DRAG.moved = true;
+    flip(() => parent.insertBefore(DRAG.im, next));
+  }
+  function drop(cancel) {
+    const p = DRAG.p;
+    DRAG.p = null;
+    if (p) clearTimeout(p.t);
+    if (!DRAG.on) return;
+    DRAG.on = false;
+    DRAG.eat = performance.now();
+    document.documentElement.classList.remove('rv-dragging');
+    const { g, im } = DRAG;
+    DRAG.im = null;
+    if (g.classList.contains('out') && !cancel) {
+      const parent = im.parentNode, next = im.nextSibling;
+      flip(() => im.remove());
+      im.classList.remove('rv-hole', 'rv-away');
+      g.classList.add('poof');
+      setTimeout(() => g.remove(), 260);
+      changed();
+      say('Picture taken out.', ['Undo', () => { if (parent.isConnected) { flip(() => parent.insertBefore(im, next?.parentNode === parent ? next : null)); changed(); } }]);
+      return;
+    }
+    im.classList.remove('rv-away');
+    const h = home(im);
+    g.classList.remove('up', 'out');
+    g.classList.add('home');
+    g.style.translate = `${h.x - h.w / 2 - DRAG.r.left}px ${h.y - h.h / 2 - DRAG.r.top}px`;
+    let done = false;
+    const land = () => { if (done) return; done = true; g.remove(); im.classList.remove('rv-hole'); };
+    g.addEventListener('transitionend', (e) => e.propertyName === 'translate' && land());
+    setTimeout(land, 420);
+    if (DRAG.moved) changed();
+  }
+  EL.addEventListener('pointerdown', (e) => {
+    const im = e.target.closest?.('.rv-f img');
+    if (!im || e.button || DRAG.on) return;
+    if (e.pointerType === 'mouse') e.preventDefault(); // no browser drag, no caret; the click still picks it
+    DRAG.p = { im, id: e.pointerId, x: e.clientX, y: e.clientY, touch: e.pointerType !== 'mouse' };
+    if (DRAG.p.touch) DRAG.p.t = setTimeout(() => DRAG.p && lift(DRAG.p.x, DRAG.p.y), 300);
+  });
+  addEventListener('pointermove', (e) => {
+    const p = DRAG.p;
+    if (!p || e.pointerId !== p.id) return;
+    if (!DRAG.on) {
+      const d = Math.hypot(e.clientX - p.x, e.clientY - p.y);
+      if (p.touch) {
+        if (d > 8) (clearTimeout(p.t), (DRAG.p = null)); // a finger that moves before the hold is scrolling
+        return;
+      }
+      if (d < 4) return;
+      lift(p.x, p.y);
+    }
+    move(e.clientX, e.clientY);
+  });
+  addEventListener('pointerup', (e) => DRAG.p && e.pointerId === DRAG.p.id && drop(false));
+  addEventListener('pointercancel', (e) => DRAG.p && e.pointerId === DRAG.p.id && drop(true));
+  // while a picture is up, the page doesn't scroll under the finger
+  addEventListener('touchmove', (e) => DRAG.on && e.cancelable && e.preventDefault(), { passive: false });
+  EL.addEventListener('contextmenu', (e) => e.target.closest?.('.rv-f img') && e.preventDefault());
+  EL.addEventListener('dragstart', (e) => e.target.closest?.('.rv-f img') && e.preventDefault());
+  EL.addEventListener('click', (e) => performance.now() - DRAG.eat < 350 && e.target.closest?.('.rv-f') && (e.stopImmediatePropagation(), e.preventDefault()), true);
   document.addEventListener('selectionchange', () => {
     if (!RV.selImg) return;
     const s = getSelection();
@@ -611,6 +767,9 @@
         field('chinese').innerHTML = st.chinese;
         draft.set(w, st);
         paintBar();
+        const out = copy(sn);
+        if (NARROW.matches) say('It’s the Sentence now.', ['Add', () => pane('add')]);
+        return out;
       }
     }
     return copy(sn);
