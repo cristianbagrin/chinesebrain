@@ -5,13 +5,24 @@
 //   grab      a picture from the web, kept in R2;  pinyin  the sentence's reading, done for him
 //   voice     the sentence read by an Azure Taiwan voice (YunJhe or HsiaoChen, picked at random)
 //   media     pictures and audio kept in R2 under an unguessable name, so <img> and <audio> can load them
+//   clean     once a day (worker.js scheduled), like Anki's Check Media: what nothing points to any more goes
 import * as ai from './ai.ts';
 import { hex } from './plus.ts';
 
 type R2Object = { body: ReadableStream; httpMetadata?: { contentType?: string } };
 type Env = {
-  CBP: { prepare(sql: string): { bind(...v: unknown[]): { first<T>(): Promise<T | null>; run(): Promise<unknown> } } };
-  FILES: { put(k: string, v: ArrayBuffer | ReadableStream, o?: { httpMetadata?: { contentType?: string } }): Promise<unknown>; get(k: string): Promise<R2Object | null> };
+  CBP: {
+    prepare(sql: string): {
+      bind(...v: unknown[]): { first<T>(): Promise<T | null>; run(): Promise<unknown>; all<T>(): Promise<{ results: T[] }> };
+      all<T>(): Promise<{ results: T[] }>;
+    };
+  };
+  FILES: {
+    put(k: string, v: ArrayBuffer | ReadableStream, o?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
+    get(k: string): Promise<R2Object | null>;
+    list(o: { prefix: string; cursor?: string; limit?: number }): Promise<{ objects: { key: string; uploaded: Date }[]; truncated: boolean; cursor?: string }>;
+    delete(k: string | string[]): Promise<unknown>;
+  };
   CBP_PUSH_KEY?: string;
   AZURE_SPEECH_KEY?: string;
   AZURE_SPEECH_REGION?: string;
@@ -63,6 +74,35 @@ export async function media(env: Env, name: string) {
   const o = await env.FILES.get(`m/${name}`);
   if (!o) return new Response('Not found', { status: 404 });
   return new Response(o.body, { headers: { 'Content-Type': o.httpMetadata?.contentType ?? 'application/octet-stream', 'Cache-Control': 'private, max-age=31536000, immutable' } });
+}
+
+// ---------- cleaning up, like Anki's Check Media ----------
+const DAY = 864e5;
+/** Picture plans of words not touched for 30 days go (their drawings with them, unless a note uses one); then every
+ *  file in R2 that no document, file or kept old version names, and that is over 14 days old (a picture in a draft not
+ *  added yet keeps that long), is deleted. */
+export async function clean(env: Env, now = Date.now()) {
+  const plans = await env.CBP.prepare("DELETE FROM docs WHERE col = 'pics' AND updated < ?").bind(now - 30 * DAY).run();
+  const used = new Set<string>();
+  const scan = (t: string) => {
+    for (const m of String(t).matchAll(/\/api\/plus\/media\/([0-9a-f]{32}\.[a-z0-9]+)/g)) used.add(m[1]);
+  };
+  for (const [sql] of [["SELECT data AS t FROM docs WHERE data LIKE '%/api/plus/media/%'"], ["SELECT data AS t FROM history WHERE data LIKE '%/api/plus/media/%'"], ["SELECT text AS t FROM files WHERE text LIKE '%/api/plus/media/%'"]]) {
+    const { results } = await env.CBP.prepare(sql).all<{ t: string }>();
+    results.forEach((r) => scan(r.t));
+  }
+  const gone: string[] = [];
+  let cursor: string | undefined, seen = 0;
+  do {
+    const l = await env.FILES.list({ prefix: 'm/', cursor, limit: 1000 });
+    for (const o of l.objects) {
+      seen++;
+      if (!used.has(o.key.slice(2)) && now - new Date(o.uploaded).getTime() > 14 * DAY) gone.push(o.key);
+    }
+    cursor = l.truncated ? l.cursor : undefined;
+  } while (cursor);
+  for (let i = 0; i < gone.length; i += 1000) await env.FILES.delete(gone.slice(i, i + 1000));
+  return { files: seen, used: used.size, deleted: gone.length, plans: (plans as { meta?: { changes?: number } })?.meta?.changes ?? 0 };
 }
 
 // ---------- pictures from the web ----------

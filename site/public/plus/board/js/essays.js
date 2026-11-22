@@ -121,9 +121,14 @@ function ES_dots(mon,have){
 function ES_stampHTML(e){
   if(!ES.reviews[e.day]) return '';
   let h=e.day*2654435761>>>0;const r=()=>{h=Math.imul(h^h>>>15,2246822507)>>>0;h^=h>>>13;return (h>>>0)%10000/10000;};
-  const st=`--st-rot:${(-15+r()*19).toFixed(1)}deg;--st-x:${(r()*34).toFixed(0)}px;--st-y:${(r()*18-4).toFixed(0)}px;`
-    +`--st-o:${(.66+r()*.24).toFixed(2)};--st-fade:${(r()*360).toFixed(0)}deg;--st-fa:${(.18+r()*.62).toFixed(2)}`;
-  return `<i class="paper-stamp read wear-${1+(e.day*7%6)}" style="${st}" aria-hidden="true"></i>`;
+  // the tilt: most land nearly straight, a few more askew (his call, 2026-11-22): a small lean left, then a spread
+  // that thins out fast (u^2.6), at most about 8 degrees either way
+  const s=r()<.5?-1:1, tilt=-1.2+s*7*Math.pow(r(),2.6);
+  const fr=ES_fresh(e);
+  // a fresh stamp is wet ink: full and even, so the recent ones read alike; older ones mellow, each its own way
+  const st=`--st-rot:${tilt.toFixed(1)}deg;--st-x:${(r()*34).toFixed(0)}px;--st-y:${(r()*18-4).toFixed(0)}px;`
+    +(fr?'':`--st-o:${(.62+r()*.24).toFixed(2)};--st-fade:${(r()*360).toFixed(0)}deg;--st-fa:${(.18+r()*.62).toFixed(2)}`);
+  return `<i class="paper-stamp read wear-${fr?1:1+(e.day*7%6)}" style="${st}" aria-hidden="true"></i>`;
 }
 // a day the review read in the last five days is fresh: its 閱 stamp in wet ink, until it ages out
 const ES_FRESH_DAYS=5;

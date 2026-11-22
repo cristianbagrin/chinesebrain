@@ -135,3 +135,10 @@ h1,h2,h3{font-weight:500;margin:0;text-wrap:balance}
 .sw[aria-checked="true"] i::after{transform:translateX(14px)}
 
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation-duration:.001s!important}}
+
+/* hold Option (core.js OPT): .opt shows only while the key is down, or once clicked (.kept) */
+html:not(.opt-on) .opt:not(.kept){display:none!important}
+html.opt-on .opt:not(.kept){animation:opt-in .14s var(--ease) both}
+@keyframes opt-in{from{opacity:0}}
+/* four pages on a phone: the tabs close up so the bar still fits a 375px screen */
+@media (max-width:440px){.bar-in{gap:8px}.seg{gap:11px}.seg button{font-size:15px}.toc{font-size:15px}.snd,.labbtn{width:30px}}

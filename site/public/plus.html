@@ -28,6 +28,7 @@
     <nav class="seg" id="tabs" role="tablist" aria-label="Board">
       <span class="thumb" aria-hidden="true"></span>
       <button type="button" role="tab" id="tab-today" aria-controls="view-today" aria-selected="true">Today<i class="dot gold" id="dot-today" hidden></i></button>
+      <button type="button" role="tab" id="tab-cards" aria-controls="view-cards" aria-selected="false" tabindex="-1">Cards</button>
       <button type="button" role="tab" id="tab-essays" aria-controls="view-essays" aria-selected="false" tabindex="-1">Essays<i class="dot" id="dot-essays" hidden></i></button>
       <button type="button" role="tab" id="tab-progress" aria-controls="view-progress" aria-selected="false" tabindex="-1">Progress</button>
     </nav>
@@ -49,6 +50,7 @@
       <div class="companion" id="companion" aria-hidden="true"></div>
     </div>
   </section>
+  <section class="view" id="view-cards" role="tabpanel" aria-labelledby="tab-cards" hidden></section>
   <section class="view" id="view-essays" role="tabpanel" aria-labelledby="tab-essays" hidden></section>
   <section class="view" id="view-progress" role="tabpanel" aria-labelledby="tab-progress" hidden></section>
   <p class="note" id="note" hidden></p>

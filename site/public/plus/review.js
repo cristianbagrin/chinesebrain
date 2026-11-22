@@ -1,12 +1,13 @@
-/* Chinese Brain Plus: the card he adds, under the study card in the card window (Stage 3). /plus only: it hooks into the
-   board's card window (plus/board/js/cards.js, copied from life/chinese/board) without changing it.
+/* Chinese Brain Plus: the card he adds, beside the study card on the Cards page (Stage 3). /plus only: it hooks into the
+   board's Cards page (plus/board/js/cards.js, copied from life/chinese/board) and fills its side column (.cd-side).
    His Anki note type "Chinese", as an editor that behaves like Anki's: every field takes anything (bold, italics, Cmd+U
    to mark the word, which shows as a highlight, pictures pasted, dropped or dragged in from anywhere, as many as he
-   likes). Fields: Sentence, Word, Picture, Notes; Pinyin is done for him from the sentence (src/cbp/cards.ts pinyin) and
+   likes). Fields: Sentence, Word (shown while Option is held, or once he has changed it), Picture, Notes; Pinyin is done for him from the sentence (src/cbp/cards.ts pinyin) and
    never shown; Audio comes when he presses V (Azure, YunJhe or HsiaoChen).
-   Pictures to choose from sit in one strip under the fields: two drawings in his flashcard style, then photos from
+   Pictures to choose from sit in one strip under the fields: drawings in his flashcard style, then photos from
    Wikimedia Commons (straight from Commons, so they show fast); a click puts one in Picture (again takes it out), a drag
-   puts it anywhere. "More" brings two more drawings and more photos.
+   puts it anywhere. "More images" finds more photos, "More drawings" draws two more. A picture in a field is picked with a
+   click (Backspace takes it out) and dragged to move it.
    Add (the button, Cmd+Enter in a field, or the board's Enter) keeps every picture on the site, saves db
    `notes/<card id>` and cards the word. Unsaved fields survive a reload (localStorage, per word). Until reviews move
    here (Stage 4), the Mac's nightly hands new notes to Anki (scripts/cbp-push.py --anki). */
@@ -53,7 +54,7 @@
     },
     set(w, st) {
       try {
-        localStorage.setItem(draftKey(w), JSON.stringify({ v: 1, ...Object.fromEntries(FIELDS.map(([k]) => [k, st[k]])), audio: st.audio }));
+        localStorage.setItem(draftKey(w), JSON.stringify({ v: 1, at: Date.now(), ...Object.fromEntries(FIELDS.map(([k]) => [k, st[k]])), audio: st.audio }));
       } catch {}
     },
     drop(w) {
@@ -62,6 +63,15 @@
       } catch {}
     },
   };
+
+  // drafts nobody came back to in 30 days go (like the server's media sweep, cards.clean)
+  try {
+    for (const k of Object.keys(localStorage)) {
+      if (!k.startsWith('cbp-draft:')) continue;
+      const d = JSON.parse(localStorage.getItem(k) || 'null');
+      if (!d || d.v !== 1 || (d.at && Date.now() - d.at > 30 * 864e5)) localStorage.removeItem(k);
+    }
+  } catch {}
 
   // ---------- what goes in the fields ----------
   const strip = (s) => String(s || '').replace(/^[AB]\s*[：:]\s*/, '').replace(/\*\*/g, '').trim();
@@ -203,17 +213,20 @@
   const EL = document.createElement('section');
   EL.className = 'rv';
   EL.hidden = true;
-  EL.innerHTML = `<div class="rv-fields">${FIELDS.map(([k, label]) => `<div class="rv-field rv-${k}"><span class="rv-l" id="rv-l-${k}">${label}</span><div class="rv-f${k === 'chinese' || k === 'word' ? ' zh' : ''}" data-f="${k}" contenteditable="true" spellcheck="false" lang="${k === 'notes' ? 'en' : 'zh-Hant'}" role="textbox" aria-multiline="true" aria-labelledby="rv-l-${k}"></div>${k === 'chinese' ? '<button type="button" class="rv-say" data-rv="say" aria-label="Read it aloud (V)">V</button>' : ''}</div>`).join('')}</div>
-  <div class="rv-strip" aria-label="Pictures to choose from"></div>
-  <div class="rv-bar"><button type="button" class="rv-add" data-rv="add"></button></div>`;
-  CD_MAIN.appendChild(EL);
+  EL.innerHTML = `<div class="rv-fields">${FIELDS.map(([k, label]) => `<div class="rv-field rv-${k}${k === 'word' ? ' opt' : ''}"><span class="rv-l" id="rv-l-${k}">${label}</span><div class="rv-f${k === 'chinese' || k === 'word' ? ' zh' : ''}" data-f="${k}" contenteditable="true" spellcheck="false" lang="${k === 'notes' ? 'en' : 'zh-Hant'}" role="textbox" aria-multiline="true" aria-labelledby="rv-l-${k}"></div>${k === 'chinese' ? '<button type="button" class="rv-say" data-rv="say" aria-label="Read it aloud (V)">V</button>' : ''}</div>`).join('')}</div>
+  <div class="rv-pics"><div class="rv-more"><span class="rv-l">Pictures</span><button type="button" class="rv-mb" data-rv="more-img">More images</button><button type="button" class="rv-mb" data-rv="more-draw">More drawings</button></div>
+  <div class="rv-strip" aria-label="Pictures to choose from"></div></div>
+  <div class="rv-bar"><button type="button" class="rv-add" data-rv="add" data-cardit></button></div>`;
+  CD_EL.querySelector('.cd-side').appendChild(EL);
+  // on /plus the strip finds the pictures: DuckDuckGo's Images is there only while Option is held
+  CD_EL.querySelector('.cd-img')?.classList.add('opt');
   const $ = (s) => EL.querySelector(s);
   const field = (k) => EL.querySelector(`.rv-f[data-f="${k}"]`);
 
   function readFields() {
     const st = CD.cur && state(CD.cur);
     if (!st) return;
-    for (const [k] of FIELDS) st[k] = field(k).innerHTML;
+    for (const [k] of FIELDS) st[k] = field(k).innerHTML.replace(/ class="rv-sel"/g, '');
   }
   function paintBar() {
     const w = CD.cur, st = w && state(w);
@@ -241,9 +254,15 @@
         : `<div class="rv-tile${x.drawn ? ' drawn' : ''}" role="button" tabindex="0" data-rv="pick" data-full="${esc(x.full)}" aria-pressed="${inPic.has(x.full)}"><img src="${esc(x.thumb)}" alt="" draggable="true" data-full="${esc(x.full)}" loading="lazy"></div>`,
     );
     if (busy.photos && !(p.photos || []).length) tiles.push(...Array(4).fill('<div class="rv-tile wait" aria-hidden="true"></div>'));
-    tiles.push(`<button type="button" class="rv-tile rv-more" data-rv="more"${busy.draw || busy.photos ? ' disabled' : ''}>More</button>`);
     $('.rv-strip').innerHTML = tiles.join('');
+    $('[data-rv="more-img"]').disabled = !!busy.photos;
+    $('[data-rv="more-draw"]').disabled = !!busy.draw;
     $('.rv-strip').querySelectorAll('img').forEach((im) => (im.onerror = () => im.closest('.rv-tile')?.remove()));
+  }
+  // the Word field stays out of sight until Option shows it, or it holds something other than the word itself
+  function wordShown(w, st) {
+    const p = $('.rv-word'), plainWord = plain(st.word);
+    p.classList.toggle('kept', !!plainWord && plainWord !== w && plainWord !== (parseCard(cardOf(w)?.text).word || w));
   }
   function paint() {
     const w = CD.cur, st = w && state(w);
@@ -253,6 +272,7 @@
       // the fields only when the word changes, so typing is never interrupted
       RV.shown = w;
       for (const [k] of FIELDS) field(k).innerHTML = kept(st[k]);
+      wordShown(w, st);
       pictures(w);
     }
     paintBar();
@@ -499,10 +519,47 @@
       return;
     }
     if (!e.target.closest('.rv-f')) return;
+    // Cmd+U marks the word (Chrome would open the page's source otherwise); Cmd+B and Cmd+I are the browser's own
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'u') {
+      e.preventDefault();
+      e.stopPropagation();
+      document.execCommand('underline');
+      changed();
+      return;
+    }
+    if (RV.selImg && (e.key === 'Backspace' || e.key === 'Delete')) {
+      e.preventDefault();
+      RV.selImg.remove();
+      unselectImg();
+      changed();
+      return;
+    }
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
       add();
     }
+  });
+  // a picture in a field: a click picks it (a ring shows it), Backspace takes it out, a drag moves it
+  function unselectImg() {
+    RV.selImg?.classList.remove('rv-sel');
+    RV.selImg = null;
+  }
+  EL.addEventListener('click', (e) => {
+    const im = e.target.closest('.rv-f img');
+    if (im === RV.selImg) return;
+    unselectImg();
+    if (!im) return;
+    RV.selImg = im;
+    im.classList.add('rv-sel');
+    const r = document.createRange();
+    r.selectNode(im);
+    getSelection().removeAllRanges();
+    getSelection().addRange(r);
+  });
+  document.addEventListener('selectionchange', () => {
+    if (!RV.selImg) return;
+    const s = getSelection();
+    if (!s.rangeCount || !s.getRangeAt(0).intersectsNode(RV.selImg) || s.isCollapsed) unselectImg();
   });
   EL.addEventListener('click', (e) => {
     const b = e.target.closest('[data-rv]'), w = CD.cur;
@@ -512,11 +569,10 @@
     if (k === 'add') add();
     else if (k === 'say') speak();
     else if (k === 'pick') pick(b.dataset.full);
-    else if (k === 'more') {
+    else if (k === 'more-img') {
       const p = RV.pics[w] || {};
       morePhotos(w, p.q || searchWords(parseCard(cardOf(w).text).meaning) || w);
-      moreDrawings(w, true);
-    }
+    } else if (k === 'more-draw') moreDrawings(w, true);
   });
   // a sentence of the study card, clicked: it becomes the card's Sentence (and is still copied, as on the board)
   const copy = CD_copy;
@@ -535,7 +591,7 @@
     return copy(sn);
   };
   document.addEventListener('keydown', (e) => {
-    if (CD.open === null || e.isComposing || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (VIEW !== 'cards' || !CD.cur || e.isComposing || e.metaKey || e.ctrlKey || e.altKey) return;
     const t = e.target;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
     if (e.key === 'v' || e.key === 'V') {

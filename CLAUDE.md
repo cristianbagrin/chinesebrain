@@ -42,8 +42,8 @@
   `plus.write`; each replaced version kept in `history`) and the nightly runs `--pull`, words.py, `--push` (compare-and-set: nothing
   the website changed is overwritten), `--anki`. The board's code is copied in with `scripts/cbp-board.py` (never edit
   `site/public/plus/board` by hand); `plus/runtime.js` stands in for claude.ai's database and `sample` (Sonnet 5.5 on the server);
-  `plus/review.js` adds his review card under the study card (`site/src/cbp/cards.ts`: pictures from Wikimedia Commons or drawn on
-  Pollinations, Azure voices, media in R2). Staging has no AI keys: it borrows production's through the `Brains` entrypoint. Claude
+  `plus/review.js` adds his review card beside the study card on the Cards page (`site/src/cbp/cards.ts`: pictures from Wikimedia Commons or drawn on
+  Pollinations, Azure voices, media in R2; a daily sweep, `cards.clean`, drops media nothing points to). Staging has no AI keys: it borrows production's through the `Brains` entrypoint. Claude
   sessions read it through the connector at `/mcp/<CBP_MCP_KEY>`.
 - **Durable Objects free tier: 5 million rows read a day across all Account objects**, and past it every page that
   touches accounts fails until 00:00 UTC. Anything called per request (auth checks, polling, each image) reads one row

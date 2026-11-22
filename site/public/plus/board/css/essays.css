@@ -132,4 +132,4 @@ html{--hl-rgb:255 210 0;--es-hl-a:.3}
 }
 
 /* a day reviewed in the last five days (essays.js ES_fresh): the 閱 stamp pressed in fresh ink, bigger. */
-.es-day.fresh .paper-stamp.read{--st:calc(52px * var(--k));opacity:1;background:#D9302C;filter:saturate(1.15)}
+.es-day.fresh .paper-stamp.read{--st:calc(52px * var(--k));opacity:.94;background:#D9302C}

@@ -161,7 +161,8 @@ function hideToast(now){if(!TOAST)return;const {el,t}=TOAST;TOAST=null;clearTime
 
 
 /* ---------- views ---------- */
-const VIEWS=['today','essays','progress'];
+// in the order of his day (his call, 2026-11-22): the test and the essay, then the cards, then the essays' review, then progress
+const VIEWS=['today','cards','essays','progress'];
 let VIEW=null; const SCROLL={};
 const TABS=document.getElementById('tabs'), THUMB=TABS.querySelector('.thumb');
 // the essays state is shared: essays.js and improve.js fill it, Today reads it
@@ -200,7 +201,8 @@ function dots(){
 TABS.addEventListener('click',e=>{const b=e.target.closest('[role="tab"]');if(b&&b.id.slice(4)!==VIEW){sfx('tap');setView(b.id.slice(4));}});
 TABS.addEventListener('keydown',e=>{
   const i=VIEWS.indexOf(VIEW); let n=null;
-  if(e.key==='ArrowRight') n=(i+1)%3; else if(e.key==='ArrowLeft') n=(i+2)%3; else if(e.key==='Home') n=0; else if(e.key==='End') n=2;
+  const L=VIEWS.length;
+  if(e.key==='ArrowRight') n=(i+1)%L; else if(e.key==='ArrowLeft') n=(i+L-1)%L; else if(e.key==='Home') n=0; else if(e.key==='End') n=L-1;
   if(n!==null){e.preventDefault();setView(VIEWS[n]);document.getElementById('tab-'+VIEWS[n]).focus();}
 });
 const BAR=document.getElementById('bar');
@@ -208,3 +210,14 @@ addEventListener('scroll',()=>BAR.classList.toggle('lift',scrollY>4),{passive:tr
 addEventListener('resize',moveThumb);
 try{document.fonts&&document.fonts.ready.then(moveThumb);}catch(e){}
 
+
+/* ---------- hold Option (Alt) to see more, as on a Mac: anything marked .opt shows only while the key is down. A click
+   on one (or into it) keeps it on screen after the key goes up (.kept), until the page that holds it moves on (the owner
+   removes .kept). Typing with Option for a character doesn't count: only the key alone, or held with the pointer. ---------- */
+const OPT={on:false};
+function optSet(on){if(OPT.on===on)return;OPT.on=on;document.documentElement.classList.toggle('opt-on',on);}
+addEventListener('keydown',e=>{if(e.key==='Alt'&&!e.repeat)optSet(true);else if(OPT.on&&e.key!=='Alt')optSet(false);},true);
+addEventListener('keyup',e=>{if(e.key==='Alt')optSet(false);},true);
+addEventListener('blur',()=>optSet(false));
+addEventListener('pointerdown',e=>{if(!OPT.on)return;const o=e.target.closest&&e.target.closest('.opt');if(o)o.classList.add('kept');},true);
+addEventListener('focusin',e=>{if(!OPT.on)return;const o=e.target.closest&&e.target.closest('.opt');if(o)o.classList.add('kept');});

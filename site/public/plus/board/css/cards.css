@@ -1,8 +1,7 @@
-/* ---------- cards: the card window. Owner: card maker.
-   One wide window over the dimmed board (the board behind is inert). Its parts are blocks (data-area: head, ex, chars,
-   story, know, plus the follow-up thread), placed in two columns that read as pairs: the word, its characters and their
-   story on the left; the sentences and what's worth knowing on the right. Type is reading size, not display size: English 16.5px (his pick, 2026-11-19), Chinese lines
-   22px, the word itself the one big thing at 46px (smaller since 2026-11-19, so the card fits one screen more often). ---------- */
+/* ---------- cards: the Cards page (a window over the board until 2026-11-22). Owner: card maker.
+   Its parts are blocks (data-area: head, ex, chars, story, know, plus the follow-up thread), read top to bottom in one
+   column; the card he adds sits beside it (.cd-side). Type is reading size: English 16.5px (his pick, 2026-11-19),
+   Chinese lines 22px, the word itself the one big thing. ---------- */
 .nu-row{cursor:pointer}
 .cd-any{margin-top:var(--s4)}
 .cd-any input{width:100%;max-width:16em;font:inherit;font-size:var(--fs-l);font-family:var(--zh);color:var(--ink);background:transparent;
@@ -10,39 +9,51 @@
 .cd-any input::placeholder{color:var(--ink-4);font-family:var(--ui)}
 .cd-any input:focus{border-bottom-color:var(--ink-3)}
 
-html.cd-on{overflow:hidden}
-html.cd-on .toast{z-index:70}
-.cd-back{position:fixed;inset:0;z-index:60;background:rgba(21,23,28,0);transition:background-color .24s cubic-bezier(.4,0,.2,1);
-  display:flex;justify-content:center;align-items:center;padding:24px}
-.cd-back.in{background:rgba(21,23,28,.3)}
-.cd-sheet{--gap:28px;width:min(1400px,100%);height:min(940px,100%);display:flex;flex-direction:column;background:var(--surface);border-radius:20px;overflow:hidden;
-  box-shadow:0 0 0 1px rgba(21,23,28,.06),0 40px 100px -30px rgba(21,23,28,.4);
-  opacity:0;transform:translateY(16px) scale(.985);
-  /* closing: it fades and sinks away on the same path it came in by, eased at both ends (no snap) */
-  transition:transform .24s cubic-bezier(.4,0,.2,1),opacity .2s cubic-bezier(.4,0,.2,1)}
-/* opening: a quick spring up, the fade a touch shorter so it's solid before it settles */
-.cd-back.in .cd-sheet{opacity:1;transform:none;transition:transform .34s var(--spring),opacity .18s var(--ease)}
-
-/* the bar: the word tabs, ‹ ›, Images, Card it, × */
-.cd-bar{flex:none;display:flex;align-items:center;gap:8px;padding:8px 12px 8px 16px;border-bottom:1px solid var(--hair)}
+/* ---------- the page: the word tabs on a bar that stays under the app bar; the card, and beside it the card he adds ---------- */
+#view-cards{--k:1}
+.cd-page{--cd-top:calc(env(safe-area-inset-top,0px) + var(--bar));margin-top:calc(var(--s7) * -1 + 8px)}
+.cd-bar{position:sticky;top:var(--cd-top);z-index:6;display:flex;align-items:center;gap:10px;padding:10px 0;margin-bottom:22px;
+  -webkit-backdrop-filter:saturate(1.6) blur(16px);backdrop-filter:saturate(1.6) blur(16px);
+  /* the glass runs to the window's edges (a border-image paints outside the bar without widening the page) */
+  border-image:linear-gradient(var(--glass) calc(100% - 1px),var(--hair) 0) fill 0 / 0 / 0 100vmax}
+/* one hairline under the two bars, not two */
+html:has(#view-cards:not([hidden])) .appbar.lift{box-shadow:none}
+@media (prefers-reduced-transparency:reduce){.cd-bar{border-image:linear-gradient(var(--bg) calc(100% - 1px),var(--hair) 0) fill 0 / 0 / 0 100vmax;-webkit-backdrop-filter:none;backdrop-filter:none}}
 .cd-sp{flex:1}
-.cd-tabs{display:flex;gap:4px;min-width:0;overflow-x:auto}
-.cd-tab{font:inherit;border:0;background:none;cursor:pointer;padding:6px 14px;border-radius:10px;color:var(--ink-3);display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
-.cd-tab .zh{font-size:22px;line-height:1.2}
+.cd-tabs{display:flex;gap:4px;min-width:0;overflow-x:auto;scrollbar-width:none}
+.cd-tabs::-webkit-scrollbar{display:none}
+.cd-tab{font:inherit;border:0;background:none;cursor:pointer;padding:6px 14px;border-radius:12px;color:var(--ink-3);display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+  transition:background-color .15s,color .15s,transform .12s var(--ease)}
+.cd-tab:active{transform:scale(.96)}
+.cd-tab .zh{font-size:24px;line-height:1.25}
 .cd-tab:hover{color:var(--ink);background:var(--wash)}
-.cd-tab[aria-selected="true"]{color:var(--ink);background:var(--wash)}
-.cd-tab:only-child{pointer-events:none;background:none;padding-left:4px}
+.cd-tab[aria-selected="true"]{color:var(--ink);background:var(--surface);box-shadow:0 0 0 1px var(--hair),0 1px 2px var(--shade)}
 .cd-tick{font-style:normal;font-size:15.5px;color:var(--green)}
 .cd-tab.todo .zh{color:var(--ink-4)}
 .cd-tab.todo[aria-selected="true"] .zh{color:var(--ink-3)}
 .cd-tx{font-style:normal;font-size:18px;line-height:1;width:20px;height:20px;display:grid;place-items:center;border-radius:50%;margin-right:-6px;color:var(--ink-4);opacity:0;transition:opacity .15s,background .15s}
 .cd-tab:hover .cd-tx,.cd-tab[aria-selected="true"] .cd-tx{opacity:1}
 .cd-tx:hover{background:var(--wash-2);color:var(--ink)}
+.cd-anyw{flex:none;margin-left:6px}
+.cd-anyw input{width:7.5em;font:inherit;font-size:19px;font-family:var(--zh);background:transparent;border:0;border-radius:12px;padding:8px 12px;outline:none;color:var(--ink);
+  box-shadow:inset 0 0 0 1px var(--hair);transition:box-shadow .15s,background .15s,width .2s var(--ease)}
+.cd-anyw input::placeholder{font-family:var(--ui);font-size:16px;color:var(--ink-4)}
+.cd-anyw input:focus{width:10em;background:var(--surface);box-shadow:inset 0 0 0 1.5px var(--ink-4)}
 .cd-nav[hidden]{display:none}
-.cd-nav{display:inline-flex;gap:2px;margin-right:4px}
-.cd-ib{font:inherit;font-size:26px;line-height:1;width:40px;height:40px;border:0;border-radius:50%;background:none;color:var(--ink-2);cursor:pointer}
+.cd-nav{display:inline-flex;gap:2px}
+.cd-ib{font:inherit;font-size:26px;line-height:1;width:40px;height:40px;border:0;border-radius:50%;background:none;color:var(--ink-2);cursor:pointer;transition:background .15s,transform .12s var(--ease)}
 .cd-ib:hover:not(:disabled){background:var(--wash);color:var(--ink)}
+.cd-ib:active:not(:disabled){transform:scale(.92)}
 .cd-ib:disabled{opacity:.3;cursor:default}
+.cd-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(420px,.8fr);gap:56px;align-items:start}
+.cd-body:has(> .cd-side[hidden]){grid-template-columns:minmax(0,1fr)}
+.cd-body[hidden]{display:none}
+.cd-side{position:sticky;top:calc(var(--cd-top) + 82px);max-height:calc(100vh - var(--cd-top) - 100px);overflow-y:auto;overscroll-behavior:contain;
+  min-width:0;margin:-4px;padding:4px;scrollbar-width:thin}
+.cd-side[hidden]{display:none}
+.cd-empty{padding:12vh 0;text-align:center;color:var(--ink-3);font-size:17px}
+.cd-empty p{margin:0}
+.cd-empty-t{font-size:22px;color:var(--ink-2);margin-bottom:6px!important}
 .cd-btn{font:inherit;font-size:16px;line-height:1;border-radius:999px;padding:11px 18px;cursor:pointer;border:0;background:var(--wash);color:var(--ink-2);text-decoration:none;
   transition:background .15s,color .15s,transform .1s}
 .cd-btn:hover:not(:disabled){background:var(--wash-2);color:var(--ink)}
@@ -55,8 +66,6 @@ html.cd-on .toast{z-index:70}
 .cd-done:hover:not(:disabled){background:#2A2E37;color:var(--on-ink)}
 .cd-done[aria-pressed="true"]{background:var(--green-wash);color:var(--green-deep)}
 .cd-done[aria-pressed="true"]::before{content:"✓ "}
-.cd-x{font:inherit;font-size:28px;line-height:1;width:42px;height:42px;border:0;background:none;color:var(--ink-3);cursor:pointer;border-radius:50%;margin-left:2px}
-.cd-x:hover{background:var(--wash);color:var(--ink)}
 
 /* ---------- the blocks (shared by every layout) ---------- */
 .cd-main{flex:1;min-height:0;color:var(--ink);font-size:16.5px;line-height:1.6}
@@ -138,7 +147,7 @@ html.cd-on .toast{z-index:70}
 .cd-wait::after{content:"";display:inline-block;width:.5em;height:.5em;margin-left:.5em;border-radius:50%;background:var(--ink-4);vertical-align:middle;animation:cd-pulse 1s ease-in-out infinite}
 @keyframes cd-pulse{50%{opacity:.25;transform:scale(.7)}}
 
-.cd-ask{flex:none;display:flex;gap:8px;padding:8px 14px 10px;border-top:1px solid var(--hair)}
+.cd-ask{flex:none;display:flex;gap:8px}
 .cd-q{flex:1;min-width:0;font:inherit;font-size:18px;padding:9px 18px;border:0;border-radius:999px;outline:none;background:var(--wash);color:var(--ink);
   box-shadow:inset 0 0 0 1.5px transparent;transition:box-shadow .15s,background .15s}
 .cd-q::placeholder{color:var(--ink-3)}
@@ -146,27 +155,26 @@ html.cd-on .toast{z-index:70}
 .cd-send{flex:none;font:inherit;font-size:19px;width:40px;height:40px;border-radius:50%;border:0;background:var(--ink);color:var(--on-ink);cursor:pointer}
 .cd-send:disabled,.cd-q:disabled{opacity:.4;cursor:default}
 
-/* ---------- the layout: two columns, each stacked on its own (no shared rows, so a long column never leaves a gap in
-   the other), scrolling together; the follow-ups under both ---------- */
-.cd-main{overflow-y:auto;overscroll-behavior:contain;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);
-  grid-template-areas:"l r" "t t";align-items:start;gap:16px 40px;padding:16px 32px 22px}
-.cd-colL{grid-area:l}.cd-colR{grid-area:r}
-.cd-colL,.cd-colR,.cd-left{display:grid;gap:16px;min-width:0;align-content:start}
-.cd-thread{grid-area:t;border-top:1px solid var(--hair);padding-top:18px}
-.cd-chars{grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
-.cd-ch{padding:10px 14px}
-.cd-parts{margin-top:8px;gap:6px}
+/* ---------- the card, read top to bottom in the order he uses it: the word, the sentences, the characters, what's
+   worth knowing, his follow-ups (one column; the characters lay out in a grid of their own) ---------- */
+.cd-sheet{min-width:0}
+.cd-main{display:flex;flex-direction:column;gap:34px}
+.cd-colL,.cd-colR,.cd-left{display:contents}
+.cd-headwrap{order:0}[data-area="ex"]{order:1}[data-area="chars"]{order:2}[data-area="story"]{order:3}[data-area="know"]{order:4}.cd-more{order:5}.cd-thread{order:6}
+.cd-head{position:relative}
+.cd-w{font-size:56px}
+.cd-redo{margin-left:auto;font-size:15px;padding:8px 14px}
+.cd-chars{grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.cd-thread{border-top:1px solid var(--hair);padding-top:22px}
+.cd-ask{margin-top:26px;padding:0}
 
-@media (prefers-reduced-motion:reduce){.cd-wait::after{animation:none}.cd-sheet{transition:opacity .15s!important;transform:none!important}}
-/* narrower windows: one column, whatever the layout */
-@media (max-width:1000px){
-  .cd-back{padding:12px}
-  .cd-main{display:flex;flex-direction:column;gap:22px;padding:18px 22px 26px}
-  .cd-colL,.cd-colR,.cd-left{display:contents}
-  .cd-headwrap{order:0}[data-area="ex"]{order:1}[data-area="chars"]{order:2}[data-area="story"]{order:3}[data-area="know"]{order:4}.cd-more{order:5}.cd-thread{order:6}
+@media (prefers-reduced-motion:reduce){.cd-wait::after{animation:none}}
+@media (max-width:1100px){
+  .cd-body{grid-template-columns:minmax(0,1fr);gap:40px}
+  .cd-side{position:static;max-height:none;overflow:visible}
 }
 @media (max-width:640px){
-  .cd-back{padding:0}
-  .cd-sheet{border-radius:0;height:100%}
-  .cd-nav{display:none}
+  .cd-nav,.cd-img{display:none}
+  .cd-w{font-size:46px}
+  .cd-anyw input{width:5.5em}
 }

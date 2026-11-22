@@ -665,6 +665,7 @@ async function plusMachine(request, env, url) {
     // once the website is the source: the Mac pulls what changed, and the switch-over itself
     if (url.pathname === '/api/plus/push/pull') return json(await plus.pull(env, await request.json()));
     if (url.pathname === '/api/plus/push/switch') return json(await plus.switchOver(env));
+    if (url.pathname === '/api/plus/push/clean') return json(await cards.clean(env));
     // a test's audio and pictures (media.py), kept like the card window's
     if (url.pathname === '/api/plus/push/media') return json({ url: await cards.keepMedia(env, await request.arrayBuffer(), request.headers.get('Content-Type') ?? '') });
     // the taste test: its samples and models, a run now, and which Gemini models the key can call
@@ -1040,6 +1041,8 @@ export default {
   // hourly: the taste test's other models answer a few more samples (free tiers allow only so many a day)
   async scheduled(event, env, ctx) {
     ctx.waitUntil(taste.run(env, 240_000).then((r) => console.log('taste', JSON.stringify(r))));
+    // and once a day (3 am in Taipei), the media nothing points to any more goes (cards.clean)
+    if (new Date(event.scheduledTime).getUTCHours() === 19) ctx.waitUntil(cards.clean(env).then((r) => console.log('clean', JSON.stringify(r))));
   },
   async fetch(request, env) {
     const url = new URL(request.url);
