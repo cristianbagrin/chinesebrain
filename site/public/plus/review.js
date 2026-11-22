@@ -2,7 +2,7 @@
    board's Cards page (plus/board/js/cards.js, copied from life/chinese/board) and fills its side column (.cd-side).
    His Anki note type "Chinese", as an editor that behaves like Anki's: every field takes anything (bold, italics, Cmd+U
    to mark the word, which shows as a highlight, pictures pasted, dropped or dragged in from anywhere, as many as he
-   likes). Fields: Sentence, Word (shown while Cmd is held, or once he has changed it), Picture, Notes; Pinyin is done for him from the sentence (src/cbp/cards.ts pinyin) and
+   likes). Fields: Sentence, Word (shown while Control is held, or once he has changed it), Picture, Notes; Pinyin is done for him from the sentence (src/cbp/cards.ts pinyin) and
    never shown; Audio comes when he presses V (Azure, YunJhe or HsiaoChen).
    Pictures to choose from sit in one strip under the fields: drawings in his flashcard style, then photos from
    Wikimedia Commons (straight from Commons, so they show fast); a click puts one in Picture (again takes it out), a drag
@@ -239,7 +239,7 @@
     const b = e.target.closest('[data-pane]');
     if (b) (pane(b.dataset.pane), sfx('tap'));
   });
-  // on /plus the strip finds the pictures: DuckDuckGo's Images is there only while Cmd is held
+  // on /plus the strip finds the pictures: DuckDuckGo's Images is there only while Control is held
   CD_EL.querySelector('.cd-img')?.classList.add('opt');
   const $ = (s) => EL.querySelector(s);
   const field = (k) => EL.querySelector(`.rv-f[data-f="${k}"]`);
@@ -288,7 +288,7 @@
     }
     for (const t of strip.querySelectorAll('[data-rv="pick"]')) t.setAttribute('aria-pressed', inPic.has(t.dataset.full));
   }
-  // the Word field stays out of sight until Cmd shows it, or it holds something other than the word itself
+  // the Word field stays out of sight until Control shows it, or it holds something other than the word itself
   function wordShown(w, st) {
     const p = $('.rv-word'), plainWord = plain(st.word);
     p.classList.toggle('kept', !!plainWord && plainWord !== w && plainWord !== (parseCard(cardOf(w)?.text).word || w));

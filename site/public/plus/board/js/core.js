@@ -211,18 +211,25 @@ addEventListener('resize',moveThumb);
 try{document.fonts&&document.fonts.ready.then(moveThumb);}catch(e){}
 
 
-/* ---------- hold Cmd (Ctrl off a Mac) to see more: anything marked .opt shows only while the key is down (his pick
-   2026-11-22, was Option). A click on one (or into it) keeps it on screen after the key goes up (.kept), until the page
-   that holds it moves on (the owner removes .kept). A shortcut (Cmd+C…) doesn't count: only the key alone, or held with
+/* ---------- hold Control to see more: anything marked .opt shows only while the key is down (his pick 2026-11-22,
+   was Option, then Cmd). A click on one (or into it) keeps it on screen after the key goes up (.kept), until the page
+   that holds it moves on (the owner removes .kept). A shortcut (Ctrl+A…) doesn't count: only the key alone, or held with
    the pointer. ---------- */
-const OPT_KEY=/Mac|iPhone|iPad/.test(navigator.platform||navigator.userAgent)?'Meta':'Control';
+const OPT_KEY='Control';
 const OPT={on:false};
 function optSet(on){if(OPT.on===on)return;OPT.on=on;document.documentElement.classList.toggle('opt-on',on);}
-// Cmd starts most shortcuts, so the extras wait a moment (a quick Cmd+U never flashes them)
+// Control starts shortcuts too, so the extras wait a moment (a quick Ctrl+A never flashes them)
 let OPT_T=0;
 const optOff=()=>{clearTimeout(OPT_T);optSet(false);};
 addEventListener('keydown',e=>{if(e.key===OPT_KEY){if(!e.repeat){clearTimeout(OPT_T);OPT_T=setTimeout(()=>optSet(true),180);}}else optOff();},true);
 addEventListener('keyup',e=>{if(e.key===OPT_KEY)optOff();},true);
 addEventListener('blur',optOff);
 addEventListener('pointerdown',e=>{if(!OPT.on)return;const o=e.target.closest&&e.target.closest('.opt');if(o)o.classList.add('kept');},true);
+// Control-click on a Mac is a right-click and no click at all: on an extra it does what a click would, with no menu
+addEventListener('contextmenu',e=>{
+  if(!OPT.on||!e.target.closest||!e.target.closest('.opt'))return;
+  e.preventDefault();
+  const b=e.target.closest('button,a'); if(b){b.click();return;}
+  const f=e.target.closest('[contenteditable=true],input,textarea'); if(f)f.focus();
+},true);
 addEventListener('focusin',e=>{if(!OPT.on)return;const o=e.target.closest&&e.target.closest('.opt');if(o)o.classList.add('kept');});
