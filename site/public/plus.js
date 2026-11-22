@@ -12,6 +12,7 @@
   const res = await fetch('/api/plus/me', { headers: { Authorization: `Bearer ${token}` } }).catch(() => null);
   if (res?.status === 401) return signIn();
   if (!res?.ok) return location.replace('/404');
+  const { flags = [] } = await res.json().catch(() => ({}));
   // then the review card, which hooks into the board's card window (plus/review.js)
   for (const src of [...board.map((f) => `/plus/board/${f}`), '/plus/review.js']) {
     const s = document.createElement('script');
@@ -23,5 +24,13 @@
   css.rel = 'stylesheet';
   css.href = '/plus/review.css';
   document.head.append(css);
+  // his reviews (Stage 4, /plus/review), for the account with that switch
+  if (flags.includes('plus.anki')) {
+    const a = document.createElement('a');
+    a.href = '/plus/review';
+    a.className = 'rv-go';
+    a.textContent = 'Reviews';
+    document.querySelector('.bar-r')?.prepend(a);
+  }
   document.documentElement.classList.remove('locked');
 })();

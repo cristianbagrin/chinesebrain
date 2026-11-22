@@ -45,6 +45,12 @@
   `plus/review.js` adds his review card beside the study card on the Cards page (`site/src/cbp/cards.ts`: pictures from Wikimedia Commons or drawn on
   Pollinations, Azure voices, media in R2; a daily sweep, `cards.clean`, drops media nothing points to). Staging has no AI keys: it borrows production's through the `Brains` entrypoint. Claude
   sessions read it through the connector at `/mcp/<CBP_MCP_KEY>`.
+- **CBP reviews (Stage 4, Anki rebuilt)**: `/plus/review`, behind the `plus.anki` switch; an offline PWA (`plus/sw.js`) that keeps
+  the whole collection in IndexedDB and syncs rows with the D1 table `anki` (`site/src/cbp/anki.ts`, `review/`). The scheduler is
+  `sched.ts` + `fsrs.ts`, FSRS-6 written to match Anki's own (`node scripts/cbp-anki.ts fsrs <colpkg>` replays his reviews against
+  Anki's stored memory). His `.colpkg` comes in with `node scripts/cbp-anki.ts import <file> [--staging]` (media to R2, the
+  collection replaced; devices start over on their own) and `check` compares with Anki. `cbp-anki.ts live` is switch day: from
+  then on notes saved on the Cards page join the collection (`anki.fromBoard`) and `cbp-push.py --anki` stops. Never touch his Anki.
 - **Durable Objects free tier: 5 million rows read a day across all Account objects**, and past it every page that
   touches accounts fails until 00:00 UTC. Anything called per request (auth checks, polling, each image) reads one row
   (`_who`), never a count or a scan; `_me` is for pages that show the counts.

@@ -17,7 +17,8 @@ Once the website is the source (`--where` prints which one is):
               then words.py's answers for today, so the nightly check keeps running
     --media FILE ...   upload a test's audio or pictures; prints their addresses (for media.py attach)
     --anki    the notes made on /plus and carded, not yet in Anki: pictures and sounds into Anki's media folder,
-              the notes into anki/cbp-<date>.txt (File → Import in Anki: note type Chinese, deck Chinese)
+              the notes into anki/cbp-<date>.txt (File → Import in Anki: note type Chinese, deck Chinese). Stops by
+              itself once reviews live on the website (scripts/cbp-anki.ts live)
     --adopt DIR   documents from the old claude.ai board (ArtifactData lists with out_dir DIR) changed there after
               the switch: brought over where the website's copy wasn't changed since, reported where both were
 
@@ -279,6 +280,10 @@ def media(site, k, paths):
 
 def anki(d, site, k):
     """Carded notes from /plus that Anki doesn't have yet, as a file Anki imports."""
+    # once his reviews live on the website (scripts/cbp-anki.ts live), new notes join that collection there
+    if post(site, '/api/plus/push/anki-check', k, {}).get('live'):
+        print('Reviews live on the website: nothing goes to Anki.')
+        return
     have = post(site, '/api/plus/push/manifest', k, {})
     keys = [ci for ci in have['docs'] if ci.startswith('notes/')]
     if not keys:

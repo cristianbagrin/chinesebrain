@@ -14,6 +14,7 @@ import * as plus from './src/cbp/plus.ts';
 import * as taste from './src/cbp/taste.ts';
 import * as ai from './src/cbp/ai.ts';
 import * as cards from './src/cbp/cards.ts';
+import * as anki from './src/cbp/anki.ts';
 
 const MAX_BODY = 1_500_000;
 const MAX_ITEMS = 60_000;
@@ -568,7 +569,7 @@ function appOf(v) {
 // production's database, read by staging too) and are flipped on /admin. No redeploy.
 
 /** Every switch the admin page shows. Add one here before code checks it. */
-const SWITCHES = { plus: 'Chinese Brain Plus', 'plus.write': 'Plus: changes saved on the website', staging: 'Staging site', 'plus.demo': 'Plus: switch test' };
+const SWITCHES = { plus: 'Chinese Brain Plus', 'plus.write': 'Plus: changes saved on the website', staging: 'Staging site', 'plus.demo': 'Plus: switch test', 'plus.anki': 'Plus: reviews (Anki, rebuilt)' };
 
 async function owner(env, bearer) {
   if (!env.ADMIN_KEY || !same(await sha(bearer), await sha(env.ADMIN_KEY))) throw new Fail(404, 'not_found', 'Not found.');
@@ -666,6 +667,11 @@ async function plusMachine(request, env, url) {
     if (url.pathname === '/api/plus/push/pull') return json(await plus.pull(env, await request.json()));
     if (url.pathname === '/api/plus/push/switch') return json(await plus.switchOver(env));
     if (url.pathname === '/api/plus/push/clean') return json(await cards.clean(env));
+    // his Anki collection (scripts/cbp-anki.ts): rows, media, the media map, the comparison with Anki
+    if (url.pathname === '/api/plus/push/anki') return json(await anki.load(env, await request.json()));
+    if (url.pathname === '/api/plus/push/anki-media') return json(await anki.media(env, url.searchParams.get('name') ?? '', await request.arrayBuffer(), request.headers.get('Content-Type') ?? ''));
+    if (url.pathname === '/api/plus/push/anki-map') return json(await anki.mediaMap(env));
+    if (url.pathname === '/api/plus/push/anki-check') return json(await anki.check(env));
     // a test's audio and pictures (media.py), kept like the card window's
     if (url.pathname === '/api/plus/push/media') return json({ url: await cards.keepMedia(env, await request.arrayBuffer(), request.headers.get('Content-Type') ?? '') });
     // the taste test: its samples and models, a run now, and which Gemini models the key can call
@@ -738,8 +744,15 @@ async function api(request, env, path) {
         // the board's own documents, once the website is the source and this account may change them
         if (path === 'plus/db') {
           if (!flags.includes('plus.write')) throw new Fail(403, 'read_only', 'Read-only for now.');
-          return await plus.write(env, body);
+          const out = await plus.write(env, body);
+          // a note made on the Cards page joins his collection once reviews live here (src/cbp/anki.ts)
+          if (body.col === 'notes' && body.op === 'set') out.anki = await anki.fromBoard(env, String(body.id), body.data).catch((e) => (console.error(e), null));
+          return out;
         }
+        // his reviews (src/cbp/anki.ts), behind their own switch
+        if (path.startsWith('plus/anki/') && !flags.includes('plus.anki')) throw new Fail(404, 'not_found', 'Not found.');
+        if (path === 'plus/anki/push') return await anki.push(env, body);
+        if (path === 'plus/anki/deeper') return await anki.deeper(env, body);
         // the card window (src/cbp/cards.ts)
         if (path === 'plus/sample') return await cards.sample(env, body);
         if (path === 'plus/photos') return await cards.photos(env, body);
@@ -755,6 +768,9 @@ async function api(request, env, path) {
       if (e instanceof ai.Quota) throw new Fail(429, 'rate_limited', 'Not now: try again in a while.');
       throw e;
     }
+    if (path.startsWith('plus/anki/') && !flags.includes('plus.anki')) throw new Fail(404, 'not_found', 'Not found.');
+    if (path === 'plus/anki/pull') return anki.pull(env, Number(q.get('since')) || 0);
+    if (path === 'plus/anki/check') return anki.check(env);
     if (path === 'plus/taste') return taste.board(env);
     if (path === 'plus/taste/results') return taste.results(env);
     if (path === 'plus/taste/img') return taste.img(env, q.get('item') ?? '', Number(q.get('n')));
@@ -1088,7 +1104,16 @@ export default {
     }
     if (path === '/brain/firefox' || path === '/brain/chrome') return Response.redirect(STORES[path.slice(7)], 302);
     // Chinese Brain Plus: the board, which loads its fonts from Google (the site's own CSP allows none).
-    if (path === '/plus' || path === '/plus/taste') {
+    // the review page's offline worker: its own policy, so it may keep the fonts for offline use
+    if (path === '/plus/sw.js') {
+      const res = await env.ASSETS.fetch(new Request(new URL('/plus/sw.js', url), request));
+      const h = new Headers(res.headers);
+      h.set('Content-Security-Policy', "default-src 'self'; connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com");
+      h.set('Cache-Control', 'no-cache');
+      h.set('Service-Worker-Allowed', '/plus/');
+      return new Response(res.body, { status: res.status, headers: h });
+    }
+    if (path === '/plus' || path === '/plus/taste' || path === '/plus/review') {
       const res = await pageFile(env, request, path);
       const h = new Headers(res.headers);
       h.set('Content-Security-Policy', PLUS_CSP);

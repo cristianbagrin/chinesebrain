@@ -78,7 +78,10 @@ const pages = { ...site, entryPoints: { site: 'site/src/site.ts', edit: 'site/sr
 
 writeFileSync('site/public/brain/demo.json', demoData(readFileSync('site/public/brain.html', 'utf8')));
 
-const builds = [firefox, chrome, chromeHook, site, pages];
+// Chinese Brain Plus's review page (/plus/review): his Anki collection, offline.
+const review = { ...site, entryPoints: { anki: 'site/src/cbp/review/main.ts' }, outdir: 'site/public/plus', target: 'es2022' };
+
+const builds = [firefox, chrome, chromeHook, site, pages, review];
 if (watch) {
   for (const opts of builds) await (await esbuild.context(opts)).watch();
 } else {

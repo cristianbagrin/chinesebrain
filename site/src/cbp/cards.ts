@@ -58,7 +58,7 @@ export async function sample(env: Env, body: { input?: unknown; effort?: unknown
 }
 
 // ---------- media ----------
-const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a' };
+const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/svg+xml': 'svg', 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a', 'audio/ogg': 'ogg', 'audio/wav': 'wav' };
 export const mediaUrl = (name: string) => `/api/plus/media/${name}`;
 /** Keep bytes; returns the address they're served at. */
 export async function keepMedia(env: Env, bytes: ArrayBuffer, type: string) {
@@ -70,10 +70,10 @@ export async function keepMedia(env: Env, bytes: ArrayBuffer, type: string) {
   return mediaUrl(name);
 }
 export async function media(env: Env, name: string) {
-  if (!/^[0-9a-f]{32}\.(jpg|png|webp|gif|mp3|m4a)$/.test(name)) return new Response('Not found', { status: 404 });
+  if (!/^[0-9a-f]{32}\.(jpg|png|webp|gif|svg|mp3|m4a|ogg|wav)$/.test(name)) return new Response('Not found', { status: 404 });
   const o = await env.FILES.get(`m/${name}`);
   if (!o) return new Response('Not found', { status: 404 });
-  return new Response(o.body, { headers: { 'Content-Type': o.httpMetadata?.contentType ?? 'application/octet-stream', 'Cache-Control': 'private, max-age=31536000, immutable' } });
+  return new Response(o.body, { headers: { 'Content-Type': o.httpMetadata?.contentType ?? 'application/octet-stream', 'Cache-Control': 'private, max-age=31536000, immutable', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox", 'X-Content-Type-Options': 'nosniff' } });
 }
 
 // ---------- cleaning up, like Anki's Check Media ----------
@@ -87,7 +87,7 @@ export async function clean(env: Env, now = Date.now()) {
   const scan = (t: string) => {
     for (const m of String(t).matchAll(/\/api\/plus\/media\/([0-9a-f]{32}\.[a-z0-9]+)/g)) used.add(m[1]);
   };
-  for (const [sql] of [["SELECT data AS t FROM docs WHERE data LIKE '%/api/plus/media/%'"], ["SELECT data AS t FROM history WHERE data LIKE '%/api/plus/media/%'"], ["SELECT text AS t FROM files WHERE text LIKE '%/api/plus/media/%'"]]) {
+  for (const [sql] of [["SELECT data AS t FROM docs WHERE data LIKE '%/api/plus/media/%'"], ["SELECT data AS t FROM history WHERE data LIKE '%/api/plus/media/%'"], ["SELECT text AS t FROM files WHERE text LIKE '%/api/plus/media/%'"], ["SELECT data AS t FROM anki WHERE data LIKE '%/api/plus/media/%'"], ['SELECT url AS t FROM anki_media']]) {
     const { results } = await env.CBP.prepare(sql).all<{ t: string }>();
     results.forEach((r) => scan(r.t));
   }
