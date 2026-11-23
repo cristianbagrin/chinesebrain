@@ -14,8 +14,8 @@
 .rx-cog[aria-current=true]{background:var(--wash);color:var(--ink)}
 .rx-wait{text-align:center;color:var(--ink-3);margin-top:24vh;font-size:var(--fs-l)}
 @media (hover:hover){.rx-seg button:hover:not([aria-current=true]){color:var(--ink-2)}.rx-cog:hover{background:var(--wash);color:var(--ink-2)}}
-/* Review is clean: the strip, the progress line and the card's options show only while Control is held (the board's
-   "show more" key, core.js OPT), or on a touch screen. Space is kept, so nothing moves when they appear. */
+/* Review is clean: the strip and the card's options show only while Option's extras are on (the board's "show more"
+   key, core.js OPT), or on a touch screen. Space is kept, so nothing moves when they appear. */
 @media (hover:hover){
   html:not(.opt-on) .rx[data-rx=review] .rx-opt{opacity:0;visibility:hidden;pointer-events:none}
   .rx-opt{transition:opacity .14s var(--ease),visibility 0s}
@@ -23,7 +23,7 @@
 }
 
 /* ---------- review ---------- */
-.rx-prog{height:2px;border-radius:2px;background:var(--wash-2);max-width:760px;margin:0 auto var(--s5);overflow:hidden}
+.rx-prog{height:2px;border-radius:2px;background:var(--wash-2);max-width:240px;margin:0 auto var(--s5);overflow:hidden}
 .rx-prog i{display:block;height:100%;background:var(--green);border-radius:3px;transition:width .5s var(--ease)}
 .rw{position:relative;max-width:760px;margin:0 auto;display:flex;flex-direction:column;min-height:calc(100dvh - var(--bar) - 190px)}
 .rw-card{flex:1;position:relative}
@@ -58,6 +58,7 @@
 .rw.rw-end{justify-content:flex-start;align-items:center;text-align:center}
 .rw-done{font-size:var(--fs-2xl);margin:18vh 0 var(--s3);color:var(--ink)}
 .rw-later{font-size:var(--fs-m);color:var(--ink-3);margin:0}
+.rw-again{display:flex;justify-content:center;gap:var(--s2);margin-top:var(--s6)}
 /* both easy: one card about the difference */
 .rw-merge{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--s3);margin:0 0 var(--s5);padding:var(--s3) var(--s3) var(--s3) var(--s4);border-radius:var(--r);background:var(--green-wash);color:var(--green-deep);font-size:var(--fs-m)}
 .rw-merge b{font-weight:500;color:var(--ink)}

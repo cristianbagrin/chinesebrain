@@ -14,7 +14,7 @@
   const isSwitch=d=>d.options.length===2&&d.options[0][0]==='on'&&d.options[1][0]==='off';
   // a choice: a switch for on/off, else the options side by side (text size shows its own size)
   function row(d){
-    if(isSwitch(d)) return `<label class="st-row st-sw"><span class="st-l">${esc(d.label)}</span><button type="button" role="switch" class="sw" aria-checked="${d.v==='on'}" data-x="${d.id}" data-v="${d.v==='on'?'off':'on'}"><i></i></button></label>`;
+    if(isSwitch(d)) return `<label class="st-row st-sw"><span class="st-l">${esc(d.label)}</span><button type="button" role="switch" class="st-tg" aria-checked="${d.v==='on'}" data-x="${d.id}" data-v="${d.v==='on'?'off':'on'}"><i></i></button></label>`;
     const big=d.id==='text-size';
     return `<div class="st-row"><span class="st-l">${esc(d.label)}</span><span class="st-o${big?' st-sz':''}" role="radiogroup" aria-label="${esc(d.label)}">${d.options.map(([v,l])=>`<button type="button" role="radio" aria-checked="${d.v===v}" data-x="${d.id}" data-v="${esc(v)}"${big?` aria-label="${esc(l)}"`:''}>${big?`<span class="sz-${esc(v)}">Aa <span class="zh">中文</span></span>`:esc(l)}</button>`).join('')}</span></div>`;
   }
@@ -25,12 +25,16 @@
     box.innerHTML=`<div class="st-in" role="dialog" aria-label="Settings">
       <div class="st-top"><b>Settings</b><button class="btn-q" type="button" id="st-reset">Reset</button><button class="st-x" type="button" id="st-close" aria-label="Close">×</button></div>
       ${Object.entries(groups).map(([g,ds],i)=>`<section class="st-g"><h3>${esc(g)}</h3>
-        ${i===0?`<label class="st-row st-sw"><span class="st-l">Sound</span><button type="button" role="switch" class="sw" aria-checked="${SND.on}" data-sound><i></i></button></label>`:''}
+        ${i===0?`<label class="st-row st-sw"><span class="st-l">Sound</span><button type="button" role="switch" class="st-tg" aria-checked="${SND.on}" data-sound><i></i></button></label>`:''}
         ${ds.map(row).join('')}</section>`).join('')}
     </div>`;
-    if(keep){const [x]=keep.split('|');const b=x==='sound'?box.querySelector('[data-sound]'):box.querySelector(`[data-x="${x}"][aria-checked="true"]`)||box.querySelector(`[data-x="${x}"]`);b&&b.focus();}
+    if(keep){const [x]=keep.split('|');const b=x==='sound'?box.querySelector('[data-sound]'):box.querySelector(`[data-x="${x}"][aria-checked="true"]`)||box.querySelector(`[data-x="${x}"]`);b&&b.focus({focusVisible:KB});}
   }
-  function open(on,back){box.hidden=!on;btn.setAttribute('aria-expanded',String(on));if(on){draw();(box.querySelector('[aria-checked="true"]')||box.querySelector('button')).focus();}else if(back)btn.focus();}
+  // the focus ring only for the keyboard: a click doesn't leave one on the switch
+  let KB=false;
+  addEventListener('keydown',()=>{KB=true;},true);
+  addEventListener('pointerdown',()=>{KB=false;},true);
+  function open(on,back){box.hidden=!on;btn.setAttribute('aria-expanded',String(on));if(on){draw();(box.querySelector('[aria-checked="true"]')||box.querySelector('button')).focus({focusVisible:KB});}else if(back)btn.focus();}
   btn.onclick=e=>{e.stopPropagation();sfx('tap');open(box.hidden);};
   box.addEventListener('click',e=>{
     e.stopPropagation();

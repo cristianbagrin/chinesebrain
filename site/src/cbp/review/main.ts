@@ -17,6 +17,8 @@ declare let VIEW: string | null;
 declare function sfx(name: string): void;
 declare function hideToast(now?: boolean): void;
 declare function openCard(word: string, src: string): void;
+declare const LAB: { define(id: string, label: string, options: [string, string][], def: string, group: string): string; get(id: string): string };
+LAB.define('deeper-model', 'Five minutes on a word by', [['haiku', 'Haiku'], ['sonnet', 'Sonnet'], ['opus', 'Opus']], 'sonnet', 'Reviews');
 
 const $ = <T extends Element = HTMLElement>(s: string, el: ParentNode = document) => el.querySelector(s) as T;
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -93,9 +95,21 @@ function today() {
   }
   return { fresh, revs, seen, done };
 }
+/** Studying past today's limits (the buttons under 今天複習完了): more new cards today, or reviews from the days ahead. */
+const MORE = { day: -1, fresh: 0, ahead: false };
+const more = () => {
+  const d = ck().today;
+  if (MORE.day !== d) Object.assign(MORE, { day: d, fresh: 0, ahead: false });
+  return MORE;
+};
 function todayQueue() {
   const k = ck(), t = today();
-  return { k, t, q: queue(live(), conf(), k, new Set(t.seen), t.fresh, t.revs) };
+  return { k, t, q: queue(live(), conf(), k, new Set(t.seen), Math.max(0, t.fresh - more().fresh), t.revs) };
+}
+/** The next review due after today (earliest first), one card per note today; for reviewing ahead. */
+function ahead(): Card | null {
+  const k = ck(), seen = today().seen;
+  return live().filter((c) => (c.queue === 2 || c.queue === 3) && c.due > k.today && !seen.has(c.nid)).sort((a, b) => a.due - b.due || a.id - b.id)[0] ?? null;
 }
 
 // ---------- toasts (the board's look: .toast) ----------
@@ -251,7 +265,7 @@ function pick(): Card | null {
   // new cards spread through the reviews (Anki's "mix with reviews")
   if (fresh.length && (!review.length || RV.sinceNew >= Math.max(1, Math.floor(review.length / fresh.length)))) return fresh[0];
   if (review.length) return review[0];
-  return q.learn[0] ?? null;
+  return q.learn[0] ?? (more().ahead ? ahead() : null);
 }
 const left = () => {
   const { q } = todayQueue();
@@ -268,12 +282,24 @@ function showReview(): void {
   }
   const c = RV.cur, t = today(), n = left();
   // how far through today: a thin line, no numbers
-  const prog = `<div class="rx-prog rx-opt" aria-hidden="true"><i style="width:${t.done + n ? Math.round((t.done / (t.done + n)) * 100) : 100}%"></i></div>`;
+  const prog = `<div class="rx-prog" aria-hidden="true"><i style="width:${t.done + n ? Math.round((t.done / (t.done + n)) * 100) : 100}%"></i></div>`;
   paintDot();
   if (!c) {
     const nextLearn = live().filter((x) => x.queue === 1).sort((a, b) => a.due - b.due)[0];
+    const anyNew = live().some((x) => x.queue === 0);
     app.innerHTML = `${prog}<section class="rw rw-end"><p class="rw-done zh">今天複習完了</p>
-      ${nextLearn ? `<p class="rw-later">One more at ${new Date(nextLearn.due * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>` : ''}</section>`;
+      ${nextLearn ? `<p class="rw-later">One more at ${new Date(nextLearn.due * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>` : ''}
+      <div class="rw-again">${anyNew ? '<button type="button" class="btn-q" data-more="new">Ten more new</button>' : ''}${ahead() ? '<button type="button" class="btn-q" data-more="ahead">Review ahead</button>' : ''}</div></section>`;
+    app.querySelectorAll<HTMLElement>('[data-more]').forEach(
+      (b) =>
+        (b.onclick = () => {
+          const m = more();
+          if (b.dataset.more === 'new') m.fresh += 10;
+          else m.ahead = true;
+          sfx('tap');
+          showReview();
+        }),
+    );
     return;
   }
   const r = rowOf(c)!;
@@ -421,7 +447,7 @@ function showDeeper(): void {
         if (!navigator.onLine) return;
         try {
           const i = (n: string) => fieldIndex(r.type!, n);
-          const out = await api('anki/deeper', { word, sentence: strip(r.note.flds[i('Chinese')] ?? ''), notes: strip(r.note.flds[i('Notes')] ?? ''), near: nearWords(r.note).slice(0, 30) });
+          const out = await api('anki/deeper', { word, sentence: strip(r.note.flds[i('Chinese')] ?? ''), notes: strip(r.note.flds[i('Notes')] ?? ''), near: nearWords(r.note).slice(0, 30), model: `claude-${LAB.get('deeper-model')}-5-5` });
           text.innerHTML = esc(out.text).replace(/\n/g, '<br>');
         } catch (e) {
           text.textContent = (e as Error).message;

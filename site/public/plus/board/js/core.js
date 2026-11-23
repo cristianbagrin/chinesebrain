@@ -211,21 +211,24 @@ addEventListener('resize',moveThumb);
 try{document.fonts&&document.fonts.ready.then(moveThumb);}catch(e){}
 
 
-/* ---------- hold Control to see more: anything marked .opt shows only while the key is down (his pick 2026-11-22,
-   was Option, then Cmd). A click on one (or into it) keeps it on screen after the key goes up (.kept), until the page
-   that holds it moves on (the owner removes .kept). A shortcut (Ctrl+A…) doesn't count: only the key alone, or held with
-   the pointer. ---------- */
-const OPT_KEY='Control';
-const OPT={on:false};
+/* ---------- Option to see more (Alt off a Mac): anything marked .opt shows only while the extras are on. A tap of Option
+   alone turns them on, another tap turns them off (his pick 2026-11-23; before: Control held, Option held, Cmd held);
+   Escape turns them off too. Option used in a shortcut or with a click doesn't count. A click on an extra (or into it) keeps it
+   on screen after they go off (.kept), until the page that holds it moves on (the owner removes .kept). ---------- */
+const OPT_KEY='Alt';
+const OPT={on:false,down:false,other:false};
 function optSet(on){if(OPT.on===on)return;OPT.on=on;document.documentElement.classList.toggle('opt-on',on);}
-// Control starts shortcuts too, so the extras wait a moment (a quick Ctrl+A never flashes them)
-let OPT_T=0;
-const optOff=()=>{clearTimeout(OPT_T);optSet(false);};
-addEventListener('keydown',e=>{if(e.key===OPT_KEY){if(!e.repeat){clearTimeout(OPT_T);OPT_T=setTimeout(()=>optSet(true),180);}}else optOff();},true);
-addEventListener('keyup',e=>{if(e.key===OPT_KEY)optOff();},true);
-addEventListener('blur',optOff);
+const optOff=()=>optSet(false);
+addEventListener('keydown',e=>{
+  if(e.key===OPT_KEY){if(!e.repeat){OPT.down=true;OPT.other=false;}return;}
+  if(OPT.down)OPT.other=true;
+  else if(e.key==='Escape'&&OPT.on)optSet(false);
+},true);
+addEventListener('keyup',e=>{if(e.key===OPT_KEY){if(OPT.down&&!OPT.other)optSet(!OPT.on);OPT.down=false;}},true);
+addEventListener('pointerdown',()=>{if(OPT.down)OPT.other=true;},true);
+addEventListener('blur',()=>{OPT.down=false;});
 addEventListener('pointerdown',e=>{if(!OPT.on)return;const o=e.target.closest&&e.target.closest('.opt');if(o)o.classList.add('kept');},true);
-// Control-click on a Mac is a right-click and no click at all: on an extra it does what a click would, with no menu
+// a right-click on an extra while they're on does what a click would, with no menu
 addEventListener('contextmenu',e=>{
   if(!OPT.on||!e.target.closest||!e.target.closest('.opt'))return;
   e.preventDefault();

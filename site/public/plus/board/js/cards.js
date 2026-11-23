@@ -14,8 +14,8 @@
    src: next|any|second, parent, carded, filed, making, dropped, knows:{char:true|false}}. The five Next up words are written
    ahead when the board opens on a computer. ---------- */
 const CD={docs:{},kit:null,busy:{},open:null,cur:null,ahead:false,loaded:false};
-const CD_MODELS={opus:'claude-opus-5-5',sonnet:'claude-sonnet-5-5'};
-LAB.define('card-model','Cards written by',[['sonnet','Sonnet'],['opus','Opus']],'sonnet','Cards');
+const CD_MODELS={haiku:'claude-haiku-5-5',opus:'claude-opus-5-5',sonnet:'claude-sonnet-5-5'};
+LAB.define('card-model','Cards written by',[['haiku','Haiku'],['sonnet','Sonnet'],['opus','Opus']],'sonnet','Cards');
 LAB.define('card-ahead','Next five written ahead',[['on','On'],['off','Off']],'on','Cards');
 const cardId=w=>'w'+[...String(w)].map(c=>c.codePointAt(0).toString(16)).join('-');
 const cardOf=w=>CD.docs[cardId(w)]||null;

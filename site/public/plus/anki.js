@@ -625,6 +625,7 @@ CREATE INDEX ix_revlog_cid ON revlog (cid);
 CREATE INDEX ix_notes_csum ON notes (csum);`;
 
   // site/src/cbp/review/main.ts
+  LAB.define("deeper-model", "Five minutes on a word by", [["haiku", "Haiku"], ["sonnet", "Sonnet"], ["opus", "Opus"]], "sonnet", "Reviews");
   var $ = (s, el = document) => el.querySelector(s), esc2 = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]), MAC = /Mac|iPhone|iPad/.test(navigator.platform), TOUCH = matchMedia("(hover: none)").matches, TAB = document.createElement("button");
   TAB.type = "button";
   TAB.setAttribute("role", "tab");
@@ -671,9 +672,17 @@ CREATE INDEX ix_notes_csum ON notes (csum);`;
     }
     return { fresh, revs, seen, done };
   }
+  var MORE = { day: -1, fresh: 0, ahead: !1 }, more = () => {
+    let d = ck().today;
+    return MORE.day !== d && Object.assign(MORE, { day: d, fresh: 0, ahead: !1 }), MORE;
+  };
   function todayQueue() {
     let k = ck(), t = today();
-    return { k, t, q: queue(live(), conf(), k, new Set(t.seen), t.fresh, t.revs) };
+    return { k, t, q: queue(live(), conf(), k, new Set(t.seen), Math.max(0, t.fresh - more().fresh), t.revs) };
+  }
+  function ahead() {
+    let k = ck(), seen = today().seen;
+    return live().filter((c) => (c.queue === 2 || c.queue === 3) && c.due > k.today && !seen.has(c.nid)).sort((a, b) => a.due - b.due || a.id - b.id)[0] ?? null;
   }
   var toastEl = null, toastT;
   function toast(msg, undoable = !1) {
@@ -751,7 +760,7 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
     let { k, q } = todayQueue(), now = q.learn.filter((c) => c.due * 1e3 <= k.now);
     if (now.length) return now[0];
     let { review, fresh } = q;
-    return fresh.length && (!review.length || RV.sinceNew >= Math.max(1, Math.floor(review.length / fresh.length))) ? fresh[0] : review.length ? review[0] : q.learn[0] ?? null;
+    return fresh.length && (!review.length || RV.sinceNew >= Math.max(1, Math.floor(review.length / fresh.length))) ? fresh[0] : review.length ? review[0] : q.learn[0] ?? (more().ahead ? ahead() : null);
   }
   var left = () => {
     let { q } = todayQueue();
@@ -760,11 +769,17 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
   function showReview() {
     if (RV.panel === "deeper") return showDeeper();
     (!RV.cur || !S.cards.has(RV.cur.id) || RV.cur !== S.cards.get(RV.cur.id) || RV.cur.queue < 0) && (RV.cur = pick(), RV.shown = !1, RV.py = !1, RV.t0 = Date.now());
-    let c = RV.cur, t = today(), n = left(), prog = `<div class="rx-prog rx-opt" aria-hidden="true"><i style="width:${t.done + n ? Math.round(t.done / (t.done + n) * 100) : 100}%"></i></div>`;
+    let c = RV.cur, t = today(), n = left(), prog = `<div class="rx-prog" aria-hidden="true"><i style="width:${t.done + n ? Math.round(t.done / (t.done + n) * 100) : 100}%"></i></div>`;
     if (paintDot(), !c) {
-      let nextLearn = live().filter((x) => x.queue === 1).sort((a, b) => a.due - b.due)[0];
+      let nextLearn = live().filter((x) => x.queue === 1).sort((a, b) => a.due - b.due)[0], anyNew = live().some((x) => x.queue === 0);
       app.innerHTML = `${prog}<section class="rw rw-end"><p class="rw-done zh">\u4ECA\u5929\u8907\u7FD2\u5B8C\u4E86</p>
-      ${nextLearn ? `<p class="rw-later">One more at ${new Date(nextLearn.due * 1e3).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>` : ""}</section>`;
+      ${nextLearn ? `<p class="rw-later">One more at ${new Date(nextLearn.due * 1e3).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>` : ""}
+      <div class="rw-again">${anyNew ? '<button type="button" class="btn-q" data-more="new">Ten more new</button>' : ""}${ahead() ? '<button type="button" class="btn-q" data-more="ahead">Review ahead</button>' : ""}</div></section>`, app.querySelectorAll("[data-more]").forEach(
+        (b) => b.onclick = () => {
+          let m = more();
+          b.dataset.more === "new" ? m.fresh += 10 : m.ahead = !0, sfx("tap"), showReview();
+        }
+      );
       return;
     }
     let r = rowOf(c), flag = c.flags & 7;
@@ -863,7 +878,7 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
         let text = $(".dtext", app);
         if (text.textContent = navigator.onLine ? "\u2026" : "Needs signal. Use the five minutes with your own notes.", !!navigator.onLine)
           try {
-            let i = (n) => fieldIndex(r.type, n), out = await api("anki/deeper", { word, sentence: strip(r.note.flds[i("Chinese")] ?? ""), notes: strip(r.note.flds[i("Notes")] ?? ""), near: nearWords(r.note).slice(0, 30) });
+            let i = (n) => fieldIndex(r.type, n), out = await api("anki/deeper", { word, sentence: strip(r.note.flds[i("Chinese")] ?? ""), notes: strip(r.note.flds[i("Notes")] ?? ""), near: nearWords(r.note).slice(0, 30), model: `claude-${LAB.get("deeper-model")}-5-5` });
             text.innerHTML = esc2(out.text).replace(/\n/g, "<br>");
           } catch (e) {
             text.textContent = e.message;

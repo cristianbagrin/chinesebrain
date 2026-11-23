@@ -2,7 +2,7 @@
    board's Cards page (plus/board/js/cards.js, copied from life/chinese/board) and fills its side column (.cd-side).
    His Anki note type "Chinese", as an editor that behaves like Anki's: every field takes anything (bold, italics, Cmd+U
    to mark the word, which shows as a highlight, pictures pasted, dropped or dragged in from anywhere, as many as he
-   likes). Fields: Sentence, Word (shown while Control is held, or once he has changed it), Picture, Notes; Pinyin is done for him from the sentence (src/cbp/cards.ts pinyin) and
+   likes). Fields: Sentence, Word (shown while Option's extras are on, or once he has changed it), Picture, Notes; Pinyin is done for him from the sentence (src/cbp/cards.ts pinyin) and
    never shown; Audio comes when he presses V (Azure, YunJhe or HsiaoChen).
    Pictures to choose from sit in one strip under the fields: drawings in his flashcard style, then photos from
    Wikimedia Commons (straight from Commons, so they show fast); a click puts one in Picture (again takes it out), a drag
@@ -15,15 +15,16 @@
   const RV = { notes: {}, st: {}, pics: {}, busy: {}, saving: false, shown: '', kept: {}, pending: new Set() };
   const FIELDS = [['chinese', 'Sentence'], ['word', 'Word'], ['mnemonic', 'Mnemonic'], ['picture', 'Picture'], ['notes', 'Notes']];
   // his three note types (Anki's names): Phrase makes only the picture → phrase card; Radical has a Mnemonic, no Word
-  // His three note types, and what each turns into (shown under the switch, which Control brings up like the Word field):
-  // a Word (almost always) is a sentence with the word marked, three cards; a Phrase is something said whole, one card,
-  // picture → the phrase, so it needs a picture; a Radical is a character part with its story, a card per side filled.
+  // His three note types (the switch comes up with Option, like the Word field): a Word (almost always) is a sentence
+  // with the word marked, three cards; a Phrase is something said whole and is for no one word (no Word field), one
+  // card, picture → the phrase, so it needs a picture; a Radical is a character part with its story.
+  // which model does which job (Settings › Cards; the card writing itself is the board's own "Cards written by")
+  const MODELS = [['haiku', 'Haiku'], ['sonnet', 'Sonnet'], ['opus', 'Opus']];
+  const modelId = (id) => `claude-${LAB.get(id)}-5-5`;
+  LAB.define('pinyin-model', 'Pinyin by', MODELS, 'sonnet', 'Cards');
+  LAB.define('idea-model', 'Picture ideas by', MODELS, 'sonnet', 'Cards');
+  LAB.define('draw-model', 'Drawings by', [['both', 'Both'], ['mai', 'MAI'], ['flux', 'Flux']], 'both', 'Cards');
   const TYPES = [['Chinese', 'Word'], ['Chinese phrases', 'Phrase'], ['Chinese radicals', 'Radical']];
-  const MAKES = {
-    Chinese: 'Three cards: the word, the picture, the sentence with a gap.',
-    'Chinese phrases': 'One card: the picture, then you say the whole phrase. Needs a picture.',
-    'Chinese radicals': 'A card for each of the character, its story and the picture.',
-  };
   const token = () => {
     try {
       return localStorage.getItem('cb-token') ?? '';
@@ -224,7 +225,7 @@
   const EL = document.createElement('section');
   EL.className = 'rv';
   EL.hidden = true;
-  EL.innerHTML = `<div class="rv-typebox opt"><div class="rv-type" role="radiogroup" aria-label="Note type">${TYPES.map(([t, l]) => `<button type="button" role="radio" data-rv="type" data-t="${t}" aria-checked="false">${l}</button>`).join('')}</div><p class="rv-makes" data-js-text></p></div><div class="rv-fields">${FIELDS.map(([k, label]) => `<div class="rv-field rv-${k}${k === 'word' ? ' opt' : ''}"><span class="rv-l" id="rv-l-${k}">${label}</span><div class="rv-f${k === 'chinese' || k === 'word' ? ' zh' : ''}" data-f="${k}" contenteditable="true" spellcheck="false" lang="${k === 'notes' ? 'en' : 'zh-Hant'}" role="textbox" aria-multiline="true" aria-labelledby="rv-l-${k}"></div>${k === 'chinese' ? '<button type="button" class="rv-say" data-rv="say" aria-label="Read it aloud (V)">V</button>' : ''}</div>`).join('')}</div>
+  EL.innerHTML = `<div class="rv-typebox opt"><div class="rv-type" role="radiogroup" aria-label="Note type">${TYPES.map(([t, l]) => `<button type="button" role="radio" data-rv="type" data-t="${t}" aria-checked="false">${l}</button>`).join('')}</div></div><div class="rv-fields">${FIELDS.map(([k, label]) => `<div class="rv-field rv-${k}${k === 'word' ? ' opt' : ''}"><span class="rv-l" id="rv-l-${k}">${label}</span><div class="rv-f${k === 'chinese' || k === 'word' ? ' zh' : ''}" data-f="${k}" contenteditable="true" spellcheck="false" lang="${k === 'notes' ? 'en' : 'zh-Hant'}" role="textbox" aria-multiline="true" aria-labelledby="rv-l-${k}"></div>${k === 'chinese' ? '<button type="button" class="rv-say" data-rv="say" aria-label="Read it aloud (V)">V</button>' : ''}</div>`).join('')}</div>
   <div class="rv-strip" aria-label="Pictures to choose from"></div>
   <div class="rv-bar"><button type="button" class="rv-add" data-rv="add" data-cardit></button></div>`;
   CD_EL.querySelector('.cd-side').appendChild(EL);
@@ -249,7 +250,7 @@
     const b = e.target.closest('[data-pane]');
     if (b) (pane(b.dataset.pane), sfx('tap'));
   });
-  // on /plus the strip finds the pictures: DuckDuckGo's Images is there only while Control is held
+  // on /plus the strip finds the pictures: DuckDuckGo's Images is there only while Option's extras are on
   CD_EL.querySelector('.cd-img')?.classList.add('opt');
   const $ = (s) => EL.querySelector(s);
   const field = (k) => EL.querySelector(`.rv-f[data-f="${k}"]`);
@@ -298,7 +299,7 @@
     }
     for (const t of strip.querySelectorAll('[data-rv="pick"]')) t.setAttribute('aria-pressed', inPic.has(t.dataset.full));
   }
-  // the Word field stays out of sight until Control shows it, or it holds something other than the word itself
+  // the Word field stays out of sight until Option shows it, or it holds something other than the word itself
   function wordShown(w, st) {
     const p = $('.rv-word'), plainWord = plain(st.word);
     p.classList.toggle('kept', !!plainWord && plainWord !== w && plainWord !== (parseCard(cardOf(w)?.text).word || w));
@@ -307,7 +308,6 @@
     EL.dataset.type = st.type || 'Chinese';
     EL.querySelectorAll('[data-rv="type"]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.t === EL.dataset.type)));
     $('#rv-l-chinese').textContent = EL.dataset.type === 'Chinese radicals' ? 'Character' : EL.dataset.type === 'Chinese phrases' ? 'Phrase' : 'Sentence';
-    $('.rv-makes').textContent = MAKES[EL.dataset.type] || '';
     // a type other than Word stays in sight, so it's never picked by mistake and forgotten
     $('.rv-typebox').classList.toggle('kept', EL.dataset.type !== 'Chinese');
   }
@@ -363,7 +363,7 @@
     (RV.busy[w] ||= {}).draw = true;
     if (CD.cur === w) paintStrip();
     try {
-      const r = await call('drawings', { word: c.word || w, meaning: c.meaning, sentence: st ? plain(st.chinese) : '', again: !!again });
+      const r = await call('drawings', { word: c.word || w, meaning: c.meaning, sentence: st ? plain(st.chinese) : '', again: !!again, model: modelId('idea-model'), drawer: LAB.get('draw-model') });
       p.drawn = r.drawn;
       keepPics(w);
       if (r.errs?.length) console.error(r.errs);
@@ -468,7 +468,7 @@
   async function pinyinOf(st) {
     const text = plain(st.chinese);
     if (text === st.pyFor) return st.py;
-    const r = await call('pinyin', { text });
+    const r = await call('pinyin', { text, model: modelId('pinyin-model') });
     st.py = r.pinyin;
     st.pyFor = text;
     return st.py;
@@ -495,7 +495,8 @@
       const py = await pinyinOf(st);
       const d = cardOf(w) || {}, c = parseCard(d.text), prev = RV.notes[cardId(w)];
       const note = {
-        word: st.word.replace(/<[^>]+>/g, '').trim() ? st.word : esc(c.word || w),
+        // a phrase is for no one word
+        word: st.type === 'Chinese phrases' ? '' : st.word.replace(/<[^>]+>/g, '').trim() ? st.word : esc(c.word || w),
         chinese: st.chinese,
         pinyin: esc(py).replace(/\n/g, '<br>'),
         picture: st.picture,

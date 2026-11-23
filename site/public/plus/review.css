@@ -113,11 +113,10 @@ html.rv-dragging,html.rv-dragging *{cursor:grabbing!important;user-select:none;-
 
 /* the note type: Word (his Chinese note), Phrase (picture → phrase only), Radical (a Mnemonic instead of the Word) */
 .rv-typebox{display:grid;gap:6px;justify-items:start}
-.rv-makes{margin:0;font-size:var(--fs-s);color:var(--ink-3)}
 .rv-type{display:inline-flex;justify-self:start;gap:2px;padding:3px;border-radius:10px;background:var(--wash)}
 .rv-type button{border:0;background:none;border-radius:8px;padding:7px 14px;font:500 var(--fs-s)/1 var(--latin);color:var(--ink-3);cursor:pointer}
 .rv-type button[aria-checked="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px var(--shade)}
 .rv-type button:active{scale:.97}
-.rv[data-type="Chinese radicals"] .rv-word{display:none}
+.rv[data-type="Chinese radicals"] .rv-word,.rv[data-type="Chinese phrases"] .rv-word{display:none!important}
 .rv:not([data-type="Chinese radicals"]) .rv-mnemonic{display:none}
 .rv-mnemonic .rv-f{font-size:20px}

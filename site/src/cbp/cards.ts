@@ -40,8 +40,10 @@ export class Bad extends Error {}
 
 // ---------- Claude ----------
 /** The board's `sample`: one prompt, or the turns of a conversation. */
-/** The models the board may ask for (its "Cards written by" setting); anything else gets the default. */
-const CARD_MODELS = new Set(['claude-sonnet-5-5', 'claude-opus-5-5']);
+/** The models his Settings may pick for each job (cards, pinyin, picture ideas, five minutes on a word); anything
+ *  else gets the default, Sonnet. */
+const CARD_MODELS = new Set(['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5']);
+export const modelOf = (m: unknown) => (typeof m === 'string' && CARD_MODELS.has(m) ? `anthropic:${m}` : CARD_MODEL);
 export async function sample(env: Env, body: { input?: unknown; effort?: unknown; model?: unknown }) {
   const input = body.input;
   let msgs: ai.Input;
@@ -55,7 +57,7 @@ export async function sample(env: Env, body: { input?: unknown; effort?: unknown
   } else throw new Bad('Nothing to send.');
   if (JSON.stringify(msgs).length > 400_000) throw new Bad('Too long.');
   const effort = body.effort === 'low' || body.effort === 'high' ? body.effort : 'medium';
-  const model = typeof body.model === 'string' && CARD_MODELS.has(body.model) ? `anthropic:${body.model}` : CARD_MODEL;
+  const model = modelOf(body.model);
   const r = await ai.text(env, model, msgs, { effort });
   return { text: r.text, model: model.split(':')[1] };
 }
@@ -178,12 +180,12 @@ async function savePlan(env: Env, p: Plan) {
 
 /** POST plus/drawings {word, meaning, sentence, again}: two drawings in his flashcard style (kept, so a card opened
  *  again shows the same ones; `again` draws two more), and Claude's search words for better photos. */
-export async function drawings(env: Env, b: { word?: unknown; meaning?: unknown; sentence?: unknown; again?: unknown }) {
+export async function drawings(env: Env, b: { word?: unknown; meaning?: unknown; sentence?: unknown; again?: unknown; model?: unknown; drawer?: unknown }) {
   const word = String(b.word ?? '').trim().slice(0, 30);
   if (!word) throw new Bad('No word.');
   let p = await loadPlan(env, word);
   if (!p) {
-    const r = await ai.text(env, CARD_MODEL, planPrompt(word, String(b.meaning ?? '').slice(0, 200), String(b.sentence ?? '').slice(0, 300)), { effort: 'low' });
+    const r = await ai.text(env, modelOf(b.model), planPrompt(word, String(b.meaning ?? '').slice(0, 200), String(b.sentence ?? '').slice(0, 300)), { effort: 'low' });
     const j = JSON.parse(/\{[\s\S]*\}/.exec(r.text)?.[0] ?? '{}');
     const prompts = (Array.isArray(j.prompts) ? j.prompts : []).map(String).filter(Boolean).slice(0, 2);
     p = { word, query: String(j.query || ''), prompts: prompts.length ? prompts : [word] };
@@ -194,7 +196,8 @@ export async function drawings(env: Env, b: { word?: unknown; meaning?: unknown;
   if (b.again || (!p.drawn?.length && !(p.tried && Date.now() - p.tried < 864e5))) {
     p.tried = Date.now();
     const made = await Promise.all(
-      DRAWERS.map(async (m, i) => {
+      // who draws: both models (one picture each), or two from the one he picked
+      (b.drawer === 'mai' ? [DRAWERS[0], DRAWERS[0]] : b.drawer === 'flux' ? [DRAWERS[1], DRAWERS[1]] : DRAWERS).map(async (m, i) => {
         try {
           const im = await ai.image(env, m, p!.prompts[i % p!.prompts.length]);
           return await keepMedia(env, im.bytes, im.type);
@@ -212,10 +215,10 @@ export async function drawings(env: Env, b: { word?: unknown; meaning?: unknown;
 
 // ---------- pinyin ----------
 /** POST plus/pinyin {text}: the sentence's Taiwan reading, for the Pinyin field he never has to see. */
-export async function pinyin(env: Env, b: { text?: unknown }) {
+export async function pinyin(env: Env, b: { text?: unknown; model?: unknown }) {
   const text = String(b.text ?? '').trim().slice(0, 600);
   if (!text) return { pinyin: '' };
-  const r = await ai.text(env, CARD_MODEL, `Write the pinyin of this Traditional Chinese text with tone marks, as a Taiwanese speaker says it: Taiwan readings (垃圾 lèsè, 星期 xīngqí, 期 qí, 研究 yánjiù, 誰 shéi), 不 and 一 with their changed tones (bú shì, yí gè, yì tiān), no third-tone sandhi written, neutral tone only where Taiwan dictionaries have it (的 de, 了 le, 嗎 ma, 們 men) and full tones where Taiwan keeps them (東西 dōngxī, 朋友 péngyǒu, 時候 shíhòu, 知道 zhīdào), one pinyin syllable per character. Join the syllables of a dictionary word and keep particles and measure words apart (Wǒmen míngtiān dā huǒchē), capitalize the first word of each sentence, keep the punctuation as English punctuation, and keep the line breaks and any "- " at the start of a line. Reply with the pinyin only.
+  const r = await ai.text(env, modelOf(b.model), `Write the pinyin of this Traditional Chinese text with tone marks, as a Taiwanese speaker says it: Taiwan readings (垃圾 lèsè, 星期 xīngqí, 期 qí, 研究 yánjiù, 誰 shéi), 不 and 一 with their changed tones (bú shì, yí gè, yì tiān), no third-tone sandhi written, neutral tone only where Taiwan dictionaries have it (的 de, 了 le, 嗎 ma, 們 men) and full tones where Taiwan keeps them (東西 dōngxī, 朋友 péngyǒu, 時候 shíhòu, 知道 zhīdào), one pinyin syllable per character. Join the syllables of a dictionary word and keep particles and measure words apart (Wǒmen míngtiān dā huǒchē), capitalize the first word of each sentence, keep the punctuation as English punctuation, and keep the line breaks and any "- " at the start of a line. Reply with the pinyin only.
 
 ${text}`, { effort: 'low' });
   return { pinyin: r.text.trim() };

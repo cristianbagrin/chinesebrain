@@ -6,7 +6,7 @@
 //   deeper   Claude's five minutes on a card he missed three times running (Sonnet 5.5, his pick for cards)
 //   fromBoard a note made on /plus's Cards page lands here as a new note with its cards, once Anki has moved (meta live)
 import * as ai from './ai.ts';
-import { CARD_MODEL, keepMedia, Bad } from './cards.ts';
+import { modelOf, keepMedia, Bad } from './cards.ts';
 import { clock, forecast, type Card } from './sched.ts';
 
 type Stmt = { bind(...v: unknown[]): Stmt; first<T>(): Promise<T | null>; all<T>(): Promise<{ results: T[] }>; run(): Promise<unknown> };
@@ -123,7 +123,7 @@ Give him five minutes of going deeper, in under 150 words, written to him ("you"
 1. One vivid analogy or tiny story that makes ${word} stick: wild and funny beats safe, built on what its characters picture.
 2. The word he most likely confuses it with (from his deck if one fits, else the usual trap) and the difference in one line, then one short example sentence for each in Traditional, each with Taiwan pinyin and English on its own line.
 Chinese punctuation in Chinese, English punctuation in English.`;
-  const r = await ai.text(env as never, CARD_MODEL, prompt, { effort: 'low' });
+  const r = await ai.text(env as never, modelOf(b.model), prompt, { effort: 'low' });
   return { text: r.text.trim() };
 }
 
