@@ -15,7 +15,15 @@
   const RV = { notes: {}, st: {}, pics: {}, busy: {}, saving: false, shown: '', kept: {}, pending: new Set() };
   const FIELDS = [['chinese', 'Sentence'], ['word', 'Word'], ['mnemonic', 'Mnemonic'], ['picture', 'Picture'], ['notes', 'Notes']];
   // his three note types (Anki's names): Phrase makes only the picture → phrase card; Radical has a Mnemonic, no Word
+  // His three note types, and what each turns into (shown under the switch, which Control brings up like the Word field):
+  // a Word (almost always) is a sentence with the word marked, three cards; a Phrase is something said whole, one card,
+  // picture → the phrase, so it needs a picture; a Radical is a character part with its story, a card per side filled.
   const TYPES = [['Chinese', 'Word'], ['Chinese phrases', 'Phrase'], ['Chinese radicals', 'Radical']];
+  const MAKES = {
+    Chinese: 'Three cards: the word, the picture, the sentence with a gap.',
+    'Chinese phrases': 'One card: the picture, then you say the whole phrase. Needs a picture.',
+    'Chinese radicals': 'A card for each of the character, its story and the picture.',
+  };
   const token = () => {
     try {
       return localStorage.getItem('cb-token') ?? '';
@@ -216,7 +224,7 @@
   const EL = document.createElement('section');
   EL.className = 'rv';
   EL.hidden = true;
-  EL.innerHTML = `<div class="rv-type" role="radiogroup" aria-label="Note type">${TYPES.map(([t, l]) => `<button type="button" role="radio" data-rv="type" data-t="${t}" aria-checked="false">${l}</button>`).join('')}</div><div class="rv-fields">${FIELDS.map(([k, label]) => `<div class="rv-field rv-${k}${k === 'word' ? ' opt' : ''}"><span class="rv-l" id="rv-l-${k}">${label}</span><div class="rv-f${k === 'chinese' || k === 'word' ? ' zh' : ''}" data-f="${k}" contenteditable="true" spellcheck="false" lang="${k === 'notes' ? 'en' : 'zh-Hant'}" role="textbox" aria-multiline="true" aria-labelledby="rv-l-${k}"></div>${k === 'chinese' ? '<button type="button" class="rv-say" data-rv="say" aria-label="Read it aloud (V)">V</button>' : ''}</div>`).join('')}</div>
+  EL.innerHTML = `<div class="rv-typebox opt"><div class="rv-type" role="radiogroup" aria-label="Note type">${TYPES.map(([t, l]) => `<button type="button" role="radio" data-rv="type" data-t="${t}" aria-checked="false">${l}</button>`).join('')}</div><p class="rv-makes" data-js-text></p></div><div class="rv-fields">${FIELDS.map(([k, label]) => `<div class="rv-field rv-${k}${k === 'word' ? ' opt' : ''}"><span class="rv-l" id="rv-l-${k}">${label}</span><div class="rv-f${k === 'chinese' || k === 'word' ? ' zh' : ''}" data-f="${k}" contenteditable="true" spellcheck="false" lang="${k === 'notes' ? 'en' : 'zh-Hant'}" role="textbox" aria-multiline="true" aria-labelledby="rv-l-${k}"></div>${k === 'chinese' ? '<button type="button" class="rv-say" data-rv="say" aria-label="Read it aloud (V)">V</button>' : ''}</div>`).join('')}</div>
   <div class="rv-strip" aria-label="Pictures to choose from"></div>
   <div class="rv-bar"><button type="button" class="rv-add" data-rv="add" data-cardit></button></div>`;
   CD_EL.querySelector('.cd-side').appendChild(EL);
@@ -299,6 +307,9 @@
     EL.dataset.type = st.type || 'Chinese';
     EL.querySelectorAll('[data-rv="type"]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.t === EL.dataset.type)));
     $('#rv-l-chinese').textContent = EL.dataset.type === 'Chinese radicals' ? 'Character' : EL.dataset.type === 'Chinese phrases' ? 'Phrase' : 'Sentence';
+    $('.rv-makes').textContent = MAKES[EL.dataset.type] || '';
+    // a type other than Word stays in sight, so it's never picked by mistake and forgotten
+    $('.rv-typebox').classList.toggle('kept', EL.dataset.type !== 'Chinese');
   }
   function paint() {
     const w = CD.cur, st = w && state(w);
@@ -337,6 +348,7 @@
       p.photos = first ? [...fresh, ...(p.photos || [])] : [...(p.photos || []), ...fresh];
       p.q = q;
       p.next = r.next;
+      keepPics(w);
     } catch (e) {
       console.error(e);
     } finally {
@@ -353,6 +365,7 @@
     try {
       const r = await call('drawings', { word: c.word || w, meaning: c.meaning, sentence: st ? plain(st.chinese) : '', again: !!again });
       p.drawn = r.drawn;
+      keepPics(w);
       if (r.errs?.length) console.error(r.errs);
       // Claude's search words find better photos than the gloss: those go first
       if (r.query && r.query !== p.q && !p.better) {
@@ -367,9 +380,35 @@
       if (CD.cur === w) paintStrip();
     }
   }
+  // The strip is found once per word and kept on this device (his call, Nov 23: no new search or drawing on every
+  // open); More images and More drawings add to it.
+  const PICS_KEY = 'cbp-pics';
+  const picsSaved = () => {
+    try {
+      return JSON.parse(localStorage.getItem(PICS_KEY) || '{}');
+    } catch {
+      return {};
+    }
+  };
+  function keepPics(w) {
+    const p = RV.pics[w];
+    if (!p) return;
+    const all = picsSaved();
+    all[w] = { photos: p.photos || [], q: p.q || '', next: p.next || 0, drawn: p.drawn || [], better: !!p.better, at: Date.now() };
+    // the 60 words seen last
+    const keep = Object.entries(all).sort((a, b) => b[1].at - a[1].at).slice(0, 60);
+    try {
+      localStorage.setItem(PICS_KEY, JSON.stringify(Object.fromEntries(keep)));
+    } catch {}
+  }
   function pictures(w) {
     const d = cardOf(w);
     if (!cardOK(d) || RV.pics[w]) return;
+    const saved = picsSaved()[w];
+    if (saved && (saved.photos.length || saved.drawn.length)) {
+      RV.pics[w] = { ...saved };
+      return;
+    }
     RV.pics[w] = {};
     morePhotos(w, searchWords(parseCard(d.text).meaning) || w);
     moreDrawings(w);
@@ -439,6 +478,11 @@
   async function save(w) {
     const st = state(w);
     if (!st || !plain(st.chinese)) return false;
+    if (CD.cur === w) readFields();
+    if (st.type === 'Chinese phrases' && !/<img/i.test(st.picture || '')) {
+      say('A phrase card shows only its picture: add one first.');
+      return false;
+    }
     RV.saving = true;
     paintBar();
     try {
@@ -761,7 +805,17 @@
     else if (k === 'type') {
       const st = state(w);
       readFields();
+      const was = st.type || 'Chinese';
       st.type = b.dataset.t;
+      // a Radical's first field is the character itself; the sentence comes back when he switches away
+      if (st.type === 'Chinese radicals' && was !== st.type) {
+        st.sentence = st.chinese;
+        st.chinese = esc(w);
+        field('chinese').innerHTML = st.chinese;
+      } else if (was === 'Chinese radicals' && st.type !== was && st.sentence != null) {
+        st.chinese = st.sentence;
+        field('chinese').innerHTML = kept(st.chinese);
+      }
       st.dirty = true;
       draft.set(w, st);
       paintType(st);

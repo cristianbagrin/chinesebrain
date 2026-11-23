@@ -40,7 +40,9 @@ export class Bad extends Error {}
 
 // ---------- Claude ----------
 /** The board's `sample`: one prompt, or the turns of a conversation. */
-export async function sample(env: Env, body: { input?: unknown; effort?: unknown }) {
+/** The models the board may ask for (its "Cards written by" setting); anything else gets the default. */
+const CARD_MODELS = new Set(['claude-sonnet-5-5', 'claude-opus-5-5']);
+export async function sample(env: Env, body: { input?: unknown; effort?: unknown; model?: unknown }) {
   const input = body.input;
   let msgs: ai.Input;
   if (typeof input === 'string') msgs = input;
@@ -53,8 +55,9 @@ export async function sample(env: Env, body: { input?: unknown; effort?: unknown
   } else throw new Bad('Nothing to send.');
   if (JSON.stringify(msgs).length > 400_000) throw new Bad('Too long.');
   const effort = body.effort === 'low' || body.effort === 'high' ? body.effort : 'medium';
-  const r = await ai.text(env, CARD_MODEL, msgs, { effort });
-  return { text: r.text, model: CARD_MODEL.split(':')[1] };
+  const model = typeof body.model === 'string' && CARD_MODELS.has(body.model) ? `anthropic:${body.model}` : CARD_MODEL;
+  const r = await ai.text(env, model, msgs, { effort });
+  return { text: r.text, model: model.split(':')[1] };
 }
 
 // ---------- media ----------
@@ -148,7 +151,7 @@ const PICTURE_RULES = `How his flashcard pictures work (his rules):
 - Funny and over the top beats polite; the meaning must land at a glance.
 - Words only when they genuinely help an abstract word: a short Traditional-Chinese speech bubble or sign. Never the target word itself, no captions or labels. Otherwise say "no text".`;
 
-type Plan = { word: string; query: string; prompts: string[]; drawn?: string[] };
+type Plan = { word: string; query: string; prompts: string[]; drawn?: string[]; tried?: number };
 
 function planPrompt(word: string, meaning: string, sentence: string) {
   return `Chris is making a flashcard for the Taiwan Mandarin word ${word}${meaning ? ` (${meaning})` : ''}${sentence ? `, in the sentence ${sentence}` : ''}. Its picture: two drawings, and photos from Wikimedia Commons.
@@ -187,7 +190,9 @@ export async function drawings(env: Env, b: { word?: unknown; meaning?: unknown;
     await savePlan(env, p);
   }
   const errs: string[] = [];
-  if (!p.drawn?.length || b.again) {
+  // a plain open draws only the first time; after a failed try it waits a day (More drawings, `again`, always draws)
+  if (b.again || (!p.drawn?.length && !(p.tried && Date.now() - p.tried < 864e5))) {
+    p.tried = Date.now();
     const made = await Promise.all(
       DRAWERS.map(async (m, i) => {
         try {

@@ -12,19 +12,18 @@
 .rx-cog{border:0;background:none;width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:var(--ink-3);cursor:pointer;transition:background .15s,color .15s}
 .rx-cog::before{content:"";width:21px;height:21px;background:currentColor;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3Cpath d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3Cpath d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/%3E%3C/svg%3E") center/contain no-repeat}
 .rx-cog[aria-current=true]{background:var(--wash);color:var(--ink)}
-/* the sync dot: green synced, gold waiting, grey offline, red trouble */
-.rx-sync{border:0;background:none;width:32px;height:32px;display:grid;place-items:center;cursor:pointer;border-radius:50%}
-.rx-sync::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--green-soft)}
-.rx-sync[data-s=wait]::before,.rx-sync[data-s=busy]::before{background:var(--gold)}
-.rx-sync[data-s=busy]::before{animation:rx-pulse 1s ease-in-out infinite alternate}
-.rx-sync[data-s=off]::before{background:var(--ink-4)}
-.rx-sync[data-s=err]::before{background:var(--red)}
-@keyframes rx-pulse{to{opacity:.35}}
 .rx-wait{text-align:center;color:var(--ink-3);margin-top:24vh;font-size:var(--fs-l)}
 @media (hover:hover){.rx-seg button:hover:not([aria-current=true]){color:var(--ink-2)}.rx-cog:hover{background:var(--wash);color:var(--ink-2)}}
+/* Review is clean: the strip, the progress line and the card's options show only while Control is held (the board's
+   "show more" key, core.js OPT), or on a touch screen. Space is kept, so nothing moves when they appear. */
+@media (hover:hover){
+  html:not(.opt-on) .rx[data-rx=review] .rx-opt{opacity:0;visibility:hidden;pointer-events:none}
+  .rx-opt{transition:opacity .14s var(--ease),visibility 0s}
+  html:not(.opt-on) .rx-opt{transition:opacity .2s var(--ease),visibility 0s .2s}
+}
 
 /* ---------- review ---------- */
-.rx-prog{height:3px;border-radius:3px;background:var(--wash-2);max-width:760px;margin:0 auto var(--s5);overflow:hidden}
+.rx-prog{height:2px;border-radius:2px;background:var(--wash-2);max-width:760px;margin:0 auto var(--s5);overflow:hidden}
 .rx-prog i{display:block;height:100%;background:var(--green);border-radius:3px;transition:width .5s var(--ease)}
 .rw{position:relative;max-width:760px;margin:0 auto;display:flex;flex-direction:column;min-height:calc(100dvh - var(--bar) - 190px)}
 .rw-card{flex:1;position:relative}
@@ -33,15 +32,15 @@
 .rw.fl1 .rw-card::before,.rw.fl3 .rw-card::before{content:"";position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:50%;background:var(--red)}
 .rw.fl3 .rw-card::before{background:var(--green)}
 .rw-bar{position:sticky;bottom:0;z-index:2;padding:var(--s4) 0 calc(var(--s2) + env(safe-area-inset-bottom,0px));background:linear-gradient(to top,var(--bg) 72%,transparent)}
-.rw-show{display:block;width:min(100%,440px);margin:0 auto;border:0;border-radius:16px;padding:17px 24px;background:var(--ink);color:var(--on-ink);font-size:var(--fs-l);font-weight:550;letter-spacing:.005em;cursor:pointer;transition:transform .12s var(--ease),box-shadow .2s;box-shadow:0 8px 22px -12px rgba(21,23,28,.55)}
-.rw-g{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;max-width:640px;margin:0 auto}
-.rw-a{border:0;border-radius:16px;padding:17px 6px;font-size:var(--fs-l);font-weight:550;cursor:pointer;transition:transform .12s var(--ease),background .15s,box-shadow .2s;-webkit-user-select:none;user-select:none}
+.rw-show{display:block;width:min(100%,360px);margin:0 auto;border:0;border-radius:14px;padding:12px 22px;background:var(--ink);color:var(--on-ink);font-size:var(--fs-m);font-weight:550;letter-spacing:.005em;cursor:pointer;transition:transform .12s var(--ease),box-shadow .2s;box-shadow:0 8px 22px -12px rgba(21,23,28,.55)}
+.rw-g{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-width:520px;margin:0 auto}
+.rw-a{border:0;border-radius:14px;padding:12px 6px;font-size:var(--fs-m);font-weight:550;cursor:pointer;transition:transform .12s var(--ease),background .15s,box-shadow .2s;-webkit-user-select:none;user-select:none}
 .rw-a1{background:var(--red-wash);color:var(--red)}
 .rw-a2{background:var(--wash);color:var(--ink-2)}
-.rw-a3{background:var(--ink);color:var(--on-ink);box-shadow:0 8px 22px -12px rgba(21,23,28,.55)}
-.rw-a4{background:var(--green-wash);color:var(--green-deep)}
+.rw-a3{background:var(--green-wash);color:var(--green-deep)}
+.rw-a4{background:#ECF0F7;color:#3F5A86}
 .rw-show:active,.rw-a:active{transform:scale(.96)}
-@media (hover:hover){.rw-a1:hover{background:#F6DEDC}.rw-a2:hover{background:var(--wash-2)}.rw-a4:hover{background:#D9EDE1}.rw-show:hover,.rw-a3:hover{box-shadow:0 10px 26px -12px rgba(21,23,28,.7)}}
+@media (hover:hover){.rw-a1:hover{background:#F6DEDC}.rw-a2:hover{background:var(--wash-2)}.rw-a3:hover{background:#D9EDE1}.rw-a4:hover{background:#E0E7F2}.rw-show:hover{box-shadow:0 10px 26px -12px rgba(21,23,28,.7)}}
 .rw-more{display:flex;justify-content:center;flex-wrap:wrap;gap:2px;padding:var(--s1) 0 var(--s4)}
 .rw-more .btn-q{color:var(--ink-3)}
 .rw-flagb[aria-expanded=true]{background:var(--wash);color:var(--ink)}
@@ -84,6 +83,8 @@
 .fv{min-height:46px;border-radius:12px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--hair);padding:10px 14px;font-size:var(--fs-m);line-height:1.5;outline:0;overflow-wrap:anywhere;transition:box-shadow .15s}
 .fv.zh{font-family:var(--zh);font-size:var(--fs-l)}
 .fv:focus{box-shadow:inset 0 0 0 1.5px var(--ink-2)}
+.fv.busy{animation:rx-pulse 1s ease-in-out infinite alternate}
+@keyframes rx-pulse{to{opacity:.4}}
 .fv img{max-height:160px;border-radius:8px;vertical-align:middle}
 .ed-end{display:flex;justify-content:flex-end;padding-top:var(--s2)}
 .ed-del{border:0;background:none;color:var(--ink-3);font-size:var(--fs-s);padding:8px 12px;border-radius:999px;cursor:pointer;transition:color .15s,background .15s}

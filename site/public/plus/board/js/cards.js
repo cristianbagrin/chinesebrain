@@ -1,6 +1,6 @@
 /* ---------- cards: Claude writes his cards on the board (from 2026-11-04). Owner: card maker
    Tap a Next up word, or type any word under the list: a sheet opens and Claude writes the card through `sample` (his
-   own usage, Opus unless the Lab says Sonnet), from db `board/cardkit` (his card rules from chinese.md, his word
+   own usage, Sonnet unless Settings say Opus), from db `board/cardkit` (his card rules from chinese.md, his word
    lists, known characters and components, saved sentences: life/chinese/words.py kit writes it).
    The card is written in a line format (CARD_FORMAT below) so the board, not the model, decides how it looks, and
    the board checks every character against his known list itself: a known character is never taken apart.
@@ -15,7 +15,7 @@
    ahead when the board opens on a computer. ---------- */
 const CD={docs:{},kit:null,busy:{},open:null,cur:null,ahead:false,loaded:false};
 const CD_MODELS={opus:'claude-opus-5-5',sonnet:'claude-sonnet-5-5'};
-LAB.define('card-model','Cards written by',[['opus','Opus'],['sonnet','Sonnet']],'opus','Cards');
+LAB.define('card-model','Cards written by',[['sonnet','Sonnet'],['opus','Opus']],'sonnet','Cards');
 LAB.define('card-ahead','Next five written ahead',[['on','On'],['off','Off']],'on','Cards');
 const cardId=w=>'w'+[...String(w)].map(c=>c.codePointAt(0).toString(16)).join('-');
 const cardOf=w=>CD.docs[cardId(w)]||null;
@@ -89,7 +89,7 @@ Judge it the way a good tutor sitting next to him would. Is there one other word
 ${CARD_FORMAT}`;
 }
 function cardCall(sm,input,opts){
-  const m=CD_MODELS[LAB.get('card-model')]||CD_MODELS.opus;
+  const m=CD_MODELS[LAB.get('card-model')]||CD_MODELS.sonnet;
   return sm(input,{model:m,modelTier:'complex',cache:false,...opts});
 }
 

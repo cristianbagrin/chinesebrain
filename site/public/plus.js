@@ -30,7 +30,7 @@
   // the board's scripts, the reviews tab (plus/anki.js) just before boot.js so the board can open on it, then the
   // review card that hooks into the Cards page (plus/review.js)
   const srcs = board.map((f) => `/plus/board/${f}`);
-  if (reviews) srcs.splice(srcs.indexOf('/plus/board/js/boot.js'), 0, '/plus/anki.js?v=2');
+  if (reviews) srcs.splice(srcs.indexOf('/plus/board/js/boot.js'), 0, '/plus/anki.js?v=4');
   for (const src of [...srcs, '/plus/review.js']) {
     const s = document.createElement('script');
     s.src = src;
@@ -45,7 +45,7 @@
   };
   link('stylesheet', '/plus/review.css');
   if (reviews) {
-    link('stylesheet', '/plus/anki.css?v=2');
+    link('stylesheet', '/plus/anki.css?v=4');
     link('manifest', '/plus/app.webmanifest');
   }
   document.documentElement.classList.remove('locked');

@@ -80,7 +80,7 @@
 
   // sample: Claude on the server. The answer comes whole (onText hears it once, at the end).
   const sample = async (input, opts = {}) => {
-    const { text, model } = await post('sample', { input, effort: opts.effort });
+    const { text, model } = await post('sample', { input, effort: opts.effort, model: opts.model });
     opts.onText?.({ text });
     return { text, modelApplied: model };
   };

@@ -248,9 +248,9 @@
     }
     return n ? sum / n : 1 / 0;
   }
-  async function optimize(w0, hs, steps2 = 160, tick) {
+  async function optimize(w0, hs, steps = 160, tick) {
     let w = new Fsrs(w0).w.slice(), clip = (x) => x.map((v2, i) => Math.min(BOUNDS[i][1], Math.max(BOUNDS[i][0], v2))), before = loss(w, hs), cur = clip(w), m = Array(21).fill(0), v = Array(21).fill(0), lr = 0.02, b1 = 0.9, b2 = 0.999;
-    for (let s = 1; s <= steps2; s++) {
+    for (let s = 1; s <= steps; s++) {
       let g = cur.map((x, i) => {
         let h = Math.max(1e-4, Math.abs(x) * 1e-3), up = cur.slice(), dn = cur.slice();
         return up[i] = x + h, dn[i] = x - h, (loss(up, hs) - loss(dn, hs)) / (2 * h);
@@ -271,7 +271,7 @@
     return c.s != null && c.d != null ? { s: c.s, d: c.d } : c.type === 2 || c.type === 3 ? { s: Math.max(0.1, c.ivl || 1), d: 5 } : null;
   }
   function answer(c0, g, conf2, ck2, ms = 0) {
-    let f = new Fsrs(conf2.w), c = { ...c0, revs: c0.revs }, mem = memoryOf(c0), t = c0.lrt ? Math.max(0, ck2.today - ck2.dayOf(c0.lrt * 1e3)) : 0, next = f.step(mem, mem ? t : 0, g), rand = seedRand(c0.id, c0.reps), ivlOf = (s, min = 1) => constrain(f.interval(s, conf2.retention), min, conf2.maxIvl, rand), steps2 = c0.type === 0 || c0.type === 1 ? conf2.learnSteps : conf2.relearnSteps, lastIvl = c0.queue === 1 ? -Math.round(stepAt(steps2, c0) * 60) : c0.ivl, revType = c0.type === 2 ? 1 : c0.type === 3 ? 2 : 0, leech = !1, toStep = (mins, left2) => (c.left = left2, mins >= 1440 ? (c.queue = 3, c.due = ck2.today + Math.round(mins / 1440), Math.round(mins / 1440)) : (c.queue = 1, c.due = Math.round(ck2.now / 1e3 + mins * 60), -Math.round(mins * 60))), graduate = (s, min = 1) => (c.type = 2, c.queue = 2, c.left = 0, c.ivl = ivlOf(s, min), c.due = ck2.today + c.ivl, c.ivl), ivl;
+    let f = new Fsrs(conf2.w), c = { ...c0, revs: c0.revs }, mem = memoryOf(c0), t = c0.lrt ? Math.max(0, ck2.today - ck2.dayOf(c0.lrt * 1e3)) : 0, next = f.step(mem, mem ? t : 0, g), rand = seedRand(c0.id, c0.reps), ivlOf = (s, min = 1) => constrain(f.interval(s, conf2.retention), min, conf2.maxIvl, rand), steps = c0.type === 0 || c0.type === 1 ? conf2.learnSteps : conf2.relearnSteps, lastIvl = c0.queue === 1 ? -Math.round(stepAt(steps, c0) * 60) : c0.ivl, revType = c0.type === 2 ? 1 : c0.type === 3 ? 2 : 0, leech = !1, toStep = (mins, left2) => (c.left = left2, mins >= 1440 ? (c.queue = 3, c.due = ck2.today + Math.round(mins / 1440), Math.round(mins / 1440)) : (c.queue = 1, c.due = Math.round(ck2.now / 1e3 + mins * 60), -Math.round(mins * 60))), graduate = (s, min = 1) => (c.type = 2, c.queue = 2, c.left = 0, c.ivl = ivlOf(s, min), c.due = ck2.today + c.ivl, c.ivl), ivl;
     if (c0.type === 2)
       if (g === 1) {
         c.lapses = c0.lapses + 1, c.ivl = ivlOf(next.s), conf2.relearnSteps.length ? (c.type = 3, ivl = toStep(conf2.relearnSteps[0], conf2.relearnSteps.length)) : ivl = graduate(next.s);
@@ -282,22 +282,22 @@
         c.ivl = g === 2 ? hard : g === 3 ? good : easy, c.due = ck2.today + c.ivl, ivl = c.ivl;
       }
     else {
-      let remaining = c0.type === 0 ? steps2.length : c0.left % 1e3 || steps2.length, idx = Math.max(0, steps2.length - remaining);
-      if (c0.type === 0 && (c.type = 1), !steps2.length || g === 4) ivl = graduate(next.s);
-      else if (g === 1) ivl = toStep(steps2[0], steps2.length);
+      let remaining = c0.type === 0 ? steps.length : c0.left % 1e3 || steps.length, idx = Math.max(0, steps.length - remaining);
+      if (c0.type === 0 && (c.type = 1), !steps.length || g === 4) ivl = graduate(next.s);
+      else if (g === 1) ivl = toStep(steps[0], steps.length);
       else if (g === 2) {
-        let d = idx === 0 ? steps2.length > 1 ? (steps2[0] + steps2[1]) / 2 : Math.min(steps2[0] * 1.5, steps2[0] + 1440) : steps2[idx];
+        let d = idx === 0 ? steps.length > 1 ? (steps[0] + steps[1]) / 2 : Math.min(steps[0] * 1.5, steps[0] + 1440) : steps[idx];
         ivl = toStep(d, remaining);
-      } else idx + 1 < steps2.length ? ivl = toStep(steps2[idx + 1], steps2.length - idx - 1) : ivl = graduate(next.s);
+      } else idx + 1 < steps.length ? ivl = toStep(steps[idx + 1], steps.length - idx - 1) : ivl = graduate(next.s);
     }
     c.reps = c0.reps + 1, c.s = next.s, c.d = next.d, c.lrt = Math.floor(ck2.now / 1e3), c.mod = ck2.now;
     let rev = [ck2.now, g, ivl, lastIvl, Math.round(next.d * 1e3), Math.min(ms, 6e4), revType];
     return c.revs = [...c0.revs ?? [], rev], { card: c, rev, leech, label: label(ivl) };
   }
-  function stepAt(steps2, c) {
-    if (!steps2.length) return 0;
-    let remaining = c.left % 1e3 || steps2.length;
-    return steps2[Math.min(steps2.length - 1, Math.max(0, steps2.length - remaining))];
+  function stepAt(steps, c) {
+    if (!steps.length) return 0;
+    let remaining = c.left % 1e3 || steps.length;
+    return steps[Math.min(steps.length - 1, Math.max(0, steps.length - remaining))];
   }
   function label(ivl) {
     if (ivl < 0) {
@@ -633,20 +633,19 @@ CREATE INDEX ix_notes_csum ON notes (csum);`;
   TAB.setAttribute("aria-selected", "false");
   TAB.tabIndex = -1;
   TAB.innerHTML = 'Reviews<i class="dot gold" id="dot-reviews" hidden></i>';
-  document.getElementById("tab-cards").after(TAB);
+  document.getElementById("tab-today").after(TAB);
   var VIEW_EL = document.createElement("section");
   VIEW_EL.className = "view";
   VIEW_EL.id = "view-reviews";
   VIEW_EL.setAttribute("role", "tabpanel");
   VIEW_EL.setAttribute("aria-labelledby", "tab-reviews");
   VIEW_EL.hidden = !0;
-  document.getElementById("view-cards").after(VIEW_EL);
-  VIEWS.splice(VIEWS.indexOf("cards") + 1, 0, "reviews");
+  document.getElementById("view-today").after(VIEW_EL);
+  VIEWS.splice(VIEWS.indexOf("today") + 1, 0, "reviews");
   VIEW_EL.innerHTML = `<div class="rx">
-  <header class="rx-top">
+  <header class="rx-top rx-opt">
     <nav class="rx-seg" aria-label="Reviews"><button type="button" data-v="review">Review</button><button type="button" data-v="browse">Browse</button></nav>
     <span class="rx-sp"></span>
-    <button type="button" class="rx-sync" aria-label="Synced"></button>
     <button type="button" class="rx-cog" data-v="settings" aria-label="Settings"></button>
   </header>
   <div class="rx-body"></div>
@@ -732,7 +731,7 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
   }
   var view = "review";
   function go(v) {
-    view === "browse" && v !== "browse" && closeSide(), view = v, VIEW_EL.querySelectorAll("[data-v]").forEach((b) => b.setAttribute("aria-current", String(b.dataset.v === v || v === "designs" && b.dataset.v === "settings"))), app.className = "rx-body v-" + v, paint();
+    view === "browse" && v !== "browse" && closeSide(), view = v, VIEW_EL.querySelectorAll("[data-v]").forEach((b) => b.setAttribute("aria-current", String(b.dataset.v === v || v === "designs" && b.dataset.v === "settings"))), app.className = "rx-body v-" + v, $(".rx", VIEW_EL).dataset.rx = v, paint();
     try {
       sessionStorage.setItem("cbp-rx", v);
     } catch {
@@ -744,7 +743,7 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
   VIEW_EL.querySelectorAll("[data-v]").forEach(
     (b) => b.onclick = () => {
       let v = b.dataset.v;
-      sfx("tap"), go(v === "settings" && (view === "settings" || view === "designs") ? "review" : v);
+      sfx("tap"), v === "browse" && resetBrowse(), go(v === "settings" && (view === "settings" || view === "designs") ? "review" : v);
     }
   );
   var RV = { cur: null, shown: !1, py: !1, t0: 0, sinceNew: 0, panel: "", merge: null, deeperFor: 0, flags: !1 };
@@ -761,7 +760,7 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
   function showReview() {
     if (RV.panel === "deeper") return showDeeper();
     (!RV.cur || !S.cards.has(RV.cur.id) || RV.cur !== S.cards.get(RV.cur.id) || RV.cur.queue < 0) && (RV.cur = pick(), RV.shown = !1, RV.py = !1, RV.t0 = Date.now());
-    let c = RV.cur, t = today(), n = left(), prog = `<div class="rx-prog" aria-hidden="true"><i style="width:${t.done + n ? Math.round(t.done / (t.done + n) * 100) : 100}%"></i></div>`;
+    let c = RV.cur, t = today(), n = left(), prog = `<div class="rx-prog rx-opt" aria-hidden="true"><i style="width:${t.done + n ? Math.round(t.done / (t.done + n) * 100) : 100}%"></i></div>`;
     if (paintDot(), !c) {
       let nextLearn = live().filter((x) => x.queue === 1).sort((a, b) => a.due - b.due)[0];
       app.innerHTML = `${prog}<section class="rw rw-end"><p class="rw-done zh">\u4ECA\u5929\u8907\u7FD2\u5B8C\u4E86</p>
@@ -773,7 +772,7 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
     ${RV.merge ? mergeBanner() : ""}
     <div class="rw-card"><div class="host${RV.py ? " py" : ""}"></div></div>
     <div class="rw-bar">${RV.shown ? `<div class="rw-g">${["Again", "Hard", "Good", "Easy"].map((x, i) => `<button type="button" class="rw-a rw-a${i + 1}" data-g="${i + 1}">${x}</button>`).join("")}</div>` : '<button type="button" class="rw-show" data-a="show">Show answer</button>'}</div>
-    <div class="rw-more">
+    <div class="rw-more rx-opt">
       ${TOUCH ? '<button type="button" class="btn-q" data-a="py">Pinyin</button><button type="button" class="btn-q" data-a="play">Play</button>' : ""}
       <button type="button" class="btn-q" data-a="edit">Edit</button><button type="button" class="btn-q rw-flagb" data-a="flag" aria-haspopup="dialog" aria-expanded="${RV.flags}">Flag</button><button type="button" class="btn-q" data-a="suspend">Suspend</button>
     </div>
@@ -937,17 +936,42 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
         note = read(), JSON.stringify(note.flds) !== JSON.stringify(S.notes.get(note.id)?.flds) && await put("note", note.id, note);
       }, 400);
     };
-    return host.querySelectorAll(".fv").forEach((f) => {
+    host.querySelectorAll(".fv").forEach((f) => {
       pasteNote.set(f, note), f.addEventListener("input", save), f.addEventListener("paste", (e) => pasteInto(e, f, save)), f.addEventListener("drop", (e) => dropInto(e, f, save));
     }), $('[data-e="del"]', host).onclick = async () => {
       clearTimeout(saveT), await deleteNote(note.id), onClose?.();
+    };
+    let ai = t.fields.find((f) => /^audio$/i.test(f.name))?.ord ?? -1, si = t.fields.find((f) => /^chinese$/i.test(f.name))?.ord ?? 0;
+    return ED = {
+      host,
+      voice: async (again) => {
+        let fa = host.querySelector(`.fv[data-o="${ai}"]`), fs = host.querySelector(`.fv[data-o="${si}"]`);
+        if (!fa || !fs) return;
+        let have = /\[sound:([^\]]+)\]/.exec(fa.textContent ?? "");
+        if (have && !again) return void new Audio(have[1]).play().catch(() => {
+        });
+        let text = strip(fs.innerHTML.replace(/<br\s*\/?>|<\/div>/gi, `
+`)).replace(/[ \t]+/g, " ").trim();
+        if (!text) return toast("The sentence is empty.");
+        if (!navigator.onLine) return toast("The voice needs signal.");
+        fa.classList.add("busy");
+        try {
+          let { url } = await api("voice", { text });
+          fa.textContent = `[sound:${url}]`, save(), new Audio(url).play().catch(() => {
+          }), sfx("save");
+        } catch (e) {
+          toast(esc2(e.message || "The voice didn\u2019t come through."));
+        } finally {
+          fa.classList.remove("busy");
+        }
+      }
     }, async () => {
-      if (clearTimeout(saveT), !S.notes.has(note.id)) return;
+      if (ED?.host === host && (ED = null), clearTimeout(saveT), !S.notes.has(note.id)) return;
       let now = read();
       JSON.stringify(now.flds) !== JSON.stringify(start2.flds) && (await put("note", now.id, now), H.undo.push({ name: "Edit", rows: [["note", now.id, start2, clone(S.notes.get(now.id))]] }), H.redo = []);
     };
   }
-  var clean = (h) => h.replace(/^(<br>)+$/, "").replace(/\s+data-[\w-]+="[^"]*"/g, "");
+  var ED = null, clean = (h) => h.replace(/^(<br>)+$/, "").replace(/\s+data-[\w-]+="[^"]*"/g, "");
   function editDialog(note) {
     let d = document.createElement("dialog");
     d.className = "rx-dlg", d.innerHTML = `<div class="dlg-top"><span class="dlg-w zh">${esc2(wordOfNote(note))}</span><button type="button" class="dlg-x" aria-label="Close">\xD7</button></div><div class="dlg-ed"></div>`, document.body.append(d);
@@ -980,7 +1004,11 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
     let w = wordOfNote(n);
     await change(`Delete ${w}`, [["note", nid, null], ...cardsOf(nid).map((c) => ["card", c.id, null])]), sfx("drop"), quiet || toast(`Deleted <span class="zh">${esc2(w)}</span>`, !0);
   }
-  var BR = { q: "", flag: 0, sort: "sort", desc: !1, sel: /* @__PURE__ */ new Set(), last: 0, focus: 0, limit: 300, close: null }, COLS = [
+  var BR = { q: "", flag: 0, sort: "added", desc: !0, sel: /* @__PURE__ */ new Set(), last: 0, focus: 0, limit: 300, close: null };
+  function resetBrowse() {
+    Object.assign(BR, { q: "", flag: 0, sort: "added", desc: !0, sel: /* @__PURE__ */ new Set(), last: 0, limit: 300 });
+  }
+  var ADDED = (r) => r.note.id * 10 + r.card.ord, COLS = [
     ["sort", "Word", (r) => wordOfNote(r.note)],
     ["card", "Card", (r) => r.type?.templates.find((t) => t.ord === r.card.ord)?.name ?? ""],
     ["due", "Due", (r, k) => r.card.queue === -1 ? 1e9 : r.card.type === 0 ? 1e8 + r.card.due : r.card.queue === 1 ? k.dayOf(r.card.due * 1e3) : r.card.due],
@@ -1002,9 +1030,9 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
     ), paintBrowse();
   }
   function results() {
-    let k = ck(), test = search(BR.q, k.today, k.dayOf), rows = live().map(rowOf).filter((r) => !!r && (!BR.flag || (r.card.flags & 7) === BR.flag) && test(r)), col_ = COLS.find((c) => c[0] === BR.sort);
+    let k = ck(), test = search(BR.q, k.today, k.dayOf), rows = live().map(rowOf).filter((r) => !!r && (!BR.flag || (r.card.flags & 7) === BR.flag) && test(r)), by = BR.sort === "added" ? ADDED : COLS.find((c) => c[0] === BR.sort)[2];
     return rows.sort((a, b) => {
-      let x = col_[2](a, k), y = col_[2](b, k), o = typeof x == "number" ? x - y : String(x).localeCompare(String(y), "zh-Hant");
+      let x = by(a, k), y = by(b, k), o = typeof x == "number" ? x - y : String(x).localeCompare(String(y), "zh-Hant");
       return BR.desc ? -o : o;
     }), rows;
   }
@@ -1084,11 +1112,6 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
       nids.flatMap((id) => [["note", id, null], ...cardsOf(id).map((c) => ["card", c.id, null])])
     ), BR.sel = /* @__PURE__ */ new Set(), sfx("drop"), toast(`Deleted ${nids.length} notes`, !0)), paintBrowse();
   }
-  var steps = (s) => s.map((m) => m >= 1440 && m % 1440 === 0 ? `${m / 1440}d` : m >= 60 && m % 60 === 0 ? `${m / 60}h` : `${m}m`).join(" "), parseSteps = (s) => s.split(/[\s,]+/).filter(Boolean).map((x) => {
-    let m = /^([\d.]+)([smhd]?)$/.exec(x);
-    if (!m) throw new Error(`\u201C${x}\u201D isn\u2019t a step. Write them like 1m 10m 1d.`);
-    return Number(m[1]) * { s: 1 / 60, m: 1, h: 60, d: 1440, "": 1 }[m[2]];
-  });
   function perDay(ret) {
     let c = conf(), f = new Fsrs(c.w), n = 0;
     for (let x of live()) x.queue >= 0 && x.type !== 0 && x.s && (n += 1 / Math.max(1, Math.min(c.maxIvl, f.interval(x.s, ret))));
@@ -1097,14 +1120,10 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
   function showSettings() {
     let c = conf(), tuned = c.tuned, fmt = (ms) => new Date(ms).toLocaleDateString([], { month: "short", day: "numeric" });
     app.innerHTML = `<section class="rs">
-    <div class="rs-row"><div class="rs-l"><label for="rs-new">New cards a day</label><p>Each new card brings a handful of reviews over the next weeks, so more new cards now means more reviews later.</p></div>
+    <div class="rs-row"><div class="rs-l"><label for="rs-new">New cards a day</label><p>More new cards now means more reviews later.</p></div>
       <div class="rs-c"><div class="stepper"><button type="button" data-n="-1" aria-label="Fewer">\u2212</button><input id="rs-new" inputmode="numeric" value="${c.newPerDay}"><button type="button" data-n="1" aria-label="More">+</button></div></div></div>
-    <div class="rs-row"><div class="rs-l"><label for="rs-ret">How much to remember</label><p>The chance you still know a card when it comes back. Higher means you forget less and review more.</p></div>
+    <div class="rs-row"><div class="rs-l"><label for="rs-ret">How much to remember</label><p>The chance that you still know a card when it comes back. Higher means you forget less and review more.</p></div>
       <div class="rs-c"><input type="range" id="rs-ret" min="80" max="97" step="1" value="${Math.round(c.retention * 100)}"><p class="rs-v"><b data-js-text class="rs-pct"></b> <span data-js-text class="rs-load"></span></p></div></div>
-    <div class="rs-row"><div class="rs-l"><label for="rs-learn">Learning steps</label><p>The waits before a new card's first real gap of days. Again starts them over.</p></div>
-      <div class="rs-c"><input id="rs-learn" value="${esc2(steps(c.learnSteps))}" spellcheck="false" autocomplete="off"></div></div>
-    <div class="rs-row"><div class="rs-l"><label for="rs-relearn">After a miss</label><p>The waits after you miss a card, before it goes back to days.</p></div>
-      <div class="rs-c"><input id="rs-relearn" value="${esc2(steps(c.relearnSteps))}" spellcheck="false" autocomplete="off"></div></div>
     <div class="rs-row"><div class="rs-l"><span class="rs-h">Memory model</span><p>Fits itself to your own reviews once a month, like Anki's Optimize, and keeps the fit only when it predicts your memory better.</p></div>
       <div class="rs-c"><p class="rs-v" data-js-text>${tuned ? `Last fit ${fmt(tuned.at)}${tuned.better ? `: ${tuned.better}% closer to how you remember` : ": already a good fit"}` : "Not fitted here yet"}</p><button type="button" class="btn-q rs-tune">Fit now</button></div></div>
     <div class="rs-row"><div class="rs-l"><span class="rs-h">Card designs</span><p>Each note type's fields, front and back, and styling, as in Anki.</p></div>
@@ -1128,20 +1147,7 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
     let nw = $("#rs-new", app), setNew = (v) => {
       nw.value = String(Math.max(0, Math.min(200, v))), saveConf("New cards a day", { newPerDay: Number(nw.value) });
     };
-    nw.onchange = () => setNew(parseInt(nw.value) || 0), app.querySelectorAll("[data-n]").forEach((b) => b.onclick = () => setNew((parseInt(nw.value) || 0) + Number(b.dataset.n)));
-    for (let [id, key, name] of [["#rs-learn", "learnSteps", "Learning steps"], ["#rs-relearn", "relearnSteps", "Steps after a miss"]]) {
-      let el = $(id, app);
-      el.onchange = () => {
-        try {
-          let v = parseSteps(el.value);
-          if (key === "learnSteps" && !v.length) throw new Error("At least one learning step.");
-          saveConf(name, { [key]: v }), el.value = steps(v);
-        } catch (e) {
-          msg.textContent = e.message;
-        }
-      };
-    }
-    $("[data-go]", app).onclick = () => go("designs"), $(".rs-tune", app).onclick = async (e) => {
+    nw.onchange = () => setNew(parseInt(nw.value) || 0), app.querySelectorAll("[data-n]").forEach((b) => b.onclick = () => setNew((parseInt(nw.value) || 0) + Number(b.dataset.n))), $("[data-go]", app).onclick = () => go("designs"), $(".rs-tune", app).onclick = async (e) => {
       let b = e.currentTarget;
       b.disabled = !0, b.textContent = "Fitting\u2026", await tune(!0), view === "settings" && showSettings();
     }, $(".rs-dl", app).onclick = async (e) => {
@@ -1243,6 +1249,7 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
         return e.preventDefault(), e.stopImmediatePropagation(), document.querySelector("dialog[open]") ? void 0 : k === "y" || e.shiftKey ? redo() : undo();
       if (e.key === "Escape")
         return RV.flags ? (e.stopImmediatePropagation(), RV.flags = !1, showReview()) : view === "browse" && BR.sel.size && !document.querySelector("dialog[open]") ? (e.stopImmediatePropagation(), BR.sel = /* @__PURE__ */ new Set(), closeSide(), paintSel()) : void 0;
+      if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && k === "v" && ED?.host.isConnected) return e.preventDefault(), e.stopImmediatePropagation(), ED.voice(e.shiftKey);
       if (typing || e.metaKey || e.ctrlKey || e.altKey || document.querySelector("dialog[open]") || view !== "review") return;
       if (RV.flags) {
         let f = { r: 1, g: 3, n: 0, 0: 0 }[k];
@@ -1254,25 +1261,20 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
       if (e.key === " " || e.key === "Enter")
         return e.preventDefault(), RV.shown ? grade(3) : act("show");
       if (/^[1-4]$/.test(e.key) && RV.shown) return e.preventDefault(), grade(Number(e.key));
-      let a = { s: "suspend", f: "flag", p: "py", v: "play", e: "edit" }[k];
+      let a = { s: "suspend", f: "flag", p: "py", v: "play", r: "play", e: "edit" }[k];
       a && (e.preventDefault(), e.stopImmediatePropagation(), act(a));
     },
     !0
   );
-  function paintSync() {
-    let el = $(".rx-sync", VIEW_EL), pending = S.outbox.size;
-    el.dataset.s = navigator.onLine ? S.syncing ? "busy" : S.error ? "err" : pending ? "wait" : "ok" : "off", el.setAttribute("aria-label", navigator.onLine ? S.error ? S.error : S.syncing ? "Syncing" : pending ? "Changes waiting" : "Synced" : "Offline: changes wait on this device");
-  }
   function paintDot() {
     if (!ready) return;
     let dot = document.getElementById("dot-reviews");
     dot && (dot.hidden = VIEW === "reviews" || !left());
   }
   onChange((what) => {
-    if (paintSync(), what !== "pulled" || VIEW !== "reviews") return paintDot();
+    if (what !== "pulled" || VIEW !== "reviews") return paintDot();
     view === "review" && !RV.shown && !document.querySelector("dialog[open]") && !VIEW_EL.contains(document.activeElement) && showReview(), view === "browse" && !$(".br-side", app)?.contains(document.activeElement) && paintBrowse();
   });
-  $(".rx-sync", VIEW_EL).onclick = () => sync();
   var ready = !1, started = null;
   function start() {
     return started ??= (async () => {
@@ -1287,7 +1289,7 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
         app.innerHTML = `<p class="rx-wait">${S.error ? esc2(S.error) : navigator.onLine ? "Nothing here yet." : "Needs signal the first time."}</p>`, started = null;
         return;
       }
-      ready = !0, paintSync();
+      ready = !0;
       let v = "review";
       try {
         v = sessionStorage.getItem("cbp-rx") || "review";

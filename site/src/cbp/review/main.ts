@@ -33,20 +33,19 @@ TAB.setAttribute('aria-controls', 'view-reviews');
 TAB.setAttribute('aria-selected', 'false');
 TAB.tabIndex = -1;
 TAB.innerHTML = 'Reviews<i class="dot gold" id="dot-reviews" hidden></i>';
-document.getElementById('tab-cards')!.after(TAB);
+document.getElementById('tab-today')!.after(TAB);
 const VIEW_EL = document.createElement('section');
 VIEW_EL.className = 'view';
 VIEW_EL.id = 'view-reviews';
 VIEW_EL.setAttribute('role', 'tabpanel');
 VIEW_EL.setAttribute('aria-labelledby', 'tab-reviews');
 VIEW_EL.hidden = true;
-document.getElementById('view-cards')!.after(VIEW_EL);
-VIEWS.splice(VIEWS.indexOf('cards') + 1, 0, 'reviews');
+document.getElementById('view-today')!.after(VIEW_EL);
+VIEWS.splice(VIEWS.indexOf('today') + 1, 0, 'reviews');
 VIEW_EL.innerHTML = `<div class="rx">
-  <header class="rx-top">
+  <header class="rx-top rx-opt">
     <nav class="rx-seg" aria-label="Reviews"><button type="button" data-v="review">Review</button><button type="button" data-v="browse">Browse</button></nav>
     <span class="rx-sp"></span>
-    <button type="button" class="rx-sync" aria-label="Synced"></button>
     <button type="button" class="rx-cog" data-v="settings" aria-label="Settings"></button>
   </header>
   <div class="rx-body"></div>
@@ -218,6 +217,7 @@ function go(v: View) {
   view = v;
   VIEW_EL.querySelectorAll<HTMLElement>('[data-v]').forEach((b) => b.setAttribute('aria-current', String(b.dataset.v === v || (v === 'designs' && b.dataset.v === 'settings'))));
   app.className = 'rx-body v-' + v;
+  ($('.rx', VIEW_EL) as HTMLElement).dataset.rx = v;
   paint();
   try {
     sessionStorage.setItem('cbp-rx', v);
@@ -235,6 +235,7 @@ VIEW_EL.querySelectorAll<HTMLElement>('[data-v]').forEach(
     (b.onclick = () => {
       const v = b.dataset.v as View;
       sfx('tap');
+      if (v === 'browse') resetBrowse();
       go(v === 'settings' && (view === 'settings' || view === 'designs') ? 'review' : v);
     }),
 );
@@ -267,7 +268,7 @@ function showReview(): void {
   }
   const c = RV.cur, t = today(), n = left();
   // how far through today: a thin line, no numbers
-  const prog = `<div class="rx-prog" aria-hidden="true"><i style="width:${t.done + n ? Math.round((t.done / (t.done + n)) * 100) : 100}%"></i></div>`;
+  const prog = `<div class="rx-prog rx-opt" aria-hidden="true"><i style="width:${t.done + n ? Math.round((t.done / (t.done + n)) * 100) : 100}%"></i></div>`;
   paintDot();
   if (!c) {
     const nextLearn = live().filter((x) => x.queue === 1).sort((a, b) => a.due - b.due)[0];
@@ -281,7 +282,7 @@ function showReview(): void {
     ${RV.merge ? mergeBanner() : ''}
     <div class="rw-card"><div class="host${RV.py ? ' py' : ''}"></div></div>
     <div class="rw-bar">${RV.shown ? `<div class="rw-g">${['Again', 'Hard', 'Good', 'Easy'].map((x, i) => `<button type="button" class="rw-a rw-a${i + 1}" data-g="${i + 1}">${x}</button>`).join('')}</div>` : `<button type="button" class="rw-show" data-a="show">Show answer</button>`}</div>
-    <div class="rw-more">
+    <div class="rw-more rx-opt">
       ${TOUCH ? `<button type="button" class="btn-q" data-a="py">Pinyin</button><button type="button" class="btn-q" data-a="play">Play</button>` : ''}
       <button type="button" class="btn-q" data-a="edit">Edit</button><button type="button" class="btn-q rw-flagb" data-a="flag" aria-haspopup="dialog" aria-expanded="${RV.flags}">Flag</button><button type="button" class="btn-q" data-a="suspend">Suspend</button>
     </div>
@@ -537,8 +538,36 @@ function editor(host: HTMLElement, note0: Note, onClose?: () => void) {
     await deleteNote(note.id);
     onClose?.();
   };
+  // V (not typing): the sentence read aloud into the Audio field, made now if it has none (Shift+V makes it again)
+  const ai = t.fields.find((f) => /^audio$/i.test(f.name))?.ord ?? -1;
+  const si = t.fields.find((f) => /^chinese$/i.test(f.name))?.ord ?? 0;
+  ED = {
+    host,
+    voice: async (again: boolean) => {
+      const fa = host.querySelector<HTMLElement>(`.fv[data-o="${ai}"]`), fs = host.querySelector<HTMLElement>(`.fv[data-o="${si}"]`);
+      if (!fa || !fs) return;
+      const have = /\[sound:([^\]]+)\]/.exec(fa.textContent ?? '');
+      if (have && !again) return void new Audio(have[1]).play().catch(() => {});
+      const text = strip(fs.innerHTML.replace(/<br\s*\/?>|<\/div>/gi, '\n')).replace(/[ \t]+/g, ' ').trim();
+      if (!text) return toast('The sentence is empty.');
+      if (!navigator.onLine) return toast('The voice needs signal.');
+      fa.classList.add('busy');
+      try {
+        const { url } = await api('voice', { text });
+        fa.textContent = `[sound:${url}]`;
+        save();
+        new Audio(url).play().catch(() => {});
+        sfx('save');
+      } catch (e) {
+        toast(esc((e as Error).message || 'The voice didn’t come through.'));
+      } finally {
+        fa.classList.remove('busy');
+      }
+    },
+  };
   /** Called when the editor goes away: the edit joins the undo history as one step. */
   return async () => {
+    if (ED?.host === host) ED = null;
     clearTimeout(saveT);
     if (!S.notes.has(note.id)) return;
     const now = read();
@@ -548,6 +577,7 @@ function editor(host: HTMLElement, note0: Note, onClose?: () => void) {
     H.redo = [];
   };
 }
+let ED: { host: HTMLElement; voice: (again: boolean) => Promise<void> } | null = null;
 const clean = (h: string) => h.replace(/^(<br>)+$/, '').replace(/\s+data-[\w-]+="[^"]*"/g, '');
 
 function editDialog(note: Note) {
@@ -605,7 +635,12 @@ async function deleteNote(nid: number, quiet = false) {
 }
 
 // ================= Browse =================
-const BR = { q: '', flag: 0, sort: 'sort', desc: false, sel: new Set<number>(), last: 0, focus: 0, limit: 300, close: null as null | (() => Promise<void>) };
+const BR = { q: '', flag: 0, sort: 'added', desc: true, sel: new Set<number>(), last: 0, focus: 0, limit: 300, close: null as null | (() => Promise<void>) };
+/** Browse as it opens: every card, newest first. */
+function resetBrowse() {
+  Object.assign(BR, { q: '', flag: 0, sort: 'added', desc: true, sel: new Set<number>(), last: 0, limit: 300 });
+}
+const ADDED = (r: Row) => r.note.id * 10 + r.card.ord;
 const COLS: [string, string, (r: Row, k: ReturnType<typeof ck>) => string | number][] = [
   ['sort', 'Word', (r) => wordOfNote(r.note)],
   ['card', 'Card', (r) => r.type?.templates.find((t) => t.ord === r.card.ord)?.name ?? ''],
@@ -642,9 +677,9 @@ function results() {
   const rows = live()
     .map(rowOf)
     .filter((r): r is Row => !!r && (!BR.flag || (r.card.flags & 7) === BR.flag) && test(r));
-  const col_ = COLS.find((c) => c[0] === BR.sort)!;
+  const by = BR.sort === 'added' ? ADDED : COLS.find((c) => c[0] === BR.sort)![2];
   rows.sort((a, b) => {
-    const x = col_[2](a, k), y = col_[2](b, k);
+    const x = by(a, k), y = by(b, k);
     const o = typeof x === 'number' ? x - (y as number) : String(x).localeCompare(String(y), 'zh-Hant');
     return BR.desc ? -o : o;
   });
@@ -786,16 +821,6 @@ async function bulkAct(a: string, sel: Card[]) {
 }
 
 // ================= Settings: only what he'd change, each with what changing it means =================
-const steps = (s: number[]) => s.map((m) => (m >= 1440 && m % 1440 === 0 ? `${m / 1440}d` : m >= 60 && m % 60 === 0 ? `${m / 60}h` : `${m}m`)).join(' ');
-const parseSteps = (s: string) =>
-  s
-    .split(/[\s,]+/)
-    .filter(Boolean)
-    .map((x) => {
-      const m = /^([\d.]+)([smhd]?)$/.exec(x);
-      if (!m) throw new Error(`“${x}” isn’t a step. Write them like 1m 10m 1d.`);
-      return Number(m[1]) * ({ s: 1 / 60, m: 1, h: 60, d: 1440, '': 1 } as Record<string, number>)[m[2]];
-    });
 /** About how many reviews a day the cards he has would ask for at this retention, as their memories stand now. */
 function perDay(ret: number) {
   const c = conf(), f = new Fsrs(c.w);
@@ -808,14 +833,10 @@ function showSettings() {
   const tuned = (c as Conf & { tuned?: Tuned }).tuned;
   const fmt = (ms: number) => new Date(ms).toLocaleDateString([], { month: 'short', day: 'numeric' });
   app.innerHTML = `<section class="rs">
-    <div class="rs-row"><div class="rs-l"><label for="rs-new">New cards a day</label><p>Each new card brings a handful of reviews over the next weeks, so more new cards now means more reviews later.</p></div>
+    <div class="rs-row"><div class="rs-l"><label for="rs-new">New cards a day</label><p>More new cards now means more reviews later.</p></div>
       <div class="rs-c"><div class="stepper"><button type="button" data-n="-1" aria-label="Fewer">−</button><input id="rs-new" inputmode="numeric" value="${c.newPerDay}"><button type="button" data-n="1" aria-label="More">+</button></div></div></div>
-    <div class="rs-row"><div class="rs-l"><label for="rs-ret">How much to remember</label><p>The chance you still know a card when it comes back. Higher means you forget less and review more.</p></div>
+    <div class="rs-row"><div class="rs-l"><label for="rs-ret">How much to remember</label><p>The chance that you still know a card when it comes back. Higher means you forget less and review more.</p></div>
       <div class="rs-c"><input type="range" id="rs-ret" min="80" max="97" step="1" value="${Math.round(c.retention * 100)}"><p class="rs-v"><b data-js-text class="rs-pct"></b> <span data-js-text class="rs-load"></span></p></div></div>
-    <div class="rs-row"><div class="rs-l"><label for="rs-learn">Learning steps</label><p>The waits before a new card's first real gap of days. Again starts them over.</p></div>
-      <div class="rs-c"><input id="rs-learn" value="${esc(steps(c.learnSteps))}" spellcheck="false" autocomplete="off"></div></div>
-    <div class="rs-row"><div class="rs-l"><label for="rs-relearn">After a miss</label><p>The waits after you miss a card, before it goes back to days.</p></div>
-      <div class="rs-c"><input id="rs-relearn" value="${esc(steps(c.relearnSteps))}" spellcheck="false" autocomplete="off"></div></div>
     <div class="rs-row"><div class="rs-l"><span class="rs-h">Memory model</span><p>Fits itself to your own reviews once a month, like Anki's Optimize, and keeps the fit only when it predicts your memory better.</p></div>
       <div class="rs-c"><p class="rs-v" data-js-text>${tuned ? `Last fit ${fmt(tuned.at)}${tuned.better ? `: ${tuned.better}% closer to how you remember` : ': already a good fit'}` : 'Not fitted here yet'}</p><button type="button" class="btn-q rs-tune">Fit now</button></div></div>
     <div class="rs-row"><div class="rs-l"><span class="rs-h">Card designs</span><p>Each note type's fields, front and back, and styling, as in Anki.</p></div>
@@ -848,19 +869,6 @@ function showSettings() {
   };
   nw.onchange = () => setNew(parseInt(nw.value) || 0);
   app.querySelectorAll<HTMLElement>('[data-n]').forEach((b) => (b.onclick = () => setNew((parseInt(nw.value) || 0) + Number(b.dataset.n))));
-  for (const [id, key, name] of [['#rs-learn', 'learnSteps', 'Learning steps'], ['#rs-relearn', 'relearnSteps', 'Steps after a miss']] as const) {
-    const el = $<HTMLInputElement>(id, app);
-    el.onchange = () => {
-      try {
-        const v = parseSteps(el.value);
-        if (key === 'learnSteps' && !v.length) throw new Error('At least one learning step.');
-        saveConf(name, { [key]: v });
-        el.value = steps(v);
-      } catch (e) {
-        msg.textContent = (e as Error).message;
-      }
-    };
-  }
   $('[data-go]', app).onclick = () => go('designs');
   $('.rs-tune', app).onclick = async (e) => {
     const b = e.currentTarget as HTMLButtonElement;
@@ -1026,6 +1034,7 @@ addEventListener(
       if (view === 'browse' && BR.sel.size && !document.querySelector('dialog[open]')) return e.stopImmediatePropagation(), (BR.sel = new Set()), closeSide(), paintSel();
       return;
     }
+    if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && k === 'v' && ED?.host.isConnected) return e.preventDefault(), e.stopImmediatePropagation(), ED.voice(e.shiftKey);
     if (typing || e.metaKey || e.ctrlKey || e.altKey || document.querySelector('dialog[open]') || view !== 'review') return;
     // the flag picker, while open, takes R, G and N for itself
     if (RV.flags) {
@@ -1040,7 +1049,7 @@ addEventListener(
       return RV.shown ? grade(3) : act('show');
     }
     if (/^[1-4]$/.test(e.key) && RV.shown) return e.preventDefault(), grade(Number(e.key));
-    const a = { s: 'suspend', f: 'flag', p: 'py', v: 'play', e: 'edit' }[k];
+    const a = { s: 'suspend', f: 'flag', p: 'py', v: 'play', r: 'play', e: 'edit' }[k];
     if (a) {
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -1051,12 +1060,8 @@ addEventListener(
 );
 
 // ================= start =================
-function paintSync() {
-  const el = $('.rx-sync', VIEW_EL);
-  const pending = S.outbox.size;
-  el.dataset.s = !navigator.onLine ? 'off' : S.syncing ? 'busy' : S.error ? 'err' : pending ? 'wait' : 'ok';
-  el.setAttribute('aria-label', !navigator.onLine ? 'Offline: changes wait on this device' : S.error ? S.error : S.syncing ? 'Syncing' : pending ? 'Changes waiting' : 'Synced');
-}
+// syncing is quiet: no dot (his call, Nov 23); changes wait on the device and go when there's signal
+function paintSync() {}
 /** The gold dot on the tab: cards are waiting today. */
 function paintDot() {
   if (!ready) return;
@@ -1070,7 +1075,6 @@ onChange((what) => {
   if (view === 'review' && !RV.shown && !document.querySelector('dialog[open]') && !VIEW_EL.contains(document.activeElement)) showReview();
   if (view === 'browse' && !$('.br-side', app)?.contains(document.activeElement)) paintBrowse();
 });
-$('.rx-sync', VIEW_EL).onclick = () => sync();
 
 let ready = false, started: Promise<void> | null = null;
 function start() {
