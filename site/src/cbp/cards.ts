@@ -215,7 +215,7 @@ export async function drawings(env: Env, b: { word?: unknown; meaning?: unknown;
 export async function pinyin(env: Env, b: { text?: unknown }) {
   const text = String(b.text ?? '').trim().slice(0, 600);
   if (!text) return { pinyin: '' };
-  const r = await ai.text(env, CARD_MODEL, `Write the pinyin of this Traditional Chinese text with tone marks, using Taiwan readings (垃圾 lèsè, 星期 xīngqí). Join the syllables of a word (Wǒmen míngtiān dā huǒchē), capitalize the first word of each sentence, keep the punctuation as English punctuation, and keep the line breaks and any "- " at the start of a line. Reply with the pinyin only.
+  const r = await ai.text(env, CARD_MODEL, `Write the pinyin of this Traditional Chinese text with tone marks, as a Taiwanese speaker says it: Taiwan readings (垃圾 lèsè, 星期 xīngqí, 期 qí, 研究 yánjiù, 誰 shéi), 不 and 一 with their changed tones (bú shì, yí gè, yì tiān), no third-tone sandhi written, neutral tone only where Taiwan dictionaries have it (的 de, 了 le, 嗎 ma, 們 men) and full tones where Taiwan keeps them (東西 dōngxī, 朋友 péngyǒu, 時候 shíhòu, 知道 zhīdào), one pinyin syllable per character. Join the syllables of a dictionary word and keep particles and measure words apart (Wǒmen míngtiān dā huǒchē), capitalize the first word of each sentence, keep the punctuation as English punctuation, and keep the line breaks and any "- " at the start of a line. Reply with the pinyin only.
 
 ${text}`, { effort: 'low' });
   return { pinyin: r.text.trim() };
