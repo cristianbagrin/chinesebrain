@@ -633,3 +633,244 @@ export function logRows(files: Files, rows: Partial<Row>[]) {
   if (flips.length) kwSave(files, l);
   return `Logged ${rows.length} row(s).` + (flips.length ? ` Known words: ${flips.join(', ')}.` : '');
 }
+
+// ---------- the nightly, ported from words.py (merge, kit, file_cards, ingest, send) ----------
+/** Where the card and test rules, his leaks and the Known components live: the system's own text. */
+export const MEMORY = 'chinese.md';
+export const LEDGER = 'cards-filed.tsv';
+
+function shortGloss(meaning: string) {
+  let m = meaning.replace(/\s+/g, ' ').trim();
+  if (m.length > 60) m = m.split(';')[0].trim();
+  return m.slice(0, 70).replace(/[ ,;]+$/, '');
+}
+
+function brainEntry(r: BrainRow, q: Queue, status: Map<string, [string, string]>): [string | null, string | null] {
+  const w = key(r.word), meaning = r.meaning.trim();
+  if (r.now === 'F') {
+    if (/^\p{Lu}/u.test(meaning) && !meaning.slice(0, 6).includes('(Tw)')) return [null, 'proper noun'];
+    if ([...w].length === 1 && [...status.keys(), ...[...q.entries()].map(([, e]) => key(e.word))].some((x) => x.includes(w) && x !== w)) return [null, 'covered by a longer word'];
+  }
+  const lane = meaning.includes('(Tw)') ? 'Taiwan' : 'Life';
+  const sources = ['Brain', ...(r.saved.trim() ? ['saved'] : [])];
+  return [q.add(lane, w, r.pinyin.trim(), shortGloss(meaning), sources), null];
+}
+
+/** words.py merge: Chinese Brain exports (their texts, oldest first) into known-words.txt and the queue. */
+export function merge(files: Files, exports: string[], today: string) {
+  const l = loadKw(files);
+  const q = loadQueue(files);
+  const cards = new Set([...ankiTargets(files), ...readLog(files).filter((r) => r.kind === 'card').map((r) => key(r.target))]);
+  const log: Record<string, string[]> = { added: [], flipped: [], removed: [], kept_L: [], file_newer: [], dequeued: [], repeat: [], saved: [], queued: [], skipped: [] };
+  const cutoff = plus(today, -14);
+  const before = kwTotal(l);
+  const repeated = new Set<string>();
+  for (const text of exports) {
+    const [rows, edate, full] = readExport(text);
+    for (const r of rows) {
+      const { word: w, now, was } = r;
+      if (!w) continue;
+      const date = r.date || edate;
+      if (r.saved.trim()) log.saved.push(`${w} (${now})`);
+      const idx = kwIndex(l), k = key(w);
+      const have = idx.has(k) ? kwGet(l, idx.get(k)!) : null;
+      if (have && cmp(have[2], date) > 0) {
+        if (have[1] !== now) log.file_newer.push(`${have[0]}: file ${have[1]} (${have[2]}), Chinese Brain ${now} (${date})`);
+        continue;
+      }
+      const [name, queued] = q.find(w);
+      if (queued && r.saved.trim() && !queued.sources.includes('saved')) {
+        queued.sources.push('saved');
+        q.changed = true;
+      }
+      if (now === 'K') {
+        if (!have) { l.push(`${k}\tK\t${date}`); log.added.push(`${k} K`); }
+        else if (have[1] === 'L' && cmp(have[2], cutoff) >= 0) { log.kept_L.push(`${have[0]} (L since ${have[2]})`); continue; }
+        else if (have[1] !== 'K') { l[idx.get(k)!] = `${have[0]}\tK\t${date}`; log.flipped.push(`${have[0]} ${have[1]}→K`); }
+        if (queued && q.remove(w)) log.dequeued.push(`${w} (${name})`);
+      } else if (now === 'L') {
+        const wasLearning = have !== null && have[1] === 'L' && cmp(have[2], date) < 0;
+        if (!have) { l.push(`${k}\tL\t${date}`); log.added.push(`${k} L`); }
+        else if (have[1] !== 'L') { l[idx.get(k)!] = `${have[0]}\tL\t${date}`; log.flipped.push(`${have[0]} ${have[1]}→L`); }
+        if (cards.has(k) || wasLearning) {
+          if (queued && q.remove(w)) log.dequeued.push(`${w} (${name}; has a card)`);
+        } else if (queued) {
+          if (was !== 'L' && !full && !repeated.has(k)) { repeated.add(k); queued.sources.push('Brain'); q.changed = true; log.repeat.push(w); }
+        } else {
+          const [done, why] = brainEntry(r, q, kwStatus(l));
+          (done ? log.queued : log.skipped).push(done ?? `${w} (${why})`);
+        }
+      } else if (now === 'F') {
+        if (have) { l.splice(idx.get(k)!, 1); log.removed.push(`${have[0]} (was ${have[1]}, now F)`); }
+        if (queued) {
+          if (was !== 'F' && !full && !repeated.has(k)) { repeated.add(k); queued.sources.push('Brain'); q.changed = true; log.repeat.push(w); }
+        } else if (!q.parked(w)) {
+          const [done, why] = brainEntry(r, q, kwStatus(l));
+          (done ? log.queued : log.skipped).push(done ?? `${w} (${why})`);
+        }
+      } else if (now === '-' && ['K', 'L', 'F'].includes(was)) {
+        if (have) { l.splice(idx.get(k)!, 1); log.removed.push(`${have[0]} (off his list)`); }
+        if (queued && q.remove(w)) log.dequeued.push(`${w} (${name})`);
+      }
+    }
+  }
+  kwSave(files, l);
+  q.save(files, today);
+  const out = [`known-words.txt: ${before} → ${kwTotal(l)} entries`];
+  for (const [k, v] of Object.entries(log)) if (v.length) out.push(`${k}: ${[...new Set(v)].join(' · ')}`);
+  return out;
+}
+
+/** A section of chinese.md by its ### title. */
+export function mdSection(md: string, title: string) {
+  const m = md.match(new RegExp('^### ' + title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\n([\\s\\S]*?)(?=^### |^## |^---)', 'm'));
+  return m ? m[1].trim() : '';
+}
+
+/** words.py kit: what cards are written from (board/cardkit). */
+export function kit(files: Files, today: string) {
+  const md = files.get(MEMORY) ?? '';
+  const comp = md.match(/\*\*Known components\*\*[^:]*:\s*(.+)/);
+  const known: string[] = [], learning: string[] = [];
+  for (const x of loadKw(files)) {
+    const p = x.split('\t');
+    if (x.startsWith('#') || p.length < 2) continue;
+    if (p[1].trim() === 'K') known.push(p[0].trim());
+    else if (p[1].trim() === 'L') learning.push(p[0].trim());
+  }
+  const sp = sprintFile(files, today);
+  const saved: Record<string, string[]> = {};
+  for (const f of exportNames(files)) {
+    for (const r of readExport(files.get(f)!)[0]) {
+      for (const s of r.saved.split('‖').map((x) => x.trim())) {
+        if (!s) continue;
+        const list = (saved[key(r.word)] ??= []);
+        if (!list.includes(s)) list.push(s);
+      }
+    }
+  }
+  return {
+    v: 1,
+    spec: '### Card structure\n' + mdSection(md, 'Card structure') + '\n\n### Voice\n' + mdSection(md, 'Voice'),
+    sprint: sp ? sprintRule(files, sp, 'Cards') : '',
+    components: comp ? comp[1].trim().replace(/\.$/, '') : '',
+    chars: known.filter((w) => [...w].length === 1).join(''),
+    known: known.join(' '),
+    learning: learning.join(' '),
+    saved: Object.fromEntries(Object.entries(saved).filter(([, x]) => x.length)),
+  };
+}
+
+/** The day he carded it where he was, turning over at 4 am like the board. A stamp with no offset (…Z) is read in
+ *  Taipei, as the Mac did. */
+export function boardDay(stamp: string) {
+  const m = String(stamp).match(/^(\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d+)?)?)(Z|[+-]\d\d:\d\d)?$/);
+  if (!m) return String(stamp).slice(0, 10);
+  const t = Date.parse(m[1] + (m[2] ?? 'Z'));
+  if (Number.isNaN(t)) return String(stamp).slice(0, 10);
+  const off = !m[2] || m[2] === 'Z' ? 480 : (m[2][0] === '-' ? -1 : 1) * (Number(m[2].slice(1, 3)) * 60 + Number(m[2].slice(4, 6)));
+  return new Date(t + (off - 240) * 60_000).toISOString().slice(0, 10);
+}
+
+/** words.py file_cards: every card he marked Carded and nobody filed yet, oldest first, filed on the day he carded
+ *  it; the components he said he knows go into Known components. `cards` and `notes` are the docs by id. */
+export function fileCards(files: Files, cards: Record<string, Record<string, unknown>>, notes: Record<string, Record<string, unknown>>, today: string) {
+  const ledger = files.get(LEDGER) ?? '';
+  const filed = new Set(lines(ledger).filter((x) => x.trim() && !x.startsWith('#')).map((x) => x.split('\t')[0]));
+  const said: string[] = [], todo: [number, string, Record<string, unknown>][] = [];
+  for (const [id, d0] of Object.entries(cards)) {
+    let d = d0;
+    if (!d?.word) continue;
+    const n = notes[id];
+    if (n) {
+      const nw = String(n.word ?? '').replace(/<[^>]+>|&nbsp;/g, ' ').trim();
+      if (nw && /[\u3400-\u9fff]/.test(nw) && nw !== d.word) d = { ...d, word: nw };
+    }
+    if (d.carded && !filed.has(id)) {
+      const m = String(d.carded).match(/(Z|[+-]\d\d:\d\d)$/);
+      const t = Date.parse(m ? String(d.carded) : String(d.carded) + '+08:00');
+      todo.push([Number.isNaN(t) ? -Infinity : t, id, d]);
+    } else if (!d.carded && filed.has(id)) said.push(`! ${d.word} was filed, then un-carded on the board: it stays logged`);
+  }
+  todo.sort((a, b) => a[0] - b[0] || cmp(a[1], b[1]));
+  let led = ledger || '# cards filed from the board: doc id, word, carded (on the board), filed\n';
+  const knows: string[] = [];
+  for (const [, id, d] of todo) {
+    const day = boardDay(String(d.carded));
+    card(files, String(d.word), day);
+    if (!led.endsWith('\n')) led += '\n';
+    led += [id, d.word, d.carded, today].join('\t') + '\n';
+    for (const [c, v] of Object.entries((d.knows as Record<string, unknown>) ?? {})) if (v === true) knows.push(c);
+    said.push(`filed ${d.word} (${day})`);
+  }
+  if (todo.length) files.set(LEDGER, led);
+  if (knows.length) {
+    const md = files.get(MEMORY) ?? '';
+    const m = md.match(/(\*\*Known components\*\*[^:]*:\s*)(.+?)\.?\n/);
+    const have = m ? m[2].split(/\s+/) : [];
+    const fresh = [...new Set(knows)].filter((c) => !have.includes(c));
+    if (fresh.length && !m) said.push('! No **Known components** line in chinese.md: add by hand: ' + fresh.join(' '));
+    else if (fresh.length && m) {
+      const at = m.index! + m[1].length;
+      files.set(MEMORY, md.slice(0, at) + [...have, ...fresh].join(' ') + md.slice(at + m[2].length));
+      said.push('Known components + ' + fresh.join(' '));
+    }
+  }
+  return said;
+}
+
+type TestDoc = { id?: string; done?: string | null; filed?: string | null; title?: string; items?: Record<string, unknown>[]; [k: string]: unknown };
+/** words.py ingest: file a test he answered. Returns the answers nobody graded (to grade, then logRows). */
+export function ingest(files: Files, doc: TestDoc, today: string) {
+  const rows = readLog(files);
+  if (rows.some((r) => r.kind === 'graded' && r.target === doc.id)) return { said: [`Test ${doc.id} is already filed.`], open: [] };
+  if (!doc.done) return { said: [`Test ${doc.id} is not finished.`], open: [] };
+  const fresh: Partial<Row>[] = [], open: { item: Record<string, unknown>; a: Record<string, unknown> }[] = [];
+  for (const it of doc.items ?? []) {
+    for (const a of [it, ...(it.retry ? [it.retry as Record<string, unknown>] : [])]) {
+      if (a.answer && RESULTS.includes(String(a.result))) {
+        const when = String(a.at || doc.done || today).slice(0, 10);
+        let note = String(a.answer) + (a.natural && a.natural !== a.answer ? ` → ${a.natural}` : '');
+        if (a.secs) note += ` (${a.secs} s)`;
+        fresh.push({ date: when, target: String(it.target), kind: String(it.kind), result: String(a.result), note });
+      } else if (a.answer) open.push({ item: it, a });
+    }
+  }
+  const said: string[] = [];
+  if (fresh.length) said.push(logRows(files, fresh));
+  const secs = (doc.items ?? []).map((a) => Number(a.secs)).filter((x) => x > 0).sort((a, b) => a - b);
+  const med = secs.length ? (secs.length % 2 ? secs[(secs.length - 1) / 2] : (secs[secs.length / 2 - 1] + secs[secs.length / 2]) / 2) : null;
+  const clean = fresh.filter((r) => r.result === 'pass').length, counted = fresh.filter((r) => r.result !== 'none').length;
+  return { said, open, graded: { date: today, target: String(doc.id), kind: 'graded', result: '-', note: `${clean} of ${counted} clean` + (med !== null ? ` · median ${Math.round(med)} s` : '') } as Partial<Row> };
+}
+
+/** words.py send: what is wrong with a test before it goes out (nothing: []). */
+export function testProblems(files: Files, doc: TestDoc, force = false) {
+  const problems: string[] = [];
+  const waiting = waitingTest(readLog(files));
+  if (waiting && !force) problems.push(`test ${waiting} is still open, not filed`);
+  const items = doc.items ?? [];
+  if (items.length < 1 || items.length > 12) problems.push(`${items.length} items`);
+  items.forEach((it, i) => {
+    const n = i + 1;
+    for (const f of ['label', 'target', 'kind', 'model', 'check']) if (!it[f]) problems.push(`item ${n}: no ${f}`);
+    if (!(it.ask || it.hear)) problems.push(`item ${n}: no ask or hear`);
+    if (!TEST_KINDS.includes(String(it.kind))) problems.push(`item ${n}: kind must be one of ${TEST_KINDS.join(', ')}`);
+    const word = key(String(it.target ?? ''));
+    if (/[一-鿿]/.test(word) && key(String(it.ask ?? '') + ' ' + String(it.label ?? '')).includes(word)) problems.push(`item ${n}: the target ${word} is in the prompt`);
+  });
+  return problems;
+}
+/** words.py send, once it passes: the test as the board takes it, and the `sent` row logged. */
+export function sendTest(files: Files, doc: TestDoc, today: string) {
+  const rows = readLog(files);
+  const id = doc.id ?? `${today}-${rows.filter((r) => r.kind === 'sent' && r.date === today).length + 1}`;
+  const items = (doc.items ?? []).map((it) => {
+    const x = { ...it };
+    for (const f of ['answer', 'secs', 'result', 'natural', 'why', 'retry']) if (!(f in x)) x[f] = null;
+    return x;
+  });
+  const out = { ...doc, id, sent: doc.sent ?? today, done: null, filed: null, items };
+  appendLog(files, [{ date: today, target: id, kind: 'sent', result: '-', note: items.map((it) => String(it.label)).join(' · ') }]);
+  return out;
+}

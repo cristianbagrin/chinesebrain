@@ -85,5 +85,12 @@
     return { text, modelApplied: model };
   };
   sample.limits = async () => ({ images: false });
+  // the answer as JSON (the board's test grading asks for it this way): the first {...} in the text
+  sample.json = async (input, opts = {}) => {
+    const { text } = await post('sample', { input, effort: opts.effort, model: opts.model });
+    const m = String(text).match(/\{[\s\S]*\}/);
+    if (!m) throw Object.assign(new Error('No JSON in the answer.'), { code: 'unavailable' });
+    return JSON.parse(m[0]);
+  };
   window.claude = { use: async (n) => (n === 'db' ? db : n === 'sample' ? sample : null) };
 })();

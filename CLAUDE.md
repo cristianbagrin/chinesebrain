@@ -35,16 +35,20 @@
   master key, and each app that encrypts wraps its data key under it. The scheme and the rules every app keeps are in
   `site/public/acct/keyring.js`. Keyrings are written with `if` (compare-and-set, see `_sync`); an item once written
   that way can't be replaced by a write without it, which keeps older app versions from writing over a newer keyring.
-- **Chinese Brain Plus** (`/plus`, plan: life/chinese/online-plan): the engine is `site/src/cbp/engine.ts` (words.py ported; check with
-  `scripts/cbp-parity.ts`), its data the CBP D1 (`files`, `docs`, `checks`, `meta`, `history`; `site/src/cbp/plus.ts`). Who holds the
-  truth is `meta.source`: absent, the Mac's nightly mirrors life/chinese up with `scripts/cbp-push.py` (key in `~/.cbp-push.env`) and
-  /plus is read-only; set (it flips itself after three matching nights), /plus writes the board's documents (accounts with
-  `plus.write`; each replaced version kept in `history`) and the nightly runs `--pull`, words.py, `--push` (compare-and-set: nothing
-  the website changed is overwritten), `--anki`. The board's code is copied in with `scripts/cbp-board.py` (never edit
-  `site/public/plus/board` by hand); `plus/runtime.js` stands in for claude.ai's database and `sample` (Sonnet 5.5 on the server);
-  `plus/review.js` adds his review card beside the study card on the Cards page (`site/src/cbp/cards.ts`: pictures from Wikimedia Commons or drawn on
-  Pollinations, Azure voices, media in R2; a daily sweep, `cards.clean`, drops media nothing points to). Staging has no AI keys: it borrows production's through the `Brains` entrypoint. Claude
-  sessions read it through the connector at `/mcp/<CBP_MCP_KEY>`.
+- **Chinese Brain Plus** (`/plus`, plan: life/chinese/online-plan): Chris's whole Chinese system, and the only place it lives (the
+  Mac's `life/chinese` files were archived on 2026-11-23). The engine is `site/src/cbp/engine.ts` (words.py ported; `scripts/cbp-parity.ts`
+  compared them), its data the CBP D1 (`files` incl. `chinese.md`, the system's rules; `docs`, `meta`, `history`; `site/src/cbp/plus.ts`).
+  The 10 pm job is a Cron Trigger (`site/src/cbp/nightly.ts`, 14:00 UTC): his Chinese Brain marks straight from his account
+  (`Account.brainSince`, `brain.ts`), test and card filing, the card kit and numbers, a new test when due (Opus writes, Azure voices),
+  a snapshot in R2 (`snap/`). Every other hour Opus marks an essay whose day is over (`essays.ts` checks the marks). `POST
+  /api/plus/push/nightly`, `/essay`, `/try-test` (Bearer CBP_PUSH_KEY; staging's is CBP_STAGING_PUSH_KEY in `~/.cbp-push.env`) run them by hand.
+  The board's code lives in `site/public/plus/board` and is edited there now (`scripts/cbp-board.py` copied it from the old folder);
+  `plus/runtime.js` stands in for claude.ai's database and `sample`; `plus/review.js` adds his review card beside the study card on
+  the Cards page (`site/src/cbp/cards.ts`: pictures from Wikimedia Commons or drawn on Pollinations, Azure voices, media in R2; a daily
+  sweep, `cards.clean`, drops media nothing points to). The Tutor tab (`plus/tutor.js` from `site/src/cbp/tutor/`, server
+  `tutor.ts`) is behind `plus.tutor`. Staging has no AI keys: it borrows production's through the `Brains` entrypoint, and its Account
+  objects are production's. Claude sessions (the essay review, monthly review, monthly test) read and write it through the connector
+  at `/mcp/<CBP_MCP_KEY>` (tools in `plus.ts`). `scripts/cbp-push.py` is retired.
 - **CBP reviews (Stage 4, Anki rebuilt)**: the Reviews tab of `/plus` (`/plus/review` redirects there), behind the `plus.anki`
   switch; `plus.js` loads `plus/anki.js` (from `site/src/cbp/review/`) before the board's `boot.js`, and it adds the tab itself.
   Class names in `plus/anki.css` must not collide with the board's or `review.css` (`.rv` is the Cards page's). Offline: `plus/sw.js`

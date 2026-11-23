@@ -15,6 +15,8 @@ import * as taste from './src/cbp/taste.ts';
 import * as ai from './src/cbp/ai.ts';
 import * as cards from './src/cbp/cards.ts';
 import * as anki from './src/cbp/anki.ts';
+import * as nightly from './src/cbp/nightly.ts';
+import * as tutor from './src/cbp/tutor.ts';
 
 const MAX_BODY = 1_500_000;
 const MAX_ITEMS = 60_000;
@@ -209,6 +211,15 @@ export class Account extends DurableObject {
    *  call on every picture and save, which ran past the free tier's daily rows-read limit on 2026-11-20). */
   _who() {
     return { email: this.get('email') };
+  }
+
+  /** Chinese Brain Plus's nightly (src/cbp/nightly.ts): the extension's words and saved sentences changed after sync
+   *  sequence `since`, a page at a time. Called by the Worker for the CBP owner's account only, never from a request. */
+  brainSince(since) {
+    const rows = this.sql.exec("SELECT k, v, seq FROM items WHERE seq > ? AND (substr(k, 1, 2) = 'w:' OR substr(k, 1, 4) = 'sav:') ORDER BY seq LIMIT ?", Number(since) || 0, 301).toArray();
+    const page = rows.slice(0, 300);
+    const seq = page.length ? page[page.length - 1].seq : Math.max(Number(since) || 0, Number(this.get('seq') ?? 0));
+    return { seq, more: rows.length > 300, items: page.map((r) => ({ k: r.k, v: r.v == null ? null : JSON.parse(r.v) })) };
   }
 
   _me() {
@@ -569,7 +580,7 @@ function appOf(v) {
 // production's database, read by staging too) and are flipped on /admin. No redeploy.
 
 /** Every switch the admin page shows. Add one here before code checks it. */
-const SWITCHES = { plus: 'Chinese Brain Plus', 'plus.write': 'Plus: changes saved on the website', staging: 'Staging site', 'plus.demo': 'Plus: switch test', 'plus.anki': 'Plus: reviews (Anki, rebuilt)' };
+const SWITCHES = { plus: 'Chinese Brain Plus', 'plus.write': 'Plus: changes saved on the website', staging: 'Staging site', 'plus.demo': 'Plus: switch test', 'plus.anki': 'Plus: reviews (Anki, rebuilt)', 'plus.tutor': 'Plus: the tutor' };
 
 async function owner(env, bearer) {
   if (!env.ADMIN_KEY || !same(await sha(bearer), await sha(env.ADMIN_KEY))) throw new Fail(404, 'not_found', 'Not found.');
@@ -640,6 +651,14 @@ async function stagingEnter(request, env) {
   return res;
 }
 
+/** The CBP owner's Chinese Brain words, for the nightly: the account with the `plus.write` switch (Chris). */
+async function ownerBrain(env) {
+  const r = await env.FLAGS.prepare("SELECT who FROM flags WHERE flag = 'plus.write' AND who != '*' LIMIT 1").first();
+  if (!r) return null;
+  const acct = env.ACCOUNT.get(env.ACCOUNT.idFromString(r.who));
+  return (since) => acct.brainSince(since);
+}
+
 // ---------- Chinese Brain Plus: the machines ----------
 // POST /api/plus/push/manifest and /api/plus/push: the Mac (Bearer CBP_PUSH_KEY), while it is the source.
 // POST /mcp/<CBP_MCP_KEY>: the connector Claude sessions add (MCP, JSON-RPC over HTTP).
@@ -655,7 +674,8 @@ async function plusMachine(request, env, url) {
     } catch {
       return json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, 400);
     }
-    const out = Array.isArray(msg) ? (await Promise.all(msg.map((m) => plus.mcp(env, m)))).filter(Boolean) : await plus.mcp(env, msg);
+    const extra = { brain: () => ownerBrain(env) };
+    const out = Array.isArray(msg) ? (await Promise.all(msg.map((m) => plus.mcp(env, m, extra)))).filter(Boolean) : await plus.mcp(env, msg, extra);
     return out && (!Array.isArray(out) || out.length) ? json(out) : new Response(null, { status: 202 });
   }
   const bearer = (request.headers.get('Authorization') ?? '').replace(/^Bearer /, '');
@@ -667,6 +687,16 @@ async function plusMachine(request, env, url) {
     if (url.pathname === '/api/plus/push/pull') return json(await plus.pull(env, await request.json()));
     if (url.pathname === '/api/plus/push/switch') return json(await plus.switchOver(env));
     if (url.pathname === '/api/plus/push/clean') return json(await cards.clean(env));
+    // the 10 pm job and the essay corrections, run now (src/cbp/nightly.ts): ?day=YYYY-MM-DD, ?notest=1
+    if (url.pathname === '/api/plus/push/nightly') return json(await nightly.nightly(env, await ownerBrain(env), { day: url.searchParams.get('day') ?? undefined, noTest: url.searchParams.get('notest') === '1' }));
+    if (url.pathname === '/api/plus/push/essay') return json(await nightly.correctEssays(env));
+    // a test written as the nightly would, shown and not sent (nothing is saved but its voices)
+    if (url.pathname === '/api/plus/push/try-test') {
+      const said = [];
+      const files = new Map(await plus.loadFiles(env));
+      if (url.searchParams.get('force') === '1') files.set('test-log.tsv', files.get('test-log.tsv') + `${plus.today()}\tx\tgraded\t-\t\n`);
+      return json({ test: await nightly.writeTest(env, files, plus.today(), said), said });
+    }
     // his Anki collection (scripts/cbp-anki.ts): rows, media, the media map, the comparison with Anki
     if (url.pathname === '/api/plus/push/anki') return json(await anki.load(env, await request.json()));
     if (url.pathname === '/api/plus/push/anki-media') return json(await anki.media(env, url.searchParams.get('name') ?? '', await request.arrayBuffer(), request.headers.get('Content-Type') ?? ''));
@@ -760,6 +790,11 @@ async function api(request, env, path) {
         if (path === 'plus/grab') return await cards.grab(env, body);
         if (path === 'plus/pinyin') return await cards.pinyin(env, body);
         if (path === 'plus/voice') return await cards.voice(env, body);
+        // the tutor (src/cbp/tutor.ts)
+        if (path === 'plus/tutor') {
+          if (!flags.includes('plus.tutor')) throw new Fail(404, 'not_found', 'Not found.');
+          return await tutor.reply(env, body);
+        }
         throw new Fail(404, 'not_found', 'Not found.');
       }
     } catch (e) {
@@ -1055,9 +1090,13 @@ const PLUS_CSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; styl
 const MOVED = { '/welcome': '/brain/guide#welcome', '/brain/welcome': '/brain/guide#welcome', '/privacy': '/brain/privacy', '/dashboard': '/brain/dashboard', '/guide': '/brain/guide', '/whats-new': '/brain/whats-new' };
 
 export default {
-  // hourly: the taste test's other models answer a few more samples (free tiers allow only so many a day)
+  // hourly (wrangler.jsonc): the nightly at 10 pm Taipei, essay marks the other hours, the media sweep at 3 am
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(taste.run(env, 240_000).then((r) => console.log('taste', JSON.stringify(r))));
+    const hour = new Date(event.scheduledTime).getUTCHours();
+    // 10 pm in Taipei: the nightly (src/cbp/nightly.ts), which the Mac's chinese-nightly task did until Nov 23
+    if (hour === 14) ctx.waitUntil(ownerBrain(env).then((b) => nightly.nightly(env, b)).then((r) => console.log('nightly', JSON.stringify(r))).catch((e) => console.error('nightly', e)));
+    // every hour: an essay whose day is over gets its corrections
+    else ctx.waitUntil(nightly.correctEssays(env).then((r) => r && console.log('essay', JSON.stringify(r))).catch((e) => console.error('essay', e)));
     // and once a day (3 am in Taipei), the media nothing points to any more goes (cards.clean)
     if (new Date(event.scheduledTime).getUTCHours() === 19) ctx.waitUntil(cards.clean(env).then((r) => console.log('clean', JSON.stringify(r))));
   },
