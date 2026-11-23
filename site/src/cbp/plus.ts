@@ -260,6 +260,7 @@ const TOOLS = [
   { name: 'essay_marks', description: "Mark his essays and keep his To improve list, in essays.py's marks format: a `DAY n` line, then one mark per line in essay order: `fix | his words | right way | note`, `better | his words | right way`, `good | his words`, `word | english | 中文`, `fix!`/`better!` also puts it on his list, `done | <item id> | his words that get it right` crosses an item off. Checked the way the board reads them; nothing is written unless every mark lands. Marks join the ones a DAY already has. Each essay is corrected by Opus the morning after; the weekly review adds to those.", inputSchema: S({ marks: { type: 'string' } }, ['marks']) },
   { name: 'update_board', description: "Change board/data fields the nightly doesn't own: essayTarget (this week's essay target), months (frozen monthly numbers).", inputSchema: S({ data: { type: 'object' } }, ['data']) },
   { name: 'send_test', description: "Send a test to his page (words.py send + media.py): {items: [...]} with each item's label, kind, target, ask (or hear), model, check, and optional hear + voice (m 阿伯, g 阿嬤 or young woman, f 阿姨), read, and for the monthly test scene ({gen: 'what the photo shows'} drawn by FLUX, or {commons: 'File title.jpg'}), alt, overlay, secs, and a title on the test. Refused while a test is open (force: true only if it never reached him) or when a target sits in an ask or label. Voices and photos are made on the server.", inputSchema: S({ test: { type: 'object' }, force: { type: 'boolean' } }, ['test']) },
+  { name: 'make_media', description: "Make a test's voices and photos without sending it (for the monthly test): {items: [...]} as for send_test. Returns the test with each item's audio and img filled in, and every photo as an image to look at. Send that test with send_test (items that have audio or img keep them); to redo a photo, drop its img and call again.", inputSchema: S({ test: { type: 'object' } }, ['test']) },
   { name: 'nightly', description: "The 10 pm job's last report (merged Chinese Brain marks, filed test and cards, the test it sent). run: true runs it now (no_test: true skips writing a test).", inputSchema: S({ run: { type: 'boolean' }, no_test: { type: 'boolean' } }) },
 ];
 
@@ -422,6 +423,22 @@ async function tool(env: Env, name: string, a: Record<string, unknown>, extra: E
       await N.putDoc(env as never, 'board', 'data', E.boardPayload(await loadFiles(env), today()) as never, 'update');
       return [`Test ${sent.id} is on his page (${sent.items.length} items).`, ...said].join('\n');
     }
+    case 'make_media': {
+      const said: string[] = [];
+      const t = JSON.parse(JSON.stringify(a.test ?? {})) as { items?: Record<string, unknown>[] };
+      await N.media(env as never, t, said);
+      const images: { type: 'image'; data: string; mimeType: string }[] = [];
+      for (const it of t.items ?? []) {
+        const m = String(it.img ?? '').match(/\/api\/plus\/media\/([0-9a-f]{32}\.[a-z0-9]+)$/);
+        const o = m ? await (env.FILES as { get(k: string): Promise<{ arrayBuffer(): Promise<ArrayBuffer>; httpMetadata?: { contentType?: string } } | null> }).get('m/' + m[1]) : null;
+        if (!o) continue;
+        const b = new Uint8Array(await o.arrayBuffer());
+        let bin = '';
+        for (let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode(...b.subarray(i, i + 0x8000));
+        images.push({ type: 'image', data: btoa(bin), mimeType: o.httpMetadata?.contentType ?? 'image/jpeg' });
+      }
+      return { content: [{ type: 'text', text: JSON.stringify(t, null, 1) + (said.length ? '\n' + said.join('\n') : '') }, ...images] };
+    }
     case 'nightly': {
       if (a.run) {
         const brain = (await extra.brain?.()) ?? null;
@@ -448,8 +465,8 @@ export async function mcp(env: Env, msg: { id?: unknown; method?: string; params
     case 'tools/call': {
       const p = msg.params ?? {};
       try {
-        const text = await tool(env, String(p.name), (p.arguments as Record<string, unknown>) ?? {}, extra);
-        return ok({ content: [{ type: 'text', text }] });
+        const out = await tool(env, String(p.name), (p.arguments as Record<string, unknown>) ?? {}, extra);
+        return ok(typeof out === 'string' ? { content: [{ type: 'text', text: out }] } : out);
       } catch (e) {
         return ok({ content: [{ type: 'text', text: String((e as Error).message) }], isError: true });
       }
