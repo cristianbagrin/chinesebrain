@@ -36,10 +36,27 @@
     <textarea rows="2" lang="zh-Hant" aria-label="Your answer" placeholder="\u4F60\u7684\u56DE\u7B54\u2026"></textarea>
     <button type="submit" class="tu-send" aria-label="Send"></button>
   </form>
-  <div class="tu-bar"><button type="button" class="tu-new">New scene</button></div>
+  <div class="tu-bar">
+    <div class="tu-mode" role="radiogroup" aria-label="Mode">
+      <button type="button" role="radio" data-mode="scene" title="A scene from your week: you answer, it pushes back">Scene</button>
+      <button type="button" role="radio" data-mode="ask" title="Ask anything: a contrast, how to say it, a sentence to check">Ask</button>
+    </div>
+    <button type="button" class="tu-new" title="Start over">New</button>
+  </div>
   <button type="button" class="tu-card" hidden>Card it</button>
 </div>`;
-  var LOG = $(".tu-log", VIEW_EL), FORM = $(".tu-in", VIEW_EL), BOX = $("textarea", VIEW_EL), CARD = $(".tu-card", VIEW_EL), talk = null, busy = !1, loaded = !1, zhSpan = (t) => t.replace(/([\u3400-\u9fff，。？！、「」『』：；…（）]+)/g, '<span class="zh">$1</span>');
+  var LOG = $(".tu-log", VIEW_EL), FORM = $(".tu-in", VIEW_EL), BOX = $("textarea", VIEW_EL), CARD = $(".tu-card", VIEW_EL), talk = null, busy = !1, loaded = !1, mode = (() => {
+    try {
+      return localStorage.getItem("tutor-mode") === "ask" ? "ask" : "scene";
+    } catch {
+      return "scene";
+    }
+  })(), talks = {};
+  function showMode() {
+    for (let b of VIEW_EL.querySelectorAll(".tu-mode button")) b.setAttribute("aria-checked", String(b.dataset.mode === mode));
+    BOX.placeholder = mode === "ask" ? "\u554F\u6211\u2026 / Ask anything\u2026" : "\u4F60\u7684\u56DE\u7B54\u2026", BOX.setAttribute("aria-label", mode === "ask" ? "Your question" : "Your answer");
+  }
+  var zhSpan = (t) => t.replace(/([\u3400-\u9fff，。？！、「」『』：；…（）]+)/g, '<span class="zh">$1</span>');
   function rich(t) {
     return t.split(`
 `).map(
@@ -60,7 +77,7 @@
     if (talk) {
       busy = !0, paint();
       try {
-        let r = await api("tutor", { messages: talk.msgs });
+        let r = await api("tutor", { messages: talk.msgs, mode: talk.mode ?? "scene" });
         talk.msgs.push({ role: "assistant", content: r.text }), save();
       } catch (e) {
         talk.msgs.push({ role: "assistant", content: `(${e.message})` });
@@ -71,16 +88,18 @@
   }
   async function fresh() {
     let now = /* @__PURE__ */ new Date();
-    talk = { id: now.toISOString().replace(/[^0-9]/g, "").slice(0, 14), started: now.toISOString(), msgs: [] }, await turn();
+    talk = talks[mode] = { id: now.toISOString().replace(/[^0-9]/g, "").slice(0, 14), started: now.toISOString(), msgs: [], mode }, mode === "scene" ? await turn() : paint();
   }
   async function load() {
     loaded = !0;
     try {
-      let last = (await api("db?col=tutor")).sort((a, b) => a.id < b.id ? -1 : 1).pop()?.data;
-      if (last && Date.now() - Date.parse(last.started) < 18 * 36e5 && last.msgs?.length)
-        return talk = last, paint();
+      let list = await api("db?col=tutor");
+      for (let { data } of list.sort((a, b) => a.id < b.id ? -1 : 1))
+        data && Date.now() - Date.parse(data.started) < 18 * 36e5 && data.msgs?.length && (talks[data.mode ?? "scene"] = data);
     } catch {
     }
+    if (showMode(), talks[mode])
+      return talk = talks[mode], paint();
     fresh();
   }
   FORM.addEventListener("submit", (e) => {
@@ -92,6 +111,17 @@
     e.key === "Enter" && !e.shiftKey && !e.isComposing && (e.preventDefault(), FORM.requestSubmit());
   });
   $(".tu-new", VIEW_EL).addEventListener("click", () => !busy && fresh());
+  $(".tu-mode", VIEW_EL).addEventListener("click", (e) => {
+    let m = e.target.closest("[data-mode]")?.dataset.mode;
+    if (!(!m || m === mode || busy)) {
+      mode = m;
+      try {
+        localStorage.setItem("tutor-mode", m);
+      } catch {
+      }
+      showMode(), talks[m] ? (talk = talks[m], paint()) : fresh(), BOX.focus();
+    }
+  });
   function card(w) {
     if (w = w.replace(/[^㐀-鿿]/g, ""), !!w) {
       try {

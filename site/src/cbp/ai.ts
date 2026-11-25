@@ -7,8 +7,9 @@ import Anthropic from '@anthropic-ai/sdk';
 
 type Relay = { call(url: string, init: { method: string; headers: Record<string, string>; body?: string }): Promise<{ status: number; type: string; body: ArrayBuffer }> };
 /** Messages for Claude: a prompt alone, or the turns of a conversation. */
-export type Input = string | { role: 'user' | 'assistant'; content: string }[];
-export type TextOpts = { json?: boolean; effort?: 'low' | 'medium' | 'high' };
+export type Block = { type: 'text'; text: string } | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } };
+export type Input = string | { role: 'user' | 'assistant'; content: string | Block[] }[];
+export type TextOpts = { json?: boolean; effort?: 'low' | 'medium' | 'high'; maxTokens?: number };
 /** Production's AI, for the staging copy (which has no keys of its own): the Brains entrypoint in worker.js. */
 type Brains = {
   text(model: string, input: Input, opts: TextOpts): Promise<{ text: string; usage: Record<string, number> }>;
@@ -32,7 +33,7 @@ const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
 export async function text(env: Env, model: string, prompt: Input, opts: TextOpts = {}) {
   const [where, name] = split(model);
   if (where === 'anthropic' && !env.ANTHROPIC_API_KEY && env.BRAINS) return quota(() => env.BRAINS!.text(model, prompt, opts));
-  if (where === 'anthropic') return claude(env, name, prompt, opts.effort);
+  if (where === 'anthropic') return claude(env, name, prompt, opts.effort, opts.maxTokens);
   if (typeof prompt !== 'string') throw new Error(`${model}: one prompt only.`);
   if (where !== 'gemini') throw new Error(`No text route for ${model}.`);
   if (!env.GEMINI_KEY) throw new Quota('No GEMINI_KEY yet.'); // not a failure: it waits for the key
@@ -113,7 +114,7 @@ async function geminiImage(env: Env, name: string, prompt: string) {
 
 /** Claude through the official SDK, its requests sent by way of the Relay. Same thinking depth for every model,
  *  so a comparison between them is fair. */
-async function claude(env: Env, name: string, prompt: Input, effort: TextOpts['effort'] = 'medium') {
+async function claude(env: Env, name: string, prompt: Input, effort: TextOpts['effort'] = 'medium', maxTokens = 16000) {
   if (!env.ANTHROPIC_API_KEY) throw new Quota('No ANTHROPIC_API_KEY yet.');
   const client = new Anthropic({
     apiKey: env.ANTHROPIC_API_KEY,
@@ -127,7 +128,7 @@ async function claude(env: Env, name: string, prompt: Input, effort: TextOpts['e
   });
   let m;
   try {
-    m = await client.messages.create({ model: name, max_tokens: 16000, thinking: { type: 'adaptive' }, output_config: { effort }, messages: typeof prompt === 'string' ? [{ role: 'user', content: prompt }] : prompt });
+    m = await client.messages.create({ model: name, max_tokens: maxTokens, thinking: { type: 'adaptive' }, output_config: { effort }, messages: typeof prompt === 'string' ? [{ role: 'user', content: prompt }] : (prompt as never) });
   } catch (e) {
     const st = (e as { status?: number }).status;
     if (e instanceof Anthropic.RateLimitError || e instanceof Anthropic.APIConnectionError || st === 529 || st === 503 || st === 504 || /credit balance/i.test(String((e as Error).message))) throw new Quota(`anthropic:${name}: ${String((e as Error).message).slice(0, 300)}`);

@@ -40,14 +40,21 @@
   compared them), its data the CBP D1 (`files` incl. `chinese.md`, the system's rules; `docs`, `meta`, `history`; `site/src/cbp/plus.ts`).
   The 10 pm job is a Cron Trigger (`site/src/cbp/nightly.ts`, 14:00 UTC): his Chinese Brain marks straight from his account
   (`Account.brainSince`, `brain.ts`), test and card filing, the card kit and numbers, a new test when due (Opus writes, Azure voices),
-  a snapshot in R2 (`snap/`). Every other hour Opus marks an essay whose day is over (`essays.ts` checks the marks). `POST
-  /api/plus/push/nightly`, `/essay`, `/try-test` (Bearer CBP_PUSH_KEY; staging's is CBP_STAGING_PUSH_KEY in `~/.cbp-push.env`) run them by hand.
+  a snapshot in R2 (`snap/`). No Claude sessions run his system: the other jobs are `site/src/cbp/jobs.ts`, on the same hourly
+  cron by the hour in Taipei: every hour Opus marks an essay whose day is over and does its bookkeeping (log rows, K words, queue,
+  Watch list; `essays.ts` checks the marks); Sunday 11 pm the weekly pass (typing slips, To improve kept to 3–5 new, essayTarget);
+  the 1st 11 pm the monthly (code freezes `months`, Measurements, Test lane refill, checks → board/data `alerts` on Progress; Opus
+  writes This month, tightens the Watch list and Lessons, proposes Part 1–2 changes as an alert, never edits them); the 2nd–9th
+  10 am the monthly test (Opus writes, looks at each photo, code checks weekdays and sends; after the nightly files it, its
+  Lessons). Each job keeps its last run in meta `job.*` (the connector's `nightly` tool shows them). `POST /api/plus/push/nightly`,
+  `/essay`, `/weekly`, `/monthly`, `/monthly-test` (`?force=1`), `/try-test` (Bearer CBP_PUSH_KEY; staging's is
+  CBP_STAGING_PUSH_KEY in `~/.cbp-push.env`; staging has no crons) run them by hand.
   The board's code lives in `site/public/plus/board` and is edited there now (`scripts/cbp-board.py` copied it from the old folder);
   `plus/runtime.js` stands in for claude.ai's database and `sample`; `plus/review.js` adds his review card beside the study card on
   the Cards page (`site/src/cbp/cards.ts`: pictures from Wikimedia Commons or drawn on Pollinations, Azure voices, media in R2; a daily
   sweep, `cards.clean`, drops media nothing points to). The Tutor tab (`plus/tutor.js` from `site/src/cbp/tutor/`, server
-  `tutor.ts`) is behind `plus.tutor`. Staging has no AI keys: it borrows production's through the `Brains` entrypoint, and its Account
-  objects are production's. Claude sessions (the essay review, monthly review, monthly test) read and write it through the connector
+  `tutor.ts`; Scene and Ask modes) is behind `plus.tutor`. Staging has no AI keys: it borrows production's through the `Brains` entrypoint, and its Account
+  objects are production's. A Claude session he opens himself reads and writes it through the connector
   at `/mcp/<CBP_MCP_KEY>` (tools in `plus.ts`). `scripts/cbp-push.py` is retired.
 - **CBP reviews (Stage 4, Anki rebuilt)**: the Reviews tab of `/plus` (`/plus/review` redirects there), behind the `plus.anki`
   switch; `plus.js` loads `plus/anki.js` (from `site/src/cbp/review/`) before the board's `boot.js`, and it adds the tab itself.

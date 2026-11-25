@@ -8,6 +8,7 @@
    tree over each month; fun.js fills #pr-forest). Months only, never weeks. ---------- */
 const PR={hover:null,C:null,S:null,F:null,G:null,w:0,h:0,k:.92,px:0,py:0};
 document.getElementById('view-progress').innerHTML=`<div class="pr">
+  <section class="pr-alerts" id="pr-alerts" aria-label="Checks" hidden></section>
   <section class="pr-hero" aria-label="Words known">
     <p class="side-h">Words known</p>
     <div class="pr-head" id="pr-head" aria-live="polite"></div>
@@ -281,9 +282,20 @@ function PR_note(){
   document.getElementById('pr-note').innerHTML=out.map(x=>`<span>${x}</span>`).join('');
 }
 
+// what the monthly job found out of step (board/data alerts: its checks, and a proposal for Parts 1–2 he decides on)
+function PR_alerts(){
+  const el=document.getElementById('pr-alerts'), A=STATE.alerts;
+  const key=A&&A.list&&A.list.length?'alerts:'+A.day:null;
+  el.hidden=!key||lsGet(key)==='seen';
+  if(el.hidden) return;
+  el.innerHTML=`<p class="side-h">Checks · ${fmtDate(A.day)}</p><ul>${A.list.map(x=>`<li${/^Proposal: /.test(x)?' class="pr-prop"':''}>${mix(x)}</li>`).join('')}</ul><button class="pr-x-btn" type="button" title="Seen" aria-label="Seen">×</button>`;
+  el.querySelector('button').onclick=()=>{lsSet(key,'seen');el.hidden=true;};
+}
+
 function PR_render(){
   if(!STATE) return;
   if(VIEW!=='progress') return;
+  PR_alerts();
   PR_chart();
   PR_head(null);
   PR_note();

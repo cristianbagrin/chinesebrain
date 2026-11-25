@@ -5,7 +5,7 @@
 //   3. the cards he carded filed, the card kit and the board's numbers rebuilt
 //   4. a new test written (Opus) and sent when one is due and none is open, its lines voiced (Azure)
 //   5. a snapshot of everything in R2 (`snap/<day>.json`)
-// And every hour: an essay whose day is over gets Opus's corrections (`correctEssays`).
+// The essays, the weekly and monthly passes and the monthly test are jobs.ts.
 // Each run's report is kept in meta (`nightly`), and the connector's `nightly` tool shows it.
 import * as E from './engine.ts';
 import * as ai from './ai.ts';
@@ -301,59 +301,3 @@ async function snapshot(env: Env, day: string) {
   if (old.length) await env.FILES.delete(old);
 }
 
-// ---------- the essays ----------
-/** Opus's corrections for an essay whose day is over, written as marks (essays.ts checks them). One per call. */
-export async function correctEssays(env: Env) {
-  const essays = await listDocs(env as never, 'essays');
-  const reviewed = new Set((await env.CBP.prepare("SELECT id FROM docs WHERE col = 'reviews'").all<{ id: string }>()).results.map((r) => r.id));
-  const last = Math.max(0, ...[...reviewed].map((id) => Number(id.slice(1)) || 0));
-  const now = essayToday(essays.map((e) => e.data));
-  const todo = essays.map((e) => e.data).filter((e) => Number(e.day) > last && norm(e.text).trim() && String(e.date) < now).sort((a, b) => Number(a.day) - Number(b.day));
-  if (!todo.length) return null;
-  const e = todo[0];
-  const files = await loadFiles(env as never);
-  const md = files.get(E.MEMORY) ?? '';
-  const improve = Object.fromEntries((await listDocs(env as never, 'improve')).map((d) => [d.id, d.data]));
-  const open = Object.entries(improve).filter(([, x]) => !x.done && !x.removed).map(([id, x]) => `${id} · DAY ${x.day ?? '-'} · ${x.mine ?? ''} → ${x.nat ?? ''}`).join('\n');
-  const leaks = md.slice(md.indexOf('### Leaks'), md.indexOf('### What he knows'));
-  const prompt = (problems: string[]) => `You correct Chris's daily Chinese essay (Traditional characters, Taiwanese Chinese, high A2). He reads your marks inside his own text the next day. Keep it light: a few marks that matter, never homework.
-
-Reply with marks in exactly this format, nothing else:
-DAY ${e.day}
-fix | his exact words | the right way | a short note, only if it adds what the right way doesn't show
-better | his exact words | how a Taiwanese person would say it
-good | his exact words (something he did well; one or two)
-word | English he dropped in | the Chinese for it
-fix! or better! puts it on his To improve list (sentence structure and natural phrasing that will keep coming back, his Leaks first; at most two a day; never a missing word, never one already on his list)
-done | <list item id> | his words in this essay that now get that item right
-
-Rules:
-- His words copied exactly, in the order they come, enough of them to land in one place only; marks never overlap.
-- The right way: Taiwan usage, Traditional characters, Chinese punctuation, no longer than it needs to be; keep his tone.
-- A typing slip inside a corrected phrase gets fixed with it; a slip on its own (a sound-alike) isn't marked.
-- English in an essay means he found no way to say it: a word mark, never a fix.
-- Notes in plain English, one line: a frame (兩碗 + noun) beats a grammar rule.
-
-His leaks, Watch list and Taiwan usage notes (look for these first):
-${leaks}
-
-His open To improve list (id · day · his words → the right way):
-${open || '(empty)'}
-
-DAY ${e.day} (${e.date}):
-${norm(e.text)}${problems.length ? `\n\nYour last marks were refused: ${problems.join('; ')}. Send them again, fixed.` : ''}`;
-  const reviews = Object.fromEntries((await listDocs(env as never, 'reviews')).map((d) => [d.id, d.data]));
-  const byId = Object.fromEntries(essays.map((x) => [x.id, x.data]));
-  let errs: string[] = [];
-  for (let tries = 0; tries < 3; tries++) {
-    const out = (await ai.text(env, ESSAY_MODEL, prompt(errs), { effort: 'medium' })).text.replace(/^```\w*\n?|```$/gm, '').trim();
-    const p = marksPlan(out, byId, reviews, improve, taipeiToday());
-    errs = p.errs;
-    if (errs.length) continue;
-    for (const w of p.writes) await putDoc(env, w.col, w.id, w.data, w.op);
-    return { day: e.day, marks: p.writes.length };
-  }
-  // three refusals: leave him an empty review rather than nothing, so the next essay isn't held up
-  await putDoc(env, 'reviews', `d${String(e.day).padStart(3, '0')}`, { day: e.day, review: taipeiToday(), marks: [] });
-  return { day: e.day, failed: errs };
-}

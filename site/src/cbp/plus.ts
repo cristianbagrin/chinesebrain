@@ -261,11 +261,11 @@ const TOOLS = [
   { name: 'update_board', description: "Change board/data fields the nightly doesn't own: essayTarget (this week's essay target), months (frozen monthly numbers).", inputSchema: S({ data: { type: 'object' } }, ['data']) },
   { name: 'send_test', description: "Send a test to his page (words.py send + media.py): {items: [...]} with each item's label, kind, target, ask (or hear), model, check, and optional hear + voice (m 阿伯, g 阿嬤 or young woman, f 阿姨), read, and for the monthly test scene ({gen: 'what the photo shows'} drawn by FLUX, or {commons: 'File title.jpg'}), alt, overlay, secs, and a title on the test. Refused while a test is open (force: true only if it never reached him) or when a target sits in an ask or label. Voices and photos are made on the server.", inputSchema: S({ test: { type: 'object' }, force: { type: 'boolean' } }, ['test']) },
   { name: 'make_media', description: "Make a test's voices and photos without sending it (for the monthly test): {items: [...]} as for send_test. Returns the test with each item's audio and img filled in, and every photo as an image to look at. Send that test with send_test (items that have audio or img keep them); to redo a photo, drop its img and call again.", inputSchema: S({ test: { type: 'object' } }, ['test']) },
-  { name: 'nightly', description: "The 10 pm job's last report (merged Chinese Brain marks, filed test and cards, the test it sent). run: true runs it now (no_test: true skips writing a test).", inputSchema: S({ run: { type: 'boolean' }, no_test: { type: 'boolean' } }) },
+  { name: 'nightly', description: "The 10 pm job's last report (merged Chinese Brain marks, filed test and cards, the test it sent), the other jobs' last runs (essay marks, weekly, monthly, monthly test) and the monthly checks that failed. run: true runs it now (no_test: true skips writing a test).", inputSchema: S({ run: { type: 'boolean' }, no_test: { type: 'boolean' } }) },
 ];
 
 /** Change files through the engine and keep them: the replaced versions go into history. */
-async function change(env: Env, f: (files: E.Files) => string | Promise<string>) {
+export async function change(env: Env, f: (files: E.Files) => string | Promise<string>) {
   const before = await loadFiles(env);
   const files: E.Files = new Map(before);
   const out = await f(files);
@@ -447,7 +447,11 @@ async function tool(env: Env, name: string, a: Record<string, unknown>, extra: E
       const r = await env.CBP.prepare("SELECT v FROM meta WHERE k = 'nightly'").first<{ v: string }>();
       if (!r) return 'The nightly has not run on the website yet.';
       const n = JSON.parse(r.v);
-      return `${n.day} (${new Date(n.at).toISOString()}):\n${n.said.join('\n')}`;
+      // and the other jobs' last runs (jobs.ts): essay, weekly, monthly, mtest, mtest.learned
+      const jobs = (await env.CBP.prepare("SELECT k, v FROM meta WHERE k IN ('job.essay', 'job.weekly', 'job.monthly', 'job.mtest', 'job.mtest.learned')").all<{ k: string; v: string }>()).results
+        .map((j) => ({ k: j.k.slice(4), ...JSON.parse(j.v) })).map((j) => `\n${j.k}, ${j.day}: ${(j.said as string[]).join(' · ') || 'nothing to do'}`);
+      const al = ((await getDoc(env, 'board', 'data')) as { alerts?: { day: string; list: string[] } } | null)?.alerts;
+      return `${n.day} (${new Date(n.at).toISOString()}):\n${n.said.join('\n')}${jobs.length ? '\n\nThe other jobs:' + jobs.join('') : ''}${al?.list?.length ? `\n\nChecks that failed (${al.day}):\n${al.list.join('\n')}` : ''}`;
     }
   }
   throw new Error(`Unknown tool ${name}.`);

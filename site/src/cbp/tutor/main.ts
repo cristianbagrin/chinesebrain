@@ -8,7 +8,8 @@ declare function openCard(word: string, src: string, opt?: Record<string, unknow
 declare function sfx(k: string): void;
 
 type Msg = { role: 'user' | 'assistant'; content: string };
-type Talk = { id: string; started: string; msgs: Msg[] };
+type Mode = 'scene' | 'ask';
+type Talk = { id: string; started: string; msgs: Msg[]; mode?: Mode };
 
 const $ = <T extends Element = HTMLElement>(s: string, el: ParentNode = document) => el.querySelector(s) as T;
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -50,13 +51,33 @@ VIEW_EL.innerHTML = `<div class="tu">
     <textarea rows="2" lang="zh-Hant" aria-label="Your answer" placeholder="你的回答…"></textarea>
     <button type="submit" class="tu-send" aria-label="Send"></button>
   </form>
-  <div class="tu-bar"><button type="button" class="tu-new">New scene</button></div>
+  <div class="tu-bar">
+    <div class="tu-mode" role="radiogroup" aria-label="Mode">
+      <button type="button" role="radio" data-mode="scene" title="A scene from your week: you answer, it pushes back">Scene</button>
+      <button type="button" role="radio" data-mode="ask" title="Ask anything: a contrast, how to say it, a sentence to check">Ask</button>
+    </div>
+    <button type="button" class="tu-new" title="Start over">New</button>
+  </div>
   <button type="button" class="tu-card" hidden>Card it</button>
 </div>`;
 const LOG = $('.tu-log', VIEW_EL), FORM = $<HTMLFormElement>('.tu-in', VIEW_EL), BOX = $<HTMLTextAreaElement>('textarea', VIEW_EL);
 const CARD = $<HTMLButtonElement>('.tu-card', VIEW_EL);
 
 let talk: Talk | null = null, busy = false, loaded = false;
+let mode: Mode = (() => {
+  try {
+    return localStorage.getItem('tutor-mode') === 'ask' ? 'ask' : 'scene';
+  } catch {
+    return 'scene';
+  }
+})();
+// per mode: the conversation that was open, so switching back finds it
+const talks: Partial<Record<Mode, Talk>> = {};
+function showMode() {
+  for (const b of VIEW_EL.querySelectorAll<HTMLElement>('.tu-mode button')) b.setAttribute('aria-checked', String(b.dataset.mode === mode));
+  BOX.placeholder = mode === 'ask' ? '問我… / Ask anything…' : '你的回答…';
+  BOX.setAttribute('aria-label', mode === 'ask' ? 'Your question' : 'Your answer');
+}
 
 /** The tutor's text with ⟦words⟧ as buttons; Chinese in the Chinese font; **bold** kept as bold. */
 const zhSpan = (t: string) => t.replace(/([\u3400-\u9fff，。？！、「」『』：；…（）]+)/g, '<span class="zh">$1</span>');
@@ -89,7 +110,7 @@ async function turn() {
   busy = true;
   paint();
   try {
-    const r = await api('tutor', { messages: talk.msgs });
+    const r = await api('tutor', { messages: talk.msgs, mode: talk.mode ?? 'scene' });
     talk.msgs.push({ role: 'assistant', content: r.text });
     save();
   } catch (e) {
@@ -102,20 +123,24 @@ async function turn() {
 }
 async function fresh() {
   const now = new Date();
-  talk = { id: now.toISOString().replace(/[^0-9]/g, '').slice(0, 14), started: now.toISOString(), msgs: [] };
-  await turn();
+  talk = talks[mode] = { id: now.toISOString().replace(/[^0-9]/g, '').slice(0, 14), started: now.toISOString(), msgs: [], mode };
+  // a scene opens with the tutor's lines; Ask waits for his question
+  if (mode === 'scene') await turn();
+  else paint();
 }
 async function load() {
   loaded = true;
   try {
     const list = (await api('db?col=tutor')) as { id: string; data: Talk }[];
-    const last = list.sort((a, b) => (a.id < b.id ? -1 : 1)).pop()?.data;
-    // a conversation from today carries on; an older one stays in the database
-    if (last && Date.now() - Date.parse(last.started) < 18 * 3600_000 && last.msgs?.length) {
-      talk = last;
-      return paint();
-    }
+    // a conversation from today carries on (the last of each mode); an older one stays in the database
+    for (const { data } of list.sort((a, b) => (a.id < b.id ? -1 : 1)))
+      if (data && Date.now() - Date.parse(data.started) < 18 * 3600_000 && data.msgs?.length) talks[data.mode ?? 'scene'] = data;
   } catch {}
+  showMode();
+  if (talks[mode]) {
+    talk = talks[mode]!;
+    return paint();
+  }
   fresh();
 }
 
@@ -134,6 +159,20 @@ BOX.addEventListener('keydown', (e) => {
   }
 });
 $('.tu-new', VIEW_EL).addEventListener('click', () => !busy && fresh());
+$('.tu-mode', VIEW_EL).addEventListener('click', (e) => {
+  const m = (e.target as HTMLElement).closest<HTMLElement>('[data-mode]')?.dataset.mode as Mode | undefined;
+  if (!m || m === mode || busy) return;
+  mode = m;
+  try {
+    localStorage.setItem('tutor-mode', m);
+  } catch {}
+  showMode();
+  if (talks[m]) {
+    talk = talks[m]!;
+    paint();
+  } else fresh();
+  BOX.focus();
+});
 
 // one tap: a marked word, or the Chinese he selected, goes to the card maker
 function card(w: string) {

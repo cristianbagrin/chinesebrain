@@ -17,6 +17,7 @@ import * as cards from './src/cbp/cards.ts';
 import * as anki from './src/cbp/anki.ts';
 import * as nightly from './src/cbp/nightly.ts';
 import * as tutor from './src/cbp/tutor.ts';
+import * as jobs from './src/cbp/jobs.ts';
 
 const MAX_BODY = 1_500_000;
 const MAX_ITEMS = 60_000;
@@ -689,7 +690,24 @@ async function plusMachine(request, env, url) {
     if (url.pathname === '/api/plus/push/clean') return json(await cards.clean(env));
     // the 10 pm job and the essay corrections, run now (src/cbp/nightly.ts): ?day=YYYY-MM-DD, ?notest=1
     if (url.pathname === '/api/plus/push/nightly') return json(await nightly.nightly(env, await ownerBrain(env), { day: url.searchParams.get('day') ?? undefined, noTest: url.searchParams.get('notest') === '1' }));
-    if (url.pathname === '/api/plus/push/essay') return json(await nightly.correctEssays(env));
+    if (url.pathname === '/api/plus/push/essay') return json(await jobs.essay(env));
+    // the weekly, monthly and monthly-test jobs, run now (src/cbp/jobs.ts); ?force=1 runs one that already ran
+    // these take minutes (Opus thinking hard): a space every 15 s keeps the connection, which would otherwise close
+    // at 60 s and cancel the job, then the JSON
+    const force = url.searchParams.get('force') === '1';
+    const long = (f) => {
+      const { readable, writable } = new TransformStream(), w = writable.getWriter(), enc = new TextEncoder();
+      const beat = setInterval(() => w.write(enc.encode(' ')).catch(() => {}), 15000);
+      f().then((r) => JSON.stringify(r), (e) => JSON.stringify({ error: String(e?.stack ?? e) })).then(async (t) => {
+        clearInterval(beat);
+        await w.write(enc.encode(t));
+        await w.close();
+      });
+      return new Response(readable, { headers: { 'Content-Type': 'application/json' } });
+    };
+    if (url.pathname === '/api/plus/push/weekly') return long(() => jobs.weekly(env, { force }));
+    if (url.pathname === '/api/plus/push/monthly') return long(() => jobs.monthly(env, { force }));
+    if (url.pathname === '/api/plus/push/monthly-test') return long(() => jobs.monthlyTest(env, { force }));
     // a test written as the nightly would, shown and not sent (nothing is saved but its voices)
     if (url.pathname === '/api/plus/push/try-test') {
       const said = [];
@@ -1090,15 +1108,29 @@ const PLUS_CSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; styl
 const MOVED = { '/welcome': '/brain/guide#welcome', '/brain/welcome': '/brain/guide#welcome', '/privacy': '/brain/privacy', '/dashboard': '/brain/dashboard', '/guide': '/brain/guide', '/whats-new': '/brain/whats-new' };
 
 export default {
-  // hourly (wrangler.jsonc): the nightly at 10 pm Taipei, essay marks the other hours, the media sweep at 3 am
+  // hourly (wrangler.jsonc), by the hour in Taipei: the nightly at 10 pm, essay marks the other hours, the weekly pass
+  // Sunday at 11 pm, the monthly one on the 1st at 11 pm, the monthly test on the 2nd at 10 am (it keeps the month it
+  // ran in meta, so 11 am and noon retry one that failed, and while a test is still open it tries each day to the 9th), the media sweep at 3 am. One after the other: they edit the
+  // same files.
   async scheduled(event, env, ctx) {
-    const hour = new Date(event.scheduledTime).getUTCHours();
-    // 10 pm in Taipei: the nightly (src/cbp/nightly.ts), which the Mac's chinese-nightly task did until Nov 23
-    if (hour === 14) ctx.waitUntil(ownerBrain(env).then((b) => nightly.nightly(env, b)).then((r) => console.log('nightly', JSON.stringify(r))).catch((e) => console.error('nightly', e)));
-    // every hour: an essay whose day is over gets its corrections
-    else ctx.waitUntil(nightly.correctEssays(env).then((r) => r && console.log('essay', JSON.stringify(r))).catch((e) => console.error('essay', e)));
-    // and once a day (3 am in Taipei), the media nothing points to any more goes (cards.clean)
-    if (new Date(event.scheduledTime).getUTCHours() === 19) ctx.waitUntil(cards.clean(env).then((r) => console.log('clean', JSON.stringify(r))));
+    const t = new Date(event.scheduledTime + 8 * 3600e3), hour = t.getUTCHours(), date = t.getUTCDate();
+    const todo = [];
+    if (t.getUTCDay() === 0 && hour === 23) todo.push(['weekly', () => jobs.weekly(env)]);
+    if (date === 1 && hour === 23) todo.push(['monthly', () => jobs.monthly(env)]);
+    if (date >= 2 && date <= 9 && hour >= 10 && hour <= 12) todo.push(['monthly-test', () => jobs.monthlyTest(env)]);
+    if (hour === 22) todo.push(['nightly', () => ownerBrain(env).then((b) => nightly.nightly(env, b))], ['monthly-test lessons', () => jobs.afterTest(env)]);
+    else todo.push(['essay', () => jobs.essay(env)]);
+    if (hour === 3) todo.push(['clean', () => cards.clean(env)]);
+    ctx.waitUntil((async () => {
+      for (const [name, f] of todo) {
+        try {
+          const r = await f();
+          if (r) console.log(name, JSON.stringify(r));
+        } catch (e) {
+          console.error(name, e);
+        }
+      }
+    })());
   },
   async fetch(request, env) {
     const url = new URL(request.url);

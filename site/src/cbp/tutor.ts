@@ -41,8 +41,21 @@ Mark a word or short set phrase you teach him (one to four characters, Tradition
 Plain text only: no markdown, no bold, no headings, no bullets with asterisks. A correction is a line of its own: his words → the natural version.
 Chinese punctuation in Chinese text, English punctuation in English text. Be direct, never a yes-man; few words. If he writes in English, he's asking you something: answer briefly, then back to the scene.`;
 
+// Ask: free chat (his questions: a contrast, "how do I say", a sentence to check, grammar). Retrieval first.
+const ASK = `You are Chris's tutor for Taiwanese Chinese (Traditional characters, Taiwan usage: 好啊 not 好的, 計畫, 捷運, 機車). He is high A2, lives in Taipei, and types or dictates (ignore the characters a transcriber picked: 在/再, 的/得). Here he asks you things: a contrast (終於 vs 總算), how to say something, a sentence to check, a grammar point.
+
+How you answer:
+- Brief: the answer in a line or two, the way a Taiwanese friend who teaches would say it. A frame (兩碗 + noun) beats a grammar rule; no labels, no lists of every sense.
+- A contrast or usage question: one real example sentence per side (the most everyday one), one line on the difference, then ask him to make a sentence of his own with the one he'd most likely get wrong, and stop there. When he answers, check it (his words → the natural version, if it needs one), and only then move on or give the next.
+- "How do I say X": the natural way first; if it's a word he can likely build from what he knows, ask him to try before you give it.
+- A sentence to check: his words → the natural version, the one or two fixes that matter (his leaks first); say so plainly when it's already right.
+- Never hand him a list to memorize; never answer a question he hasn't asked.
+
+Mark a word or short set phrase worth a card (one to four characters, Traditional only, no pinyin) as ⟦word⟧, so he can card it with one tap; at most three per turn, never a whole sentence.
+Plain text only: no markdown, no bold, no headings, no bullets with asterisks. Chinese punctuation in Chinese text, English in English. Be direct, never a yes-man; few words.`;
+
 /** POST plus/tutor {messages: [{role, content}]} → the tutor's next turn. An empty conversation starts a scene. */
-export async function reply(env: Env, body: { messages?: unknown; model?: unknown; focus?: unknown }) {
+export async function reply(env: Env, body: { messages?: unknown; model?: unknown; focus?: unknown; mode?: unknown }) {
   const msgs = Array.isArray(body.messages) ? body.messages : [];
   if (msgs.length > 80) throw new Bad('That conversation is long: start a new one.');
   const turns = msgs.map((m) => {
@@ -52,9 +65,11 @@ export async function reply(env: Env, body: { messages?: unknown; model?: unknow
   });
   const files = await loadFiles(env);
   const focus = typeof body.focus === 'string' && body.focus.trim() ? `\nHe asked to practice: ${body.focus.trim().slice(0, 200)}` : '';
-  const head = `${RULES}\n\n${context(files, today())}${focus}\n\nStart the scene now.`;
+  const ask = body.mode === 'ask';
+  if (ask && !turns.length) throw new Bad('Ask something first.');
+  const head = ask ? `${ASK}\n\nWhat he's learning:\n${context(files, today())}\n\nHis first question follows.` : `${RULES}\n\n${context(files, today())}${focus}\n\nStart the scene now.`;
   const input = [{ role: 'user' as const, content: head }, ...turns];
-  if (input[1] && input[1].role === 'user') input.splice(1, 0, { role: 'assistant', content: '(scene)' });
+  if (input[1] && input[1].role === 'user') input.splice(1, 0, { role: 'assistant', content: ask ? '(ready)' : '(scene)' });
   const model = modelOf(body.model);
   const r = await ai.text(env, model, input, { effort: 'low' });
   return { text: r.text, model: model.split(':')[1] };
