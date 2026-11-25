@@ -496,7 +496,14 @@ async function tool(env: Env, name: string, a: Record<string, unknown>, extra: E
       const jobs = (await env.CBP.prepare("SELECT k, v FROM meta WHERE k IN ('job.essay', 'job.weekly', 'job.monthly', 'job.mtest', 'job.mtest.learned')").all<{ k: string; v: string }>()).results
         .map((j) => ({ k: j.k.slice(4), ...JSON.parse(j.v) })).map((j) => `\n${j.k}, ${j.day}: ${(j.said as string[]).join(' · ') || 'nothing to do'}`);
       const al = ((await getDoc(env, 'board', 'data')) as { alerts?: { day: string; list: string[] } } | null)?.alerts;
-      return `${n.day} (${new Date(n.at).toISOString()}):\n${n.said.join('\n')}${jobs.length ? '\n\nThe other jobs:' + jobs.join('') : ''}${al?.list?.length ? `\n\nChecks that failed (${al.day}):\n${al.list.join('\n')}` : ''}`;
+      // what Claude cost this month, by job (ai.ts spend; $ per million tokens in / out)
+      const PRICE: Record<string, [number, number]> = { 'claude-opus-5-5': [4, 20], 'claude-sonnet-5-5': [2, 10], 'claude-haiku-5-5': [0.1, 0.5] };
+      const month = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 7);
+      type SpendRow = { model: string; job: string; calls: number; input: number; output: number; cache_read: number };
+      const rows = await env.CBP.prepare('SELECT model, job, calls, input, output, cache_read FROM spend WHERE month = ? ORDER BY job').bind(month).all<SpendRow>().then((r) => r.results, () => [] as SpendRow[]);
+      const usd = (r: SpendRow) => { const [i, o] = PRICE[r.model] ?? [4, 20]; return (i * r.input + o * r.output + i * 0.05 * r.cache_read) / 1e6; };
+      const spent = rows.length ? `\n\nClaude in ${month}: $${rows.reduce((t, r) => t + usd(r), 0).toFixed(2)}${rows.map((r) => `\n  ${r.job} (${r.model.replace('claude-', '')}): ${r.calls} call(s), $${usd(r).toFixed(2)}`).join('')}` : '';
+      return `${n.day} (${new Date(n.at).toISOString()}):\n${n.said.join('\n')}${jobs.length ? '\n\nThe other jobs:' + jobs.join('') : ''}${al?.list?.length ? `\n\nChecks that failed (${al.day}):\n${al.list.join('\n')}` : ''}${spent}`;
     }
   }
   throw new Error(`Unknown tool ${name}.`);
