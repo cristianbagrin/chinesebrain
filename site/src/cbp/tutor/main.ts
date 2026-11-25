@@ -198,10 +198,12 @@ document.addEventListener('selectionchange', () => {
   const t = s && !s.isCollapsed && LOG.contains(s.anchorNode) ? s.toString().replace(/[^㐀-鿿]/g, '') : '';
   if (!t || t.length > 12) return void (CARD.hidden = true);
   const r = s!.getRangeAt(0).getBoundingClientRect(), box = VIEW_EL.firstElementChild!.getBoundingClientRect();
-  CARD.style.left = `${r.left - box.left + r.width / 2}px`;
-  CARD.style.top = `${r.top - box.top - 44}px`;
   CARD.dataset.w = t;
   CARD.hidden = false;
+  // kept inside the column: past the screen's edge it made the page wider, and an iPhone zoomed out mid-selection
+  const half = CARD.offsetWidth / 2, x = r.left - box.left + r.width / 2;
+  CARD.style.left = `${Math.max(half, Math.min(box.width - half, x))}px`;
+  CARD.style.top = `${r.top - box.top - 44}px`;
 });
 CARD.addEventListener('pointerdown', (e) => e.preventDefault());
 CARD.addEventListener('click', () => card(CARD.dataset.w ?? ''));

@@ -67,7 +67,7 @@ button,input,textarea{font:inherit;color:inherit}
 button,a,[role=button],[role=tab],.cd-sent{-webkit-tap-highlight-color:transparent}
 :focus-visible{outline:2px solid var(--ink);outline-offset:3px;border-radius:6px}
 h1,h2,h3{font-weight:500;margin:0;text-wrap:balance}
-.wrap{max-width:var(--page);margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px),4vw);padding-right:max(16px,env(safe-area-inset-right,0px),4vw);padding-block:var(--s7) var(--s9)}
+.wrap{overflow-x:clip;max-width:var(--page);margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px),4vw);padding-right:max(16px,env(safe-area-inset-right,0px),4vw);padding-block:var(--s7) var(--s9)}
 @media (min-width:1600px){.wrap{padding-left:max(16px,env(safe-area-inset-left,0px),64px);padding-right:max(16px,env(safe-area-inset-right,0px),64px)}}
 
 /* a quiet section label: what a block is, said once, small and grey (never bold, never a box) */

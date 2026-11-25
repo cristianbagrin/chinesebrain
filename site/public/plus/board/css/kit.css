@@ -75,8 +75,8 @@ button.st-row:hover{background:var(--bg)}
 .hold.hold-still.held::after{opacity:.26}
 
 /* ---------- pinyin above the characters (kit/ruby.ts) ---------- */
-ruby{ruby-position:over;ruby-align:center}
+ruby{ruby-position:over;ruby-align:center;margin:0 .08em}
 rt{font-family:var(--ui);font-size:max(.55em,14px);font-weight:450;letter-spacing:0;color:var(--ink-3);-webkit-text-stroke:0;line-height:1.1}
-.rb{line-height:inherit}
-:where(.rb) ruby{line-height:1}
-.st-row.st-sub{min-height:0;padding:0 0 6px;justify-content:flex-end;margin-top:-6px}
+.rb-on.rb-on{line-height:2.3}
+.rbw{white-space:nowrap}
+.st-row.st-sub{min-height:0;padding:0 0 6px;justify-content:flex-end;margin:-8px 0 0}

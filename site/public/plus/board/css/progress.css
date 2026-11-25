@@ -36,7 +36,7 @@
 .pr-gd.on{transform:scale(1.3)}
 .pr-gl{font-size:var(--fs-xs);fill:var(--ink-3)}
 .pr-gl.next{fill:var(--ink-2);font-weight:500}
-@media (max-width:639px){.pr-fv{font-size:var(--fs-m)}.pr-head{height:calc(52px * var(--k))}.pr-big{font-size:calc(46px * var(--k))}.pr-sub{white-space:normal}}
+@media (max-width:639px){.pr-fv{font-size:var(--fs-s)}.pr-head{height:calc(52px * var(--k))}.pr-big{font-size:calc(46px * var(--k))}.pr-sub{white-space:normal}}
 .pr-cx{stroke:var(--ink-4);stroke-width:1;opacity:0;transition:opacity .15s}
 .pr-hl{fill:none;stroke:var(--ink);stroke-width:2;opacity:0;transition:opacity .15s}
 .pr-cx.on,.pr-hl.on{opacity:1}

@@ -203,10 +203,7 @@
       }
     }), out;
   }
-  var mark = (s) => s ? syllableToMarked(s) : "", word = (py) => {
-    let w = py.map(mark).reduce((a, s, i) => i && /^[aeoāáǎàēéěèōóǒò]/.test(s) ? `${a}'${s}` : a + s, "");
-    return /^[A-Z]/.test(py[0] ?? "") ? w.charAt(0).toUpperCase() + w.slice(1) : w;
-  };
+  var mark = (s) => s ? syllableToMarked(s) : "";
 
   // site/src/cbp/kit/ruby.ts
   var HAN2 = /[㐀-䶿一-鿿豈-﫿]/, lex = null, LEX_URL = "/plus/pinyin.txt?v=1";
@@ -215,14 +212,21 @@
   }
   var esc2 = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   function frag(L, text) {
-    return tokens(L, text).map((t) => t.py && t.py.every(Boolean) ? `<ruby>${esc2(t.text)}<rt>${esc2(word(t.py).toLowerCase())}</rt></ruby>` : esc2(t.text)).join("");
+    return tokens(L, text).map((t) => t.py && t.py.every(Boolean) ? `<span class="rbw">${[...t.text].map((c, i) => `<ruby>${esc2(c)}<rt>${esc2(mark(t.py[i]).toLowerCase())}</rt></ruby>`).join("")}</span>` : esc2(t.text)).join("");
+  }
+  function hidden(el2) {
+    if (!el2) return !1;
+    let cs = getComputedStyle(el2);
+    return cs.visibility === "hidden" || cs.color === "transparent" || /rgba\([^)]*,\s*0\)$/.test(cs.color) || Number(cs.opacity) === 0;
   }
   var SKIP = 'rt,rp,script,style,textarea,input,[contenteditable="true"],[contenteditable="plaintext-only"],[data-noruby],.rb';
   async function on(el2) {
     if (!el2) return;
     let L = await load(), w = document.createTreeWalker(el2, NodeFilter.SHOW_TEXT, {
-      acceptNode: (n) => HAN2.test(n.nodeValue ?? "") && !n.parentElement?.closest(SKIP) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
-    }), list = [];
+      acceptNode: (n) => HAN2.test(n.nodeValue ?? "") && !n.parentElement?.closest(SKIP) && !hidden(n.parentElement) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+    });
+    el2 instanceof Element && el2.classList.add("rb-on");
+    let list = [];
     for (let n = w.nextNode(); n; n = w.nextNode()) list.push(n);
     for (let n of list) {
       let s = document.createElement("span");
@@ -230,7 +234,7 @@
     }
   }
   function off(el2) {
-    el2?.querySelectorAll("span.rb").forEach((s) => s.replaceWith(document.createTextNode(s.dataset.t ?? "")));
+    el2?.querySelectorAll("span.rb").forEach((s) => s.replaceWith(document.createTextNode(s.dataset.t ?? ""))), el2 instanceof Element && el2.classList.remove("rb-on");
   }
   var RUBY = {
     on,
@@ -239,7 +243,7 @@
     html: async (text) => frag(await load(), text),
     shown: () => LAB.get("pinyin") === "on",
     ready: load,
-    CSS: "ruby{ruby-position:over;ruby-align:center}rt{font-family:Inter,system-ui,sans-serif;font-size:max(.55em,14px);font-weight:450;letter-spacing:0;color:#757B87;-webkit-text-stroke:0;line-height:1.1}"
+    CSS: ".rb-on.rb-on{line-height:2.3}.rbw{white-space:nowrap}ruby{ruby-position:over;ruby-align:center;margin:0 .08em}rt{font-family:Inter,system-ui,sans-serif;font-size:max(.55em,14px);font-weight:450;letter-spacing:0;color:#757B87;-webkit-text-stroke:0;line-height:1.1}"
   };
 
   // site/src/cbp/kit/keys.ts
@@ -350,13 +354,13 @@
   LAB.define("autoplay", "Card audio plays by itself", [["on", "On"], ["off", "Off"]], TOUCH ? "off" : "on", "Everyday");
   LAB.define("card-model", "Cards written by", M, "sonnet", "AI", A);
   LAB.define("card-ahead", "Next five written ahead", [["on", "On"], ["off", "Off"]], "on", "AI", A);
-  LAB.define("pinyin-model", "Pinyin checked by", M, "sonnet", "AI", A);
-  LAB.define("idea-model", "Picture ideas by", M, "sonnet", "AI", A);
-  LAB.define("draw-model", "Drawings by", [["both", "Both"], ["mai", "MAI"], ["flux", "Flux"]], "both", "AI", A);
+  LAB.define("pinyin-model", "Pinyin", M, "sonnet", "AI", A);
+  LAB.define("idea-model", "Picture ideas", M, "sonnet", "AI", A);
+  LAB.define("draw-model", "Drawings", [["both", "Both"], ["mai", "MAI"], ["flux", "Flux"]], "both", "AI", A);
   LAB.define("deeper-model", "Five minutes on a word", M, "sonnet", "AI", A);
-  LAB.define("test-model", "Tests written by", M, "sonnet", "AI", A);
-  LAB.define("grade-model", "Tests graded by", M, "sonnet", "AI", A);
-  LAB.define("essay-model", "Essays marked by", M, "opus", "AI", A);
+  LAB.define("test-model", "Writing tests", M, "sonnet", "AI", A);
+  LAB.define("grade-model", "Grading tests", M, "sonnet", "AI", A);
+  LAB.define("essay-model", "Essay marks", M, "opus", "AI", A);
   LAB.define("tutor-model", "Tutor", M, "sonnet", "AI", A);
   var ORDER = ["text-size", "pinyin", "autoplay", "card-model", "card-ahead", "pinyin-model", "idea-model", "draw-model", "deeper-model", "test-model", "grade-model", "essay-model", "tutor-model"], GROUPS = ["Everyday", "Reviews", "AI"], token = () => lsGet("cb-token") ?? "", acctIds = () => Object.values(LAB.defs).filter((d) => d.scope === "account").map((d) => d.id), pushT = 0;
   LAB.push = () => {

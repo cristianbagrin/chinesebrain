@@ -59,6 +59,11 @@
   `tutor.ts`; Scene and Ask modes) is behind `plus.tutor`. Staging has no AI keys: it borrows production's through the `Brains` entrypoint, and its Account
   objects are production's. A Claude session he opens himself reads and writes it through the connector
   at `/mcp/<CBP_MCP_KEY>` (tools in `plus.ts`). `scripts/cbp-push.py` is retired.
+- **Plus's shared parts** (`plus/kit.js` from `site/src/cbp/kit/`, loaded right after the board's `core.js`): `SETTINGS` (the one
+  Settings panel; choices are `LAB.define(…, {scope:'account'})` in core.js, account ones saved by `site/src/cbp/settings.ts` in
+  meta `settings`, which the night jobs read through `modelFor`), `KEYS` (every shortcut, rebindable: `KEYS.is(e, id)`, never
+  `e.key ===`), `SOUND` (one voice at a time), `HOLD` (press and hold), `RUBY` (pinyin above characters, from code:
+  `site/src/cbp/pinyin.ts` on the lexicon `plus/pinyin.txt` that the build writes). The type scale is in `board/css/base.css`.
 - **CBP reviews (Stage 4, Anki rebuilt)**: the Reviews tab of `/plus` (`/plus/review` redirects there), behind the `plus.anki`
   switch; `plus.js` loads `plus/anki.js` (from `site/src/cbp/review/`) before the board's `boot.js`, and it adds the tab itself.
   Class names in `plus/anki.css` must not collide with the board's or `review.css` (`.rv` is the Cards page's). Offline: `plus/sw.js`
