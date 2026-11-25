@@ -20,7 +20,8 @@
   `site/worker.js`): store listings and installed extensions link to them.
 - Key names in the UI follow the computer: `Alt` on Windows and Linux, `⌥ Option` on a Mac.
 - All user-facing English is American English (UI, docs, data; see `scripts/american.py`).
-- Few words, clear controls: prefer a button or an icon with a tooltip over a sentence.
+- Few words, clear controls: a button or an icon over a sentence. No hover tooltips anywhere (no `title=`, no hover tips).
+- **Code before AI.** Anything a rule can do runs as plain code (fast, free, the same every time); Claude gets only the jobs that need judgment. Check the `spend` table before adding AI work.
 - Chris changes the pages' words himself at `/edit` (any page: `/edit/brain/guide`…; password = the
   `EDIT_KEY` secret). His edits live in the Worker's `Copy` database and are put into each page as it's
   served, tied to the words they replaced (`site/src/copy.ts`). Run `node site/sync.mjs` before changing
