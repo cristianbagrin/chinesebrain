@@ -9,13 +9,13 @@ type Relay = { call(url: string, init: { method: string; headers: Record<string,
 /** Messages for Claude: a prompt alone, or the turns of a conversation. */
 export type Block = { type: 'text'; text: string } | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } };
 export type Input = string | { role: 'user' | 'assistant'; content: string | Block[] }[];
-export type TextOpts = { json?: boolean; effort?: 'low' | 'medium' | 'high'; maxTokens?: number };
+export type TextOpts = { json?: boolean; effort?: 'low' | 'medium' | 'high'; maxTokens?: number; job?: string };
 /** Production's AI, for the staging copy (which has no keys of its own): the Brains entrypoint in worker.js. */
 type Brains = {
   text(model: string, input: Input, opts: TextOpts): Promise<{ text: string; usage: Record<string, number> }>;
   image(model: string, prompt: string): Promise<{ bytes: ArrayBuffer; type: string }>;
 };
-type Env = { ANTHROPIC_API_KEY?: string; GEMINI_KEY?: string; POLLINATIONS_KEY?: string; BRAINS?: Brains; RELAY?: { idFromName(n: string): unknown; get(id: unknown, o?: { locationHint?: string }): Relay } };
+type Env = { CBP?: D1Like; ANTHROPIC_API_KEY?: string; GEMINI_KEY?: string; POLLINATIONS_KEY?: string; BRAINS?: Brains; RELAY?: { idFromName(n: string): unknown; get(id: unknown, o?: { locationHint?: string }): Relay } };
 
 /** Google and Anthropic refuse requests from some places (Cloudflare often serves Taiwan from Hong Kong), so their
  *  calls go through the Relay Durable Object, which lives in western North America (worker.js). */
@@ -30,10 +30,21 @@ export class Quota extends Error {}
 
 const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
 
+type D1Like = { prepare(q: string): { bind(...v: unknown[]): { run(): Promise<unknown> } } };
+/** What each Claude call cost, by month, model and job (D1 table spend), so the budget is measured, not guessed. */
+async function spend(env: Env, model: string, job: string, u: Record<string, number> | undefined) {
+  if (!env.CBP || !u) return;
+  const month = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 7);
+  await env.CBP.prepare('INSERT INTO spend (month, model, job, calls, input, output, cache_read) VALUES (?, ?, ?, 1, ?, ?, ?) ON CONFLICT (month, model, job) DO UPDATE SET calls = calls + 1, input = input + excluded.input, output = output + excluded.output, cache_read = cache_read + excluded.cache_read')
+    .bind(month, model, job, (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0), u.output_tokens ?? 0, u.cache_read_input_tokens ?? 0).run().catch(() => {});
+}
 export async function text(env: Env, model: string, prompt: Input, opts: TextOpts = {}) {
   const [where, name] = split(model);
-  if (where === 'anthropic' && !env.ANTHROPIC_API_KEY && env.BRAINS) return quota(() => env.BRAINS!.text(model, prompt, opts));
-  if (where === 'anthropic') return claude(env, name, prompt, opts.effort, opts.maxTokens);
+  if (where === 'anthropic') {
+    const r = !env.ANTHROPIC_API_KEY && env.BRAINS ? await quota(() => env.BRAINS!.text(model, prompt, { ...opts, job: undefined })) : await claude(env, name, prompt, opts.effort, opts.maxTokens);
+    await spend(env, name, opts.job ?? 'other', (r as { usage?: Record<string, number> }).usage);
+    return r;
+  }
   if (typeof prompt !== 'string') throw new Error(`${model}: one prompt only.`);
   if (where !== 'gemini') throw new Error(`No text route for ${model}.`);
   if (!env.GEMINI_KEY) throw new Quota('No GEMINI_KEY yet.'); // not a failure: it waits for the key

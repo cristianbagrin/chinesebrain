@@ -8,13 +8,21 @@ export type Files = Map<string, string>;
 
 export const TOCFL_DATE = '2026-12-12';
 export const LOGGED_FROM = '2026-10-28';
-export const TEST_EVERY = 5;
+/** A test every day (his call, 2026-11-25): about ten minutes, never two at once; 3+ missed days → a short comeback. */
+export const TEST_ITEMS = 10;
+export const COMEBACK_AFTER = 3;
+/** A word is known (K) once he has used it correctly in this many different situations (a test day, an essay, a tutor chat). */
+export const SITUATIONS = 3;
 export const LANES: Record<string, string> = { Life: 'life', Taiwan: 'tw', Test: 'test' };
 const LANE_NAMES = Object.keys(LANES);
 const NEXT_PATTERN = ['Life', 'Taiwan', 'Life', 'Test', 'Life', 'Taiwan', 'Life', 'Test', 'Life', 'Taiwan', 'Life', 'Test'];
 const ADJ = /^[+-]\d+(\.\d+)?$/;
 export const TEST_KINDS = ['new', 'old', 'leak', 'burst'];
 export const WRITING_KINDS = ['free', 'essay'];
+/** Daily-test items beyond the retest kinds: a listening drill (an exchange, answered in Chinese) and a TOCFL Band B
+ *  question (single choice, four options). Neither moves the retest schedule. */
+export const EXTRA_KINDS = ['listen', 'tocfl'];
+export const ITEM_KINDS = [...TEST_KINDS, ...EXTRA_KINDS];
 export const RESULTS = ['pass', 'partial', 'fail', 'none'];
 const SOURCE_WEIGHT: Record<string, number> = {
   Chris: 4, test: 3, essay: 3, free: 3, '動齡': 3,
@@ -508,7 +516,7 @@ export function testPlanText(files: Files, today: string, allItems = false) {
   const out: string[] = [];
   const rows = readLog(files);
   const w = waitingTest(rows);
-  if (w) {
+  if (w && !allItems) {
     return `Test ${w} is still on the board, not filed. Pull board/test and run \`words.py ingest\` first; one test at a time.\n`;
   }
   const t = table(rows);
@@ -539,6 +547,40 @@ export function testPlanText(files: Files, today: string, allItems = false) {
   return out.join('\n') + '\n';
 }
 
+/** The daily test's plan: due retests (oldest overdue first), L words still short of three situations (each with the
+ *  situations it has, so the next one is different: lateral), one word that just reached three (harder: vertical), the
+ *  cards since the last test. short: after 3+ missed days, the most overdue retests only. */
+export function dailyPlan(files: Files, today: string, o: { short?: boolean } = {}) {
+  const rows = readLog(files), out: string[] = [];
+  const t = table(rows), due = t.filter((x) => cmp(x.due!, today) <= 0);
+  const burst = due.find((x) => x.burst);
+  if (burst && !o.short) out.push(`BURST: ${burst.name} failed three tests in a row: give it 3 of the items, fast situations that each need its right form (${burst.form}).`);
+  const cap = o.short ? 4 : 5;
+  out.push(due.length ? `Retests due (oldest first${due.length > cap ? `; the first ${cap}, the rest wait` : ''}):` : 'No retests due.');
+  for (const x of due.slice(0, cap)) out.push(`  ${x.name} · due ${x.due} · tries ${x.tries.slice(-4).join('') || '-'} · right form: ${x.form || '?'}`);
+  if (o.short) {
+    out.push('A comeback after missed days: only these, nothing new, no listening or TOCFL items. Easy to finish.');
+    return out.join('\n') + '\n';
+  }
+  const st = kwStatus(loadKw(files));
+  const taught = new Set([...ankiTargets(files), ...rows.filter((r) => r.kind === 'card').map((r) => key(r.target))]);
+  const names = new Set(t.map((x) => x.name));
+  const since = new Set(cardsSinceTest(rows).map(key));
+  const lw = [...st].filter(([w, [s, d]]) => s === 'L' && taught.has(w) && !names.has(w) && !since.has(w) && cmp(d, plus(today, -2)) <= 0)
+    .map(([w, [, d]]) => ({ w, d, sit: situations(rows, w, d) })).sort((a, b) => a.sit.length - b.sit.length || cmp(a.d, b.d));
+  if (lw.length) {
+    out.push(`Words he is learning, toward ${SITUATIONS} different situations each (a new situation at the same level, unlike the ones he already had):`);
+    for (const x of lw.slice(0, 3)) out.push(`  ${x.w} · ${x.sit.length}/${SITUATIONS}${x.sit.length ? ` · already: ${x.sit.join(', ')}` : ''}`);
+  }
+  const held = [...st].filter(([, [s, d]]) => s === 'K' && cmp(d, plus(today, -30)) >= 0).map(([w]) => w)
+    .filter((w) => situations(rows, w, plus(today, -60)).length >= SITUATIONS);
+  if (held.length) out.push(`A word that holds (one item, a level up: a harder situation, a competing word, a longer answer): ${held[held.length - 1]}`);
+  out.push('Cards since the last test: ' + ([...since].filter((w) => st.get(w)?.[0] !== 'K').join(' · ') || 'none'));
+  const sp = sprintFile(files, today);
+  if (sp) out.push(`Sprint on (${sp}): ${sprintRule(files, sp, 'Tests') || 'see its file'}`);
+  return out.join('\n') + '\n';
+}
+
 /** Every field the board reads from board/data that the engine owns. */
 export function boardPayload(files: Files, today: string) {
   const l = loadKw(files), rows = readLog(files);
@@ -556,7 +598,7 @@ export function boardPayload(files: Files, today: string) {
       tests[r.date] = [p + (r.result === 'pass' ? 1 : 0), g + 1];
     }
   }
-  return { total: kwTotal(l), nextUp: q.nextUp.map(([w, p, g, lane]) => [w, p, g, LANES[lane]]), words, tests, updated: today };
+  return { total: kwTotal(l), nextUp: q.nextUp.map(([w, p, g, lane]) => [w, p, g, LANES[lane]]), words, tests, uses: situationCounts(files), updated: today };
 }
 
 /** Python's json.dumps(x, ensure_ascii=False, indent=1), for comparing with push.json. */
@@ -595,13 +637,11 @@ export function card(files: Files, word: string, today: string) {
     }
   }
   q.save(files, today);
-  const n = cardsSinceTest(readLog(files)).length;
   out.push(`${word} → L ${today}` + (where ? `; out of ${where}` : ''));
   out.push('Suggested next: ' + q.nextUp.slice(0, 3).map(([w, p, g]) => `${w} (${p} — ${g})`).join(' · '));
   const waiting = waitingTest(readLog(files));
-  if (waiting) out.push(`TEST WAITING: ${waiting} is on the board.`);
-  else if (n >= TEST_EVERY) out.push(`TEST DUE: ${n} cards since the last test.`);
-  else out.push(`${n} of ${TEST_EVERY} cards toward the next test.`);
+  if (waiting) out.push(`Test ${waiting} is on the board.`);
+  else out.push('The next daily test comes at 10 pm.');
   return out.join('\n');
 }
 
@@ -620,6 +660,24 @@ export function addWords(files: Files, items: [string, string][], today: string)
 }
 
 /** words.py log (file_rows): graded rows in, known-word flips applied. */
+/** The different situations he used a word correctly in since `from` (when it became L): one per test day, per
+ *  essay day, per tutor or chat day. */
+export function situations(rows: Row[], word: string, from: string) {
+  const out = new Set<string>();
+  for (const r of rows) {
+    if (r.result !== 'pass' || key(r.target) !== word || cmp(r.date, from) < 0) continue;
+    const src = ITEM_KINDS.includes(r.kind) ? 'test' : WRITING_KINDS.includes(r.kind) ? (r.kind === 'free' && /^tutor/.test(r.note) ? 'tutor' : r.kind) : null;
+    if (src) out.add(`${src} ${r.date}`);
+  }
+  return [...out].sort();
+}
+/** For each L word: how many of the three situations it has (Progress shows it). */
+export function situationCounts(files: Files) {
+  const rows = readLog(files), out: Record<string, number> = {};
+  for (const [w, [s, d]] of kwStatus(loadKw(files))) if (s === 'L') out[w] = Math.min(SITUATIONS, situations(rows, w, d).length);
+  return out;
+}
+
 export function logRows(files: Files, rows: Partial<Row>[]) {
   appendLog(files, rows);
   const l = loadKw(files), idx = kwIndex(l), flips = [];
@@ -627,7 +685,7 @@ export function logRows(files: Files, rows: Partial<Row>[]) {
     const k = key(r.target!);
     if (!idx.has(k) || !['pass', 'fail'].includes(r.result!)) continue;
     const [w, s, d] = kwGet(l, idx.get(k)!);
-    if (r.result === 'pass' && s === 'L' && cmp(r.date!, plus(d, 14)) >= 0) { l[idx.get(k)!] = `${w}\tK\t${r.date}`; flips.push(`${w} L→K`); }
+    if (r.result === 'pass' && s === 'L' && situations(readLog(files), k, d).length >= SITUATIONS) { l[idx.get(k)!] = `${w}\tK\t${r.date}`; flips.push(`${w} L→K (${SITUATIONS} situations)`); }
     else if (r.result === 'fail' && s === 'K' && TEST_KINDS.includes(r.kind!)) { l[idx.get(k)!] = `${w}\tL\t${r.date}`; flips.push(`${w} K→L`); }
   }
   if (flips.length) kwSave(files, l);
@@ -850,12 +908,20 @@ export function testProblems(files: Files, doc: TestDoc, force = false) {
   const waiting = waitingTest(readLog(files));
   if (waiting && !force) problems.push(`test ${waiting} is still open, not filed`);
   const items = doc.items ?? [];
-  if (items.length < 1 || items.length > 12) problems.push(`${items.length} items`);
+  if (items.length < 1 || items.length > 14) problems.push(`${items.length} items`);
   items.forEach((it, i) => {
     const n = i + 1;
     for (const f of ['label', 'target', 'kind', 'model', 'check']) if (!it[f]) problems.push(`item ${n}: no ${f}`);
     if (!(it.ask || it.hear)) problems.push(`item ${n}: no ask or hear`);
-    if (!TEST_KINDS.includes(String(it.kind))) problems.push(`item ${n}: kind must be one of ${TEST_KINDS.join(', ')}`);
+    if (!ITEM_KINDS.includes(String(it.kind))) problems.push(`item ${n}: kind must be one of ${ITEM_KINDS.join(', ')}`);
+    if (it.kind === 'tocfl') {
+      const c = it.choices;
+      if (!Array.isArray(c) || c.length !== 4 || c.some((x) => !String(x).trim()) || new Set(c.map(String)).size !== 4) problems.push(`item ${n}: a tocfl item needs four different choices`);
+      if (!(Number.isInteger(it.key) && (it.key as number) >= 0 && (it.key as number) < 4)) problems.push(`item ${n}: a tocfl item needs key, the right choice's index (0–3)`);
+      if (!(it.read || it.hear)) problems.push(`item ${n}: a tocfl item needs read (a passage) or hear (an exchange)`);
+    }
+    if (it.kind === 'listen' && !it.hear) problems.push(`item ${n}: a listen item needs hear`);
+    if (it.kind === 'tocfl' || it.kind === 'listen') return;
     const word = key(String(it.target ?? ''));
     if (/[一-鿿]/.test(word) && key(String(it.ask ?? '') + ' ' + String(it.label ?? '')).includes(word)) problems.push(`item ${n}: the target ${word} is in the prompt`);
   });

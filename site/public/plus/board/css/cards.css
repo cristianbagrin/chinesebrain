@@ -176,3 +176,13 @@ html:has(#view-cards:not([hidden])) .appbar.lift{box-shadow:none}
 
 /* a finger leaves no hover behind (iPhone keeps :hover on what was last tapped) */
 @media (hover:none){.cd-tab:hover:not([aria-selected=true]){background:none;color:var(--ink-3)}.cd-tx:hover{background:none;color:var(--ink-4)}.cd-ib:hover{background:none}}
+
+/* try first: one line, his try, then the card */
+.nu-try{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:color-mix(in srgb,var(--bg) 70%,transparent);backdrop-filter:blur(3px)}
+.nt-box{width:min(520px,calc(100vw - 32px));background:var(--surface);border:1px solid var(--hair);border-radius:16px;padding:var(--s5);box-shadow:0 10px 40px var(--shade);display:grid;gap:var(--s3)}
+.nt-k{margin:0;font-size:var(--fs-s);color:var(--ink-3)}
+.nt-line{margin:0;font-size:var(--fs-l);color:var(--ink);line-height:1.4}
+.nt-in{min-height:48px;border:1px solid var(--hair);border-radius:var(--r);padding:var(--s2) var(--s3);font-family:var(--zh);font-size:calc(20px * var(--k));outline:none}
+.nt-in:empty::before{content:attr(data-ph);color:var(--ink-4);font-family:var(--ui);font-size:var(--fs-m)}
+.nt-row{display:flex;align-items:center;gap:var(--s3)}
+.nt-hint{font-size:var(--fs-s);color:var(--ink-4)}

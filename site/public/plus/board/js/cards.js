@@ -619,8 +619,27 @@ function NU_refresh(){if(STATE)renderNext(STATE);}
 document.getElementById('next').addEventListener('click',e=>{
   const t=e.target.closest('.nu-row'); if(!t) return;
   const q=NU.list[+t.dataset.i]; if(!q) return;
-  e.stopPropagation(); NU_hide(); openCard(q.w,'next');
+  e.stopPropagation(); NU_hide(); NU_try(q);
 },true);
+
+// try first (his call, 2026-11-25): before a Next up word's card opens, one line asks him to say or type it in a
+// situation (the English of the card's own example when it's written ahead, else the meaning); then the card opens
+// and shows the real thing. Esc, or Enter on an empty box, skips straight to the card.
+function NU_try(q){
+  const d=cardOf(q.w), c=d&&cardOK(d)?parseCard(d.text):null, ex=c&&(c.mine[0]||c.ex[0]);
+  const line=ex&&ex.en?ex.en:`You need the word for “${q.gl||q.w}”.`;
+  const el=document.createElement('div'); el.className='nu-try'; el.setAttribute('role','dialog'); el.setAttribute('aria-label','Try it first');
+  el.innerHTML=`<div class="nt-box"><p class="nt-k">Say it in Chinese first</p><p class="nt-line">${esc(line)}</p>
+    <div class="nt-in" contenteditable="true" role="textbox" aria-label="Your try" lang="zh-Hant" data-ph="Dictate or type, then Enter"></div>
+    <div class="nt-row"><button type="button" class="btn" id="nt-go">See the card</button><span class="nt-hint">Esc skips</span></div></div>`;
+  document.body.append(el);
+  const box=el.querySelector('.nt-in'); box.focus();
+  const go=()=>{document.removeEventListener('keydown',key,true);el.remove();openCard(q.w,'next');};
+  const key=e=>{if(e.key==='Escape'||(e.key==='Enter'&&!e.shiftKey&&!e.isComposing)){e.preventDefault();e.stopPropagation();go();}};
+  document.addEventListener('keydown',key,true);
+  el.querySelector('#nt-go').onclick=go;
+  el.addEventListener('pointerdown',e=>{if(e.target===el)go();});
+}
 
 BUS.on('data',writeAhead);
 BUS.on('lab',id=>{if(id==='card-ahead')writeAhead();});

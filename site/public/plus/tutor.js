@@ -77,7 +77,7 @@
     if (talk) {
       busy = !0, paint();
       try {
-        let r = await api("tutor", { messages: talk.msgs, mode: talk.mode ?? "scene" });
+        let r = await api("tutor", { messages: talk.msgs, mode: talk.mode ?? "scene", id: talk.id });
         talk.msgs.push({ role: "assistant", content: r.text }), save();
       } catch (e) {
         talk.msgs.push({ role: "assistant", content: `(${e.message})` });

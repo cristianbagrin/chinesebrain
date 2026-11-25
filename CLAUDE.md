@@ -38,17 +38,19 @@
 - **Chinese Brain Plus** (`/plus`, plan: life/chinese/online-plan): Chris's whole Chinese system, and the only place it lives (the
   Mac's `life/chinese` files were archived on 2026-11-23). The engine is `site/src/cbp/engine.ts` (words.py ported; `scripts/cbp-parity.ts`
   compared them), its data the CBP D1 (`files` incl. `chinese.md`, the system's rules; `docs`, `meta`, `history`; `site/src/cbp/plus.ts`).
-  The 10 pm job is a Cron Trigger (`site/src/cbp/nightly.ts`, 14:00 UTC): his Chinese Brain marks straight from his account
-  (`Account.brainSince`, `brain.ts`), test and card filing, the card kit and numbers, a new test when due (Opus writes, Azure voices),
-  a snapshot in R2 (`snap/`). No Claude sessions run his system: the other jobs are `site/src/cbp/jobs.ts`, on the same hourly
-  cron by the hour in Taipei: every hour Opus marks an essay whose day is over and does its bookkeeping (log rows, K words, queue,
-  Watch list; `essays.ts` checks the marks); Sunday 11 pm the weekly pass (typing slips, To improve kept to 3–5 new, essayTarget);
-  the 1st 11 pm the monthly (code freezes `months`, Measurements, Test lane refill, checks → board/data `alerts` on Progress; Opus
-  writes This month, tightens the Watch list and Lessons, proposes Part 1–2 changes as an alert, never edits them); the 2nd–9th
-  10 am the monthly test (Opus writes, looks at each photo, code checks weekdays and sends; after the nightly files it, its
-  Lessons). Each job keeps its last run in meta `job.*` (the connector's `nightly` tool shows them). `POST /api/plus/push/nightly`,
-  `/essay`, `/weekly`, `/monthly`, `/monthly-test` (`?force=1`), `/try-test` (Bearer CBP_PUSH_KEY; staging's is
-  CBP_STAGING_PUSH_KEY in `~/.cbp-push.env`; staging has no crons) run them by hand.
+  Jobs run on two Cron Triggers (10 pm and 5 am Taipei; `scheduled` in worker.js); nothing polls, and only work that needs
+  judging calls Claude. 10 pm: the nightly (`site/src/cbp/nightly.ts`): his Chinese Brain marks in from his account
+  (`Account.brainSince`) and CBP's K/L changes back out (`writeBack`, `Account.brainGet/brainPut`, newer change wins per word),
+  Todoist's "Chinese" project drained (TODOIST_TOKEN), the finished test and cards filed, the day's test (one a day, ~10 items:
+  `E.dailyPlan`; Sonnet writes it; listening drills `listen` with multi-voice `hear`, TOCFL items `tocfl` with four `choices`
+  graded on the board; an untouched test is refreshed in place, 3+ missed days → a short comeback), a snapshot in R2. 5 am
+  (`site/src/cbp/jobs.ts`): yesterday's essay marked with its bookkeeping (Opus), Mondays the weekly pass, the 1st the monthly
+  (checks → board/data `alerts` on Progress) then the monthly test. A word turns K after three situations of correct use
+  (`E.situations`; Progress shows `uses`). Every Claude call's tokens go into the D1 `spend` table (ai.ts): check it before
+  adding AI work; his budget is $6–10 a month. Each job's last run is in meta `job.*`. `POST /api/plus/push/nightly`, `/essay`,
+  `/weekly`, `/monthly`, `/monthly-test` (`?force=1`), `/try-test`, `/brain-back` (`?dry=1`) (Bearer CBP_PUSH_KEY; staging's is
+  CBP_STAGING_PUSH_KEY in `~/.cbp-push.env`; staging has no crons and shares production's accounts, so `brain-back` only
+  dry-runs there) run them by hand.
   The board's code lives in `site/public/plus/board` and is edited there now (`scripts/cbp-board.py` copied it from the old folder);
   `plus/runtime.js` stands in for claude.ai's database and `sample`; `plus/review.js` adds his review card beside the study card on
   the Cards page (`site/src/cbp/cards.ts`: pictures from Wikimedia Commons or drawn on Pollinations, Azure voices, media in R2; a daily

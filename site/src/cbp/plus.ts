@@ -6,6 +6,7 @@
 import * as E from './engine.ts';
 import * as N from './nightly.ts';
 import { plan as marksPlan } from './essays.ts';
+import * as A from './anki.ts';
 
 type Env = { CBP: D1Database; CBP_PUSH_KEY?: string; [k: string]: unknown };
 type D1Database = {
@@ -261,6 +262,10 @@ const TOOLS = [
   { name: 'update_board', description: "Change board/data fields the nightly doesn't own: essayTarget (this week's essay target), months (frozen monthly numbers).", inputSchema: S({ data: { type: 'object' } }, ['data']) },
   { name: 'send_test', description: "Send a test to his page (words.py send + media.py): {items: [...]} with each item's label, kind, target, ask (or hear), model, check, and optional hear + voice (m 阿伯, g 阿嬤 or young woman, f 阿姨), read, and for the monthly test scene ({gen: 'what the photo shows'} drawn by FLUX, or {commons: 'File title.jpg'}), alt, overlay, secs, and a title on the test. Refused while a test is open (force: true only if it never reached him) or when a target sits in an ask or label. Voices and photos are made on the server.", inputSchema: S({ test: { type: 'object' }, force: { type: 'boolean' } }, ['test']) },
   { name: 'make_media', description: "Make a test's voices and photos without sending it (for the monthly test): {items: [...]} as for send_test. Returns the test with each item's audio and img filled in, and every photo as an image to look at. Send that test with send_test (items that have audio or img keep them); to redo a photo, drop its img and call again.", inputSchema: S({ test: { type: 'object' } }, ['test']) },
+  { name: 'make_card', description: "Make a card for a word and put it in his reviews, the way the Cards page does (it is filed as carded tonight: the word turns L, the queue drops it). sentence: a natural Taiwan sentence with the word, Traditional characters; meaning: the word's meaning in his words; notes: anything worth keeping; type: Chinese (word), Chinese phrases (whole phrase, no word field) or Chinese radicals. Follow Card structure in chinese.md.", inputSchema: S({ word: { type: 'string' }, sentence: { type: 'string' }, pinyin: { type: 'string', description: 'of the sentence, Taiwan tones' }, english: { type: 'string', description: 'the sentence in English' }, meaning: { type: 'string' }, notes: { type: 'string' }, mnemonic: { type: 'string' }, type: { type: 'string', enum: ['Chinese', 'Chinese phrases', 'Chinese radicals'] } }, ['word', 'sentence', 'pinyin']) },
+  { name: 'add_improve', description: "Put an item on his To improve list (the board's Essays page): his words → the natural way, sentence structure or natural phrasing that will keep coming back (never a missing word).", inputSchema: S({ mine: { type: 'string' }, nat: { type: 'string' }, note: { type: 'string' } }, ['mine', 'nat']) },
+  { name: 'review_stats', description: 'His reviews (Anki, rebuilt in CBP): cards by state, due today and the backlog, the next days\' forecast, reviews in all.', inputSchema: S({}) },
+  { name: 'test', description: "The test on his board now: its items, his answers, grades and times. start: true writes and sends today's test now if none is open (or replaces one he hasn't touched).", inputSchema: S({ start: { type: 'boolean' } }) },
   { name: 'nightly', description: "The 10 pm job's last report (merged Chinese Brain marks, filed test and cards, the test it sent), the other jobs' last runs (essay marks, weekly, monthly, monthly test) and the monthly checks that failed. run: true runs it now (no_test: true skips writing a test).", inputSchema: S({ run: { type: 'boolean' }, no_test: { type: 'boolean' } }) },
 ];
 
@@ -439,6 +444,46 @@ async function tool(env: Env, name: string, a: Record<string, unknown>, extra: E
       }
       return { content: [{ type: 'text', text: JSON.stringify(t, null, 1) + (said.length ? '\n' + said.join('\n') : '') }, ...images] };
     }
+    case 'make_card': {
+      const word = E.key(String(a.word ?? '')), sentence = String(a.sentence ?? '').trim();
+      if (!/^[\u3400-\u9fff]{1,8}$/.test(word) || !sentence) throw new Error('A word (Chinese characters) and a sentence, please.');
+      const id = 'w' + [...word].map((c) => c.codePointAt(0)!.toString(16)).join('-');
+      const now = new Date().toISOString(), type = String(a.type ?? 'Chinese');
+      const text = [`word: ${word}`, a.meaning ? `meaning: ${a.meaning}` : '', `ex: ${sentence} | ${a.pinyin ?? ''} | ${a.english ?? ''}`, a.notes ? `how: ${a.notes}` : ''].filter(Boolean).join('\n');
+      await N.putDoc(env as never, 'cards', id, { word, text, carded: now, src: 'chat', knows: {} });
+      const note = { word: type === 'Chinese phrases' ? '' : word, chinese: sentence, pinyin: String(a.pinyin ?? ''), picture: '', notes: String(a.notes ?? a.meaning ?? ''), type, mnemonic: String(a.mnemonic ?? ''), audio: '', made: now, edited: now, exported: null };
+      await N.putDoc(env as never, 'notes', id, note);
+      const r = await A.fromBoard(env as never, id, note);
+      return `Card made for ${word}${r ? ' and added to his reviews (new, at the end of the new queue)' : ' (his reviews are not live yet: it waits on the Cards page)'}. Tonight's job files it as carded.`;
+    }
+    case 'add_improve': {
+      if (!a.mine || !a.nat) throw new Error('mine and nat, please.');
+      const id = 'c' + Date.now().toString(36);
+      await N.putDoc(env as never, 'improve', id, { mine: String(a.mine), nat: String(a.nat), ...(a.note ? { note: String(a.note) } : {}), added: new Date().toISOString(), by: 'chat', done: false });
+      return `On his To improve list: ${a.mine} → ${a.nat} (${id}).`;
+    }
+    case 'review_stats': {
+      const c = (await A.check(env as never)) as { imported?: unknown; live?: boolean; now?: { day: number; cards: number; notes: number; revlog: number; byQueue: Record<string, number>; forecast: { backlog: number; days: number[] } } };
+      if (!c.now) return 'His reviews have not been imported into CBP.';
+      const q = c.now.byQueue, f = c.now.forecast;
+      return `Reviews ${c.live ? 'live in CBP' : 'imported, not live yet'}: ${c.now.cards} cards, ${c.now.notes} notes, ${c.now.revlog} reviews in all.\nBy state: new ${q['0'] ?? 0}, learning ${(q['1'] ?? 0) + (q['3'] ?? 0)}, review ${q['2'] ?? 0}, suspended ${q['-1'] ?? 0}, buried ${(q['-2'] ?? 0) + (q['-3'] ?? 0)}.\nDue today: ${(f.days[0] ?? 0) + f.backlog} (${f.backlog} overdue). Next days: ${f.days.slice(1, 8).join(', ')}.`;
+    }
+    case 'test': {
+      if (a.start) {
+        const files = await loadFiles(env);
+        const rows = E.readLog(files), waiting = E.waitingTest(rows);
+        const t = (await getDoc(env, 'board', 'test')) as Record<string, unknown> | null;
+        if (waiting && (t?.id !== waiting || ((t?.items as Record<string, unknown>[]) ?? []).some((x) => x.answer))) return `Test ${waiting} is on his board and he has started it: it stays.`;
+        const said: string[] = [];
+        const sent = await N.writeTest(env as never, files, today(), said, waiting ? { refresh: { id: waiting, missed: Number(t?.missed ?? 0) } } : {});
+        if (!sent) return said.join('\n');
+        await change(env, (f) => (f.set(E.LOG, files.get(E.LOG)!), ''));
+        await N.putDoc(env as never, 'board', 'test', sent as never);
+        return said.join('\n');
+      }
+      const t = await getDoc(env, 'board', 'test');
+      return t ? JSON.stringify(t, null, 1) : 'No test on his board.';
+    }
     case 'nightly': {
       if (a.run) {
         const brain = (await extra.brain?.()) ?? null;
@@ -457,11 +502,13 @@ async function tool(env: Env, name: string, a: Record<string, unknown>, extra: E
   throw new Error(`Unknown tool ${name}.`);
 }
 
+const INSTRUCTIONS = "This connector is Chris's whole Chinese system (Chinese Brain Plus): his rules, word lists, tests, essays, reviews. Before anything else in a conversation, read chinese.md with read_file: Part 1 is how to tutor him, Part 2 how the system works (which tool for what), Part 3 where he is. Then do what he asks with the tools: make a card (make_card), check a sentence and log the evidence (log), queue a word (add_words), put an item on his To improve list (add_improve), his review stats (review_stats), read or start a test (test), mark words known (set_known). Never edit Parts 1–2 of chinese.md unless he asks. He writes Taiwanese Mandarin in Traditional characters; answer in English with Chinese in Traditional characters.";
+
 export async function mcp(env: Env, msg: { id?: unknown; method?: string; params?: Record<string, unknown> }, extra: Extra = {}) {
   const ok = (result: unknown) => ({ jsonrpc: '2.0', id: msg.id, result });
   switch (msg.method) {
     case 'initialize':
-      return ok({ protocolVersion: (msg.params?.protocolVersion as string) ?? '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'Chinese Brain', version: '1' } });
+      return ok({ protocolVersion: (msg.params?.protocolVersion as string) ?? '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'Chinese Brain', version: '2' }, instructions: INSTRUCTIONS });
     case 'ping':
       return ok({});
     case 'tools/list':

@@ -134,3 +134,10 @@
 .pr-alerts .pr-prop{list-style:none;margin-left:-1.1em;color:var(--ink)}
 .pr-x-btn{position:absolute;top:var(--s2);right:var(--s2);border:0;background:none;color:var(--ink-3);font-size:var(--fs-l);cursor:pointer;line-height:1}
 .pr-x-btn:hover{color:var(--ink)}
+
+/* the words he is learning, by situations used right (of three) */
+.pr-uses{display:grid;gap:var(--s2)}
+.pu-row{display:flex;gap:var(--s3);align-items:baseline}
+.pu-n{flex:none;font-size:var(--fs-s);color:var(--green-deep);letter-spacing:.1em;cursor:help}
+.pu-ws{font-size:calc(18px * var(--k));line-height:1.7;color:var(--ink-2)}
+.pu-more{font-size:var(--fs-s);color:var(--ink-4)}

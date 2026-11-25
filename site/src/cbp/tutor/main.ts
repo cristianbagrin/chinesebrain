@@ -110,7 +110,7 @@ async function turn() {
   busy = true;
   paint();
   try {
-    const r = await api('tutor', { messages: talk.msgs, mode: talk.mode ?? 'scene' });
+    const r = await api('tutor', { messages: talk.msgs, mode: talk.mode ?? 'scene', id: talk.id });
     talk.msgs.push({ role: 'assistant', content: r.text });
     save();
   } catch (e) {

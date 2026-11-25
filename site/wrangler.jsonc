@@ -49,7 +49,7 @@
   "ai": { "binding": "AI" },
   // hourly (src/cbp/nightly.ts): at 14:00 UTC, 10 pm in Taipei, the nightly; every other hour, an essay whose day is
   // over gets its corrections; at 19:00 the media sweep (src/cbp/cards.ts)
-  "triggers": { "crons": ["0 * * * *"] },
+  "triggers": { "crons": ["0 14 * * *", "0 21 * * *"] },
   "env": {
     // https://chinese-staging.cristianbagrin.com: the next version, open only to accounts with the
     // `staging` switch. Same accounts and switches as the live site (the Durable Objects and FLAGS are

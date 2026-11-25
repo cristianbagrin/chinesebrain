@@ -223,6 +223,22 @@ export class Account extends DurableObject {
     return { seq, more: rows.length > 300, items: page.map((r) => ({ k: r.k, v: r.v == null ? null : JSON.parse(r.v) })) };
   }
 
+  /** CBP's nightly writing back (src/cbp/nightly.ts): his word records as they are, for the words named. */
+  brainGet(words) {
+    const out = {};
+    for (const w of words.slice(0, 400)) {
+      const r = this.sql.exec('SELECT v FROM items WHERE k = ?', 'w:' + w).toArray()[0];
+      out[w] = r?.v ? JSON.parse(r.v) : null;
+    }
+    return out;
+  }
+  /** …and the records CBP changed, through the same sync every browser uses (a newer change wins, per word), so the
+   *  extension and the Dashboard pick them up on their next sync. */
+  brainPut(records) {
+    const r = this._sync(null, Number(this.get('seq') ?? 0), records.slice(0, 400).map((v) => ({ k: 'w:' + v.w, v, t: v.updated })));
+    return r.fail ? r : { ok: true };
+  }
+
   _me() {
     // key ranges, not LIKE: each count reads only its own items, not the whole table again
     const count = (from, to) => this.sql.exec('SELECT COUNT(*) AS n FROM items WHERE k >= ? AND k < ? AND v IS NOT NULL', from, to).one().n;
@@ -459,7 +475,7 @@ export class Relay extends DurableObject {
  *  "not now" crosses as an error starting "QUOTA: " (ai.ts turns it back into one). */
 export class Brains extends WorkerEntrypoint {
   async text(model, input, opts) {
-    return brains(() => ai.text(this.env, model, input, opts));
+    return brains(() => ai.text({ ...this.env, CBP: undefined }, model, input, opts));
   }
   async image(model, prompt) {
     return brains(() => ai.image(this.env, model, prompt));
@@ -657,7 +673,10 @@ async function ownerBrain(env) {
   const r = await env.FLAGS.prepare("SELECT who FROM flags WHERE flag = 'plus.write' AND who != '*' LIMIT 1").first();
   if (!r) return null;
   const acct = env.ACCOUNT.get(env.ACCOUNT.idFromString(r.who));
-  return (since) => acct.brainSince(since);
+  const brain = (since) => acct.brainSince(since);
+  brain.get = (words) => acct.brainGet(words);
+  brain.put = (records) => acct.brainPut(records);
+  return brain;
 }
 
 // ---------- Chinese Brain Plus: the machines ----------
@@ -682,16 +701,6 @@ async function plusMachine(request, env, url) {
   const bearer = (request.headers.get('Authorization') ?? '').replace(/^Bearer /, '');
   if (!env.CBP_PUSH_KEY || request.method !== 'POST' || !same(await sha(bearer), await sha(env.CBP_PUSH_KEY))) return nope();
   try {
-    if (url.pathname === '/api/plus/push/manifest') return json(await plus.manifest(env));
-    if (url.pathname === '/api/plus/push') return json(await plus.push(env, await request.json()));
-    // once the website is the source: the Mac pulls what changed, and the switch-over itself
-    if (url.pathname === '/api/plus/push/pull') return json(await plus.pull(env, await request.json()));
-    if (url.pathname === '/api/plus/push/switch') return json(await plus.switchOver(env));
-    if (url.pathname === '/api/plus/push/clean') return json(await cards.clean(env));
-    // the 10 pm job and the essay corrections, run now (src/cbp/nightly.ts): ?day=YYYY-MM-DD, ?notest=1
-    if (url.pathname === '/api/plus/push/nightly') return json(await nightly.nightly(env, await ownerBrain(env), { day: url.searchParams.get('day') ?? undefined, noTest: url.searchParams.get('notest') === '1' }));
-    if (url.pathname === '/api/plus/push/essay') return json(await jobs.essay(env));
-    // the weekly, monthly and monthly-test jobs, run now (src/cbp/jobs.ts); ?force=1 runs one that already ran
     // these take minutes (Opus thinking hard): a space every 15 s keeps the connection, which would otherwise close
     // at 60 s and cancel the job, then the JSON
     const force = url.searchParams.get('force') === '1';
@@ -705,16 +714,36 @@ async function plusMachine(request, env, url) {
       });
       return new Response(readable, { headers: { 'Content-Type': 'application/json' } });
     };
+    if (url.pathname === '/api/plus/push/manifest') return json(await plus.manifest(env));
+    if (url.pathname === '/api/plus/push') return json(await plus.push(env, await request.json()));
+    // once the website is the source: the Mac pulls what changed, and the switch-over itself
+    if (url.pathname === '/api/plus/push/pull') return json(await plus.pull(env, await request.json()));
+    if (url.pathname === '/api/plus/push/switch') return json(await plus.switchOver(env));
+    if (url.pathname === '/api/plus/push/clean') return json(await cards.clean(env));
+    // the 10 pm job and the essay corrections, run now (src/cbp/nightly.ts): ?day=YYYY-MM-DD, ?notest=1
+    if (url.pathname === '/api/plus/push/nightly') return long(async () => nightly.nightly(env, await ownerBrain(env), { day: url.searchParams.get('day') ?? undefined, noTest: url.searchParams.get('notest') === '1' }));
+    // CBP's word statuses back to his Chinese Brain account (nightly.ts writeBack); ?dry=1 lists, ?from=YYYY-MM-DD looks further back
+    if (url.pathname === '/api/plus/push/brain-back') {
+      const said = [], dry = url.searchParams.get('dry') === '1', from = url.searchParams.get('from');
+      if (from) await env.CBP.prepare("INSERT INTO meta (k, v) VALUES ('brain_back_day', ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v").bind(from).run();
+      await nightly.writeBack(env, await ownerBrain(env), new Map(await plus.loadFiles(env)), plus.today(), Date.now(), said, dry);
+      return json(said);
+    }
+    // the connector's tools behind the push key (staging's connector has its own key): one JSON-RPC message
+    if (url.pathname === '/api/plus/push/mcp') return json(await plus.mcp(env, await request.json(), { brain: () => ownerBrain(env) }));
+    if (url.pathname === '/api/plus/push/essay') return json(await jobs.essays(env));
+    // the weekly, monthly and monthly-test jobs, run now (src/cbp/jobs.ts); ?force=1 runs one that already ran
     if (url.pathname === '/api/plus/push/weekly') return long(() => jobs.weekly(env, { force }));
     if (url.pathname === '/api/plus/push/monthly') return long(() => jobs.monthly(env, { force }));
     if (url.pathname === '/api/plus/push/monthly-test') return long(() => jobs.monthlyTest(env, { force }));
     // a test written as the nightly would, shown and not sent (nothing is saved but its voices)
-    if (url.pathname === '/api/plus/push/try-test') {
+    if (url.pathname === '/api/plus/push/try-test') return long(async () => {
       const said = [];
       const files = new Map(await plus.loadFiles(env));
-      if (url.searchParams.get('force') === '1') files.set('test-log.tsv', files.get('test-log.tsv') + `${plus.today()}\tx\tgraded\t-\t\n`);
-      return json({ test: await nightly.writeTest(env, files, plus.today(), said), said });
-    }
+      return { test: await nightly.writeTest(env, files, plus.today(), said, { force: true }), said };
+    });
+    // a test written as the nightly would, shown and not sent (nothing is saved but its voices)
+
     // his Anki collection (scripts/cbp-anki.ts): rows, media, the media map, the comparison with Anki
     if (url.pathname === '/api/plus/push/anki') return json(await anki.load(env, await request.json()));
     if (url.pathname === '/api/plus/push/anki-media') return json(await anki.media(env, url.searchParams.get('name') ?? '', await request.arrayBuffer(), request.headers.get('Content-Type') ?? ''));
@@ -1108,19 +1137,25 @@ const PLUS_CSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; styl
 const MOVED = { '/welcome': '/brain/guide#welcome', '/brain/welcome': '/brain/guide#welcome', '/privacy': '/brain/privacy', '/dashboard': '/brain/dashboard', '/guide': '/brain/guide', '/whats-new': '/brain/whats-new' };
 
 export default {
-  // hourly (wrangler.jsonc), by the hour in Taipei: the nightly at 10 pm, essay marks the other hours, the weekly pass
-  // Sunday at 11 pm, the monthly one on the 1st at 11 pm, the monthly test on the 2nd at 10 am (it keeps the month it
-  // ran in meta, so 11 am and noon retry one that failed, and while a test is still open it tries each day to the 9th), the media sweep at 3 am. One after the other: they edit the
-  // same files.
+  // twice a day (wrangler.jsonc), Taipei time. Nothing polls: each run does what is due and stops, and only work that
+  // needs judging calls Claude.
+  //   10 pm  the nightly (src/cbp/nightly.ts): Chinese Brain marks, the finished test filed, cards, the day's test;
+  //          then, if it filed a monthly test, that test's lessons
+  //   5 am   yesterday's essay (its day ended at 4) marked with its bookkeeping; Monday, then the week's pass over it;
+  //          the 1st, the month's pass and right after it the monthly test (it takes the place of that day's test);
+  //          the media sweep
   async scheduled(event, env, ctx) {
-    const t = new Date(event.scheduledTime + 8 * 3600e3), hour = t.getUTCHours(), date = t.getUTCDate();
+    const t = new Date(event.scheduledTime + 8 * 3600e3), hour = t.getUTCHours();
     const todo = [];
-    if (t.getUTCDay() === 0 && hour === 23) todo.push(['weekly', () => jobs.weekly(env)]);
-    if (date === 1 && hour === 23) todo.push(['monthly', () => jobs.monthly(env)]);
-    if (date >= 2 && date <= 9 && hour >= 10 && hour <= 12) todo.push(['monthly-test', () => jobs.monthlyTest(env)]);
     if (hour === 22) todo.push(['nightly', () => ownerBrain(env).then((b) => nightly.nightly(env, b))], ['monthly-test lessons', () => jobs.afterTest(env)]);
-    else todo.push(['essay', () => jobs.essay(env)]);
-    if (hour === 3) todo.push(['clean', () => cards.clean(env)]);
+    else {
+      todo.push(['essay', () => jobs.essays(env)]);
+      if (t.getUTCDay() === 1) todo.push(['weekly', () => jobs.weekly(env)]);
+      if (t.getUTCDate() === 1) todo.push(['monthly', () => jobs.monthly(env)]);
+      // the monthly test runs once the month's pass is done; while he's halfway through a test it waits a day (to the 7th)
+      if (t.getUTCDate() <= 7) todo.push(['monthly-test', () => jobs.monthlyTest(env)]);
+      todo.push(['clean', () => cards.clean(env)]);
+    }
     ctx.waitUntil((async () => {
       for (const [name, f] of todo) {
         try {

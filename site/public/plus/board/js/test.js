@@ -56,7 +56,8 @@ A model answer: ${it.model}
 - pass: the target is used correctly and every part of the ask is answered.
 - partial: the target is right but part of the ask is missing, or the target is only half right.
 - fail: the target is wrong, or missing where the situation required it (a dropped half, a question instead of the statement asked for, English in its place).
-- none: no evidence either way: a synonym or paraphrase in place of the target, or a use where he couldn't have gone wrong.${it.hear?`
+- none: no evidence either way: a synonym or paraphrase in place of the target, or a use where he couldn't have gone wrong.${it.kind==='listen'?`
+- This is a listening drill: grade whether his answer shows he understood the exchange (what was really said, often in other words than the question uses). An answer that goes by a word he heard but gets the meaning wrong (the echo trap) is a fail; Chinese that is clumsy but shows he understood is a pass.`:it.hear?`
 - This is a listening item: pass means his reply shows he understood "${it.target}" in the line he heard. Repeating the word back from that line without showing what it means is none, not partial.`:''}${it.read?`
 - This is a reading item: pass means his reply shows he understood "${it.target}" in the line he read; an answer that skips it or gets it wrong is a fail, not none.`:''}
 
@@ -100,7 +101,7 @@ async function grade(s){
     s.a.later=true;
   }finally{delete Q.grading[s.id];renderQuiz();}
 }
-let PLAYER=null;
+let PLAYER=null, QZ_keys=()=>{};
 // the Azure recording when the item has one; the browser's voice if it is missing or will not play
 // onEnd runs once it has finished playing
 async function play(it,rate,onEnd){
@@ -128,6 +129,8 @@ function sceneHTML(it){
   if(!it.img) return '';
   return `<div class="qscene"><img src="${esc(it.img)}" alt="${esc(it.alt||'')}">${o?`<div class="${o.kind==='menu'?'qmenu':'qnotice'}" lang="zh-Hant">${txt}</div>`:''}</div>`;
 }
+// an exchange "f: …\nm: …" shown as lines, without the voice letters
+const heardHTML=t=>String(t||'').split('\n').filter(l=>l.trim()).map(l=>zh(l.replace(/^[mfg]\s*[:：]\s*/,''))).join('<br>');
 const overlayText=it=>it.overlay?[it.overlay.title,it.overlay.text,it.overlay.sig].filter(Boolean).join(' '):'';
 const CHEV='<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 // mostly Chinese: at least 60% of the non-space characters
@@ -151,8 +154,9 @@ function verdictHTML(s){
     <p class="q-res ${st[0]}"><i class="${st[1]}" role="img" aria-label="${st[2]}"></i>${st[3]?`<span>${st[3]}</span>`:''}</p>
     <p class="q-nat">${QZ_nat(a.answer,nat)}</p>
     <p class="q-you q-mine"><span class="q-k">You</span><span>${zh(a.answer)}</span></p>
-    ${it.hear&&!s.retry?`<p class="q-you"><span class="q-k">Heard</span><span>${zh(it.hear)}</span></p>`:''}
+    ${it.hear&&!s.retry?`<p class="q-you"><span class="q-k">Heard</span><span>${heardHTML(it.hear)}</span></p>`:''}
     ${it.read&&!s.retry?`<p class="q-you"><span class="q-k">Read</span><span>${zh(it.read)}</span></p>`:''}
+    ${it.choices&&!s.retry?`<ol class="q-choices done">${it.choices.map((c,i)=>`<li class="${i===it.key?'right':''}${c===a.answer&&i!==it.key?' wrong':''}">${zh(c)}</li>`).join('')}</ol>`:''}
     ${a.why?`<p class="q-why">${zh(a.why)}</p>`:''}</div>`;
 }
 // the unsent attempt goes: the text, the clock (the next focus, Listen or keystroke starts a fresh one)
@@ -200,7 +204,8 @@ function renderQuiz(){
       ${ask?`<p class="q-ask">${zh(ask)}</p>`:''}
       ${it.read&&!cur.retry?`<p class="q-read" lang="zh-Hant">${esc(it.read)}</p>`:''}
       ${hear?`<div class="q-row"><button class="btn-q q-listen" id="q-listen" type="button">${SPEAKER}Listen</button>${it.audio?'<button class="btn-q q-listen" id="q-slow" type="button">0.8×</button>':''}<span class="q-heard" id="q-heard" hidden></span></div>`:''}
-      <div class="q-ans"><div class="q-in" id="q-ans-${cur.id}" role="textbox" aria-multiline="true" data-ph="Dictate your answer" aria-label="Your answer" lang="zh-Hant" spellcheck="false"></div>
+      ${it.choices&&!cur.retry?`<ol class="q-choices" id="q-ch">${it.choices.map((c,i)=>`<li><button type="button" class="q-ch" data-i="${i}"><b>${'ABCD'[i]}</b>${zh(c)}</button></li>`).join('')}</ol>`:''}
+      <div class="q-ans"${it.choices&&!cur.retry?' hidden':''}><div class="q-in" id="q-ans-${cur.id}" role="textbox" aria-multiline="true" data-ph="Dictate your answer" aria-label="Your answer" lang="zh-Hant" spellcheck="false"></div>
       <div class="q-clock" id="q-clock"><i></i></div></div>
       <div class="q-row"><button class="btn" id="q-check" type="button" disabled>Check</button></div></div>`;
     const ta=editable(document.getElementById('q-ans-'+cur.id)), btn=document.getElementById('q-check'), clock=document.getElementById('q-clock');
@@ -217,7 +222,7 @@ function renderQuiz(){
       const say=async r=>{
         clearTimeout(Q.heard);
         if(await play(it,r,()=>{clearTimeout(Q.heard);start();})){if(!Q.t0)Q.heard=setTimeout(start,20000);return;}
-        const h=document.getElementById('q-heard');h.hidden=false;h.innerHTML=zh(it.hear);
+        const h=document.getElementById('q-heard');h.hidden=false;h.innerHTML=heardHTML(it.hear);
         if(!Q.t0){Q.t0=Date.now()+Math.min(25000,Math.max(3000,2500+(it.hear.match(/[㐀-鿿]/g)||[]).length*400));arm();}
       };
       document.getElementById('q-listen').onclick=()=>say(1);
@@ -233,6 +238,26 @@ function renderQuiz(){
       });
     }
     if(Q.t0) arm();
+    // a TOCFL item: four choices, a click (or A–D) answers it and it's graded on the spot, like the exam
+    if(it.choices&&!cur.retry){
+      btn.hidden=true;
+      if(!hear) ta.dispatchEvent(new Event('focus'));
+      const pick=i=>{
+        const cur=steps().find(x=>x.id===curId); if(!cur||cur.a.answer) return;
+        cur.a.answer=String(it.choices[i]); cur.a.secs=Q.t0?Math.max(1,Math.round((Date.now()-Q.t0)/1000)):null; cur.a.at=K(today());
+        cur.a.result=i===it.key?'pass':'fail'; cur.a.natural=String(it.choices[it.key]); cur.a.why=i===it.key?'':String(it.explain||'');
+        sfx(cur.a.result);
+        const all=steps().every(x=>x.a.answer); if(all) TEST.done=K(today());
+        document.removeEventListener('keydown',QZ_keys);
+        save(); Q.view=cur.id; renderQuiz();
+        if(all&&once('test:'+TEST.id)) celebrate('test');
+      };
+      el.querySelectorAll('.q-ch').forEach(b=>b.onclick=()=>pick(+b.dataset.i));
+      document.removeEventListener('keydown',QZ_keys);
+      QZ_keys=e=>{const i='abcd'.indexOf(e.key.toLowerCase());if(i>=0&&!e.metaKey&&!e.ctrlKey&&!e.altKey&&VIEW==='today'&&!/INPUT|TEXTAREA/.test(document.activeElement?.tagName||'')&&!document.activeElement?.isContentEditable){e.preventDefault();pick(i);}};
+      document.addEventListener('keydown',QZ_keys);
+      return;
+    }
     ta.addEventListener('input',()=>{const v=getText(ta);if(!v&&ta.innerHTML)ta.innerHTML='';btn.disabled=!v.trim();start();});
     btn.onclick=()=>{
       const v=getText(ta).trim(); if(!v) return;
@@ -285,3 +310,16 @@ function QZ_fold(el,n){
 }
 
 BUS.on('test',()=>renderQuiz());
+
+/* ---------- answers to the questions he jotted in Todoist (the nightly's drain, board/data answers), above the test,
+   until he marks them read ---------- */
+function renderAnswers(){
+  const q=document.getElementById('quiz'); if(!q||!STATE) return;
+  let el=document.getElementById('answers');
+  if(!el){el=document.createElement('section');el.id='answers';el.className='answers';el.setAttribute('aria-label','Answers');q.before(el);}
+  const A=(STATE.answers||[]).filter(x=>lsGet('ans:'+x.day+x.q)!=='read');
+  el.hidden=!A.length; if(!A.length){el.innerHTML='';return;}
+  el.innerHTML=A.map((x,i)=>`<div class="ans"><p class="ans-q">${zh(x.q)}</p><p class="ans-a">${zh(x.a)}</p><button type="button" class="ans-x" data-i="${i}" title="Read" aria-label="Read">×</button></div>`).join('');
+  el.querySelectorAll('.ans-x').forEach(b=>b.onclick=()=>{const x=A[+b.dataset.i];lsSet('ans:'+x.day+x.q,'read');renderAnswers();});
+}
+BUS.on('data',()=>renderAnswers());

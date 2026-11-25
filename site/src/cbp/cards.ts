@@ -58,7 +58,7 @@ export async function sample(env: Env, body: { input?: unknown; effort?: unknown
   if (JSON.stringify(msgs).length > 400_000) throw new Bad('Too long.');
   const effort = body.effort === 'low' || body.effort === 'high' ? body.effort : 'medium';
   const model = modelOf(body.model);
-  const r = await ai.text(env, model, msgs, { effort });
+  const r = await ai.text(env, model, msgs, { effort, job: 'board (cards, grading)' });
   return { text: r.text, model: model.split(':')[1] };
 }
 
@@ -185,7 +185,7 @@ export async function drawings(env: Env, b: { word?: unknown; meaning?: unknown;
   if (!word) throw new Bad('No word.');
   let p = await loadPlan(env, word);
   if (!p) {
-    const r = await ai.text(env, modelOf(b.model), planPrompt(word, String(b.meaning ?? '').slice(0, 200), String(b.sentence ?? '').slice(0, 300)), { effort: 'low' });
+    const r = await ai.text(env, modelOf(b.model), planPrompt(word, String(b.meaning ?? '').slice(0, 200), String(b.sentence ?? '').slice(0, 300)), { effort: 'low', job: 'pictures' });
     const j = JSON.parse(/\{[\s\S]*\}/.exec(r.text)?.[0] ?? '{}');
     const prompts = (Array.isArray(j.prompts) ? j.prompts : []).map(String).filter(Boolean).slice(0, 2);
     p = { word, query: String(j.query || ''), prompts: prompts.length ? prompts : [word] };
@@ -220,7 +220,7 @@ export async function pinyin(env: Env, b: { text?: unknown; model?: unknown }) {
   if (!text) return { pinyin: '' };
   const r = await ai.text(env, modelOf(b.model), `Write the pinyin of this Traditional Chinese text with tone marks, as a Taiwanese speaker says it: Taiwan readings (垃圾 lèsè, 星期 xīngqí, 期 qí, 研究 yánjiù, 誰 shéi), 不 and 一 with their changed tones (bú shì, yí gè, yì tiān), no third-tone sandhi written, neutral tone only where Taiwan dictionaries have it (的 de, 了 le, 嗎 ma, 們 men) and full tones where Taiwan keeps them (東西 dōngxī, 朋友 péngyǒu, 時候 shíhòu, 知道 zhīdào), one pinyin syllable per character. Join the syllables of a dictionary word and keep particles and measure words apart (Wǒmen míngtiān dā huǒchē), capitalize the first word of each sentence, keep the punctuation as English punctuation, and keep the line breaks and any "- " at the start of a line. Reply with the pinyin only.
 
-${text}`, { effort: 'low' });
+${text}`, { effort: 'low', job: 'pinyin' });
   return { pinyin: r.text.trim() };
 }
 

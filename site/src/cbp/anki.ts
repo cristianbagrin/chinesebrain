@@ -123,7 +123,7 @@ Give him five minutes of going deeper, in under 150 words, written to him ("you"
 1. One vivid analogy or tiny story that makes ${word} stick: wild and funny beats safe, built on what its characters picture.
 2. The word he most likely confuses it with (from his deck if one fits, else the usual trap) and the difference in one line, then one short example sentence for each in Traditional, each with Taiwan pinyin and English on its own line.
 Chinese punctuation in Chinese, English punctuation in English.`;
-  const r = await ai.text(env as never, modelOf(b.model), prompt, { effort: 'low' });
+  const r = await ai.text(env as never, modelOf(b.model), prompt, { effort: 'low', job: 'reviews' });
   return { text: r.text.trim() };
 }
 

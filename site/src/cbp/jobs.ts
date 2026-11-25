@@ -1,12 +1,15 @@
 // Chinese Brain Plus: the jobs that replaced the Claude skill sessions (the weekly essay review, the monthly review
-// and the monthly test), all on the Worker's hourly Cron Trigger, all on the Claude API. Opus does the judging; code
-// does everything mechanical. Times are Taipei's (worker.js scheduled):
-//   every hour      an essay whose day is over: its marks and its bookkeeping in one Opus pass (`essay`)
-//   Sunday 11 pm    the week: typing slips, his To improve list kept to 3–5 new items, essayTarget, a Log line (`weekly`)
-//   the 1st, 11 pm  the month: code freezes the numbers, refills the Test lane, checks the pieces agree; Opus writes
-//                   This month and keeps the Watch list tight (`monthly`)
-//   the 2nd, 10 am  the monthly test: Opus writes the outing, looks at every photo, code checks and sends (`monthlyTest`)
-// Each keeps what it did in meta (`job.<name>`), which the connector's `nightly` tool and the Progress page show.
+// and the monthly test), on the Claude API, run by worker.js `scheduled` (twice a day, Taipei time). Opus does the
+// judging; code does everything mechanical, and nothing calls Claude unless there is something to judge.
+//   5 am, daily     yesterday's essay: its marks and its bookkeeping in one Opus pass (`essays`)
+//   5 am, Monday    the week, right after its last essay is marked: typing slips, To improve kept to 3–5 new items,
+//                   essayTarget, a Log line (`weekly`)
+//   5 am, the 1st   the month, right after its last essay: code freezes the numbers, refills the Test lane, checks the
+//                   pieces agree; Opus writes This month and keeps the Watch list tight (`monthly`); then the monthly
+//                   test, which takes the place of that day's test (`monthlyTest`)
+//   10 pm           after the nightly files a monthly test: its lessons (`afterTest`)
+// Each keeps what it did in meta (`job.<name>`), which the connector's `nightly` tool shows; every Claude call's
+// tokens go into the D1 table `spend` (ai.ts).
 import * as E from './engine.ts';
 import * as ai from './ai.ts';
 import * as MD from './md.ts';
@@ -68,6 +71,17 @@ DAY ${e.day} (${e.date}):
 ${norm(e.text)}${problems.length ? `\n\nYour last answer was refused: ${problems.join('; ')}. Send it again, fixed.` : ''}`;
 }
 
+/** Every essay whose day is over and has no review yet (usually just yesterday's), oldest first, at most three. */
+export async function essays(env: Env) {
+  const said: string[] = [];
+  for (let n = 0; n < 3; n++) {
+    const r = await essay(env);
+    if (!r) break;
+    said.push(...r);
+  }
+  return said.length ? said : null;
+}
+
 /** Opus's marks and bookkeeping for the oldest essay whose day is over and that has no review yet. */
 export async function essay(env: Env) {
   const essays = await listDocs(env as never, 'essays');
@@ -89,7 +103,7 @@ export async function essay(env: Env) {
   for (let tries = 0; tries < 3; tries++) {
     let out;
     try {
-      out = json((await ai.text(env, OPUS, essayPrompt(md, e, open, tracked, errs), { effort: 'medium' })).text);
+      out = json((await ai.text(env, OPUS, essayPrompt(md, e, open, tracked, errs), { effort: 'medium', job: 'essay' })).text);
     } catch (x) {
       if (x instanceof ai.Quota) throw x;
       errs = [String((x as Error).message)];
@@ -178,7 +192,7 @@ ${fresh.map(([id, x]) => `${id} · ${x.mine} → ${x.nat}`).join('\n') || '(none
 
 The week:
 ${week}`;
-    const out = json((await ai.text(env, OPUS, p, { effort: 'medium' })).text);
+    const out = json((await ai.text(env, OPUS, p, { effort: 'medium', job: 'weekly' })).text);
     const keep = new Set((Array.isArray(out.keep) ? out.keep : []).map(String).slice(0, 5));
     const drop = fresh.filter(([id]) => !keep.has(id));
     if (fresh.length > 5 || keep.size) for (const [id] of drop) await putDoc(env, 'improve', id, { removed: new Date().toISOString(), removedBy: 'weekly' }, 'update');
@@ -308,7 +322,7 @@ ${part(files.get('monthly-test.md') ?? '', '## Lessons', '## Runs')}
 
 This month's essay and test rows:
 ${rows.filter((r) => r.date.slice(0, 7) === m && (E.TEST_KINDS.includes(r.kind) || E.WRITING_KINDS.includes(r.kind))).map((r) => `${r.date}\t${r.target}\t${r.kind}\t${r.result}\t${r.note}`).join('\n')}`;
-  const out = json((await ai.text(env, OPUS, p, { effort: 'medium', maxTokens: 20000 })).text);
+  const out = json((await ai.text(env, OPUS, p, { effort: 'medium', maxTokens: 20000, job: 'monthly' })).text);
   await change(env as never, (f) => {
     let md2 = f.get(E.MEMORY) ?? '';
     const tm = String(out.thisMonth ?? '').trim();
@@ -373,9 +387,12 @@ export async function monthlyTest(env: Env, o: { force?: boolean } = {}) {
   const failed = async (said: string[]) => (await setMeta(env, `job.mtest.tries.${month}`, String(tries + 1)), report(env, 'mtest', said));
   let files = await loadFiles(env as never);
   const said: string[] = [];
-  const waiting = E.waitingTest(E.readLog(files));
-  // a test still open: try again tomorrow, through the 9th, then skip the month
-  if (waiting && Number(today.slice(8)) < 9 && !o.force) return report(env, 'mtest', [`waiting: test ${waiting} is still open`]);
+  // today's daily test, if he hasn't started it, makes way for the monthly one
+  let waiting = E.waitingTest(E.readLog(files));
+  const open = (await getDoc(env as never, 'board', 'test')) as Record<string, unknown> | null;
+  if (waiting && open?.id === waiting && !open.title && !((open.items as Record<string, unknown>[]) ?? []).some((it) => it.answer)) waiting = null;
+  // he's halfway through a test: try again tomorrow, through the 7th, then skip the month
+  if (waiting && Number(today.slice(8)) < 7 && !o.force) return report(env, 'mtest', [`waiting: test ${waiting} is still open`]);
   if (waiting) {
     await change(env as never, (f) => (f.set('monthly-test.md', MD.appendUnder(f.get('monthly-test.md') ?? '', 'Runs', `- ${today} · Monthly test skipped: test ${waiting} was still open on the board.`)), ''));
     await setMeta(env, 'job.mtest.month', month);
@@ -404,8 +421,8 @@ Reply with only {"title": string, "items": [...]}, each item with label, kind, t
   let doc: { title?: string; items?: Record<string, unknown>[] } | null = null;
   let problems: string[] = [];
   for (let tries = 0; tries < 3 && (!doc || problems.length); tries++) {
-    doc = json((await ai.text(env, OPUS, write(problems), { effort: 'medium', maxTokens: 20000 })).text);
-    problems = [...E.testProblems(files, doc as never), ...weekdayProblems(JSON.stringify(doc), today)];
+    doc = json((await ai.text(env, OPUS, write(problems), { effort: 'medium', maxTokens: 20000, job: 'monthly-test' })).text);
+    problems = [...E.testProblems(files, doc as never, true), ...weekdayProblems(JSON.stringify(doc), today)];
   }
   if (!doc || problems.length) return failed([`! not sent: ${problems.join('; ')}`]);
   doc.items = (doc.items ?? []).slice(0, 8);
@@ -420,7 +437,7 @@ Reply with only {"title": string, "items": [...]}, each item with label, kind, t
       const v = json((await ai.text(env, OPUS, [{ role: 'user', content: [img, { type: 'text', text: `This photo is for one stop of Chris's monthly test. The stop: ${JSON.stringify({ label: it.label, ask: it.ask, target: it.target, model: it.model, check: it.check, scene: it.scene, overlay: it.overlay })}
 
 Does the photo show what the stop needs, clearly enough that he can answer from it? Garbled or legible text in the photo, or anything that contradicts the ask, is a no. Reply with only this JSON:
-{"ok": boolean, "alt": "one line: what is really in the photo", "check": "the stop's check rewritten to match what the photo really shows (when ok)", "scene": {"gen": "a better description to draw (when not ok)"}, "noPhoto": {"ask": "the ask rewritten so a voice or the text carries the stop without a photo", "check": "its check"}}` }] }], { effort: 'medium' })).text);
+{"ok": boolean, "alt": "one line: what is really in the photo", "check": "the stop's check rewritten to match what the photo really shows (when ok)", "scene": {"gen": "a better description to draw (when not ok)"}, "noPhoto": {"ask": "the ask rewritten so a voice or the text carries the stop without a photo", "check": "its check"}}` }] }], { effort: 'medium', job: 'monthly-test photos' })).text);
       if (v.ok) {
         it.alt = String(v.alt ?? it.alt ?? '');
         if (v.check) it.check = String(v.check);
@@ -442,7 +459,7 @@ Does the photo show what the stop needs, clearly enough that he can answer from 
     }
   }
   files = await loadFiles(env as never);
-  problems = [...E.testProblems(files, doc as never), ...weekdayProblems(JSON.stringify(doc), today)];
+  problems = [...E.testProblems(files, doc as never, true), ...weekdayProblems(JSON.stringify(doc), today)];
   if (problems.length) return failed([...said, `! not sent after the photos: ${problems.join('; ')}`]);
   const sent = JSON.parse(await change(env as never, (f) => JSON.stringify(E.sendTest(f, doc as never, today))));
   await putDoc(env, 'board', 'test', sent);
@@ -478,7 +495,7 @@ ${part(guide, '## Format', '## Runs')}
 
 The test, with his answers (answer, natural, result, secs, feedback, retry):
 ${JSON.stringify(doc.items)}`;
-  const out = json((await ai.text(env, OPUS, p, { effort: 'medium' })).text);
+  const out = json((await ai.text(env, OPUS, p, { effort: 'medium', job: 'monthly-test lessons' })).text);
   const lessons = (Array.isArray(out.lessons) ? out.lessons : []).map((l: unknown) => String(l).trim().replace(/^- /, '')).filter(Boolean).slice(0, 4);
   await change(env as never, (f) => {
     let mt = f.get('monthly-test.md') ?? '';

@@ -3,7 +3,7 @@
 // keeps the scene going. Words it gives him come marked ⟦…⟧, and the page turns any of them into a card with a tap.
 import * as E from './engine.ts';
 import * as ai from './ai.ts';
-import { loadFiles, today } from './plus.ts';
+import { loadFiles, today, change } from './plus.ts';
 import { modelOf, Bad } from './cards.ts';
 
 type Env = Parameters<typeof loadFiles>[0] & Parameters<typeof ai.text>[0];
@@ -39,7 +39,11 @@ How a session goes:
 
 Mark a word or short set phrase you teach him (one to four characters, Traditional only, no pinyin) as ⟦word⟧, so he can card it with one tap: only words new to him or worth a card, never a whole sentence or a correction of one; at most three per turn.
 Plain text only: no markdown, no bold, no headings, no bullets with asterisks. A correction is a line of its own: his words → the natural version.
-Chinese punctuation in Chinese text, English punctuation in English text. Be direct, never a yes-man; few words. If he writes in English, he's asking you something: answer briefly, then back to the scene.`;
+Chinese punctuation in Chinese text, English punctuation in English text. Be direct, never a yes-man; few words. If he writes in English, he's asking you something: answer briefly, then back to the scene.
+
+Situations: each word he is learning needs three different situations of correct use before it counts as known. Put a word he has used once or twice into a new kind of situation at the same level (another person, place, purpose); once a word holds, raise the bar (a harder context, a competing word, a longer answer).
+
+Last line of every reply, always: ⟪used: …⟫ listing the words from "This week's words" or "His other L words" that his last message used correctly and naturally (exact characters, comma-separated; empty if none). The page hides this line.`;
 
 // Ask: free chat (his questions: a contrast, "how do I say", a sentence to check, grammar). Retrieval first.
 const ASK = `You are Chris's tutor for Taiwanese Chinese (Traditional characters, Taiwan usage: 好啊 not 好的, 計畫, 捷運, 機車). He is high A2, lives in Taipei, and types or dictates (ignore the characters a transcriber picked: 在/再, 的/得). Here he asks you things: a contrast (終於 vs 總算), how to say something, a sentence to check, a grammar point.
@@ -52,10 +56,12 @@ How you answer:
 - Never hand him a list to memorize; never answer a question he hasn't asked.
 
 Mark a word or short set phrase worth a card (one to four characters, Traditional only, no pinyin) as ⟦word⟧, so he can card it with one tap; at most three per turn, never a whole sentence.
-Plain text only: no markdown, no bold, no headings, no bullets with asterisks. Chinese punctuation in Chinese text, English in English. Be direct, never a yes-man; few words.`;
+Plain text only: no markdown, no bold, no headings, no bullets with asterisks. Chinese punctuation in Chinese text, English in English. Be direct, never a yes-man; few words.
+
+Last line of every reply, always: ⟪used: …⟫ listing the words from "This week's words" or "His other L words" that his last message used correctly and naturally (exact characters, comma-separated; empty if none). The page hides this line.`;
 
 /** POST plus/tutor {messages: [{role, content}]} → the tutor's next turn. An empty conversation starts a scene. */
-export async function reply(env: Env, body: { messages?: unknown; model?: unknown; focus?: unknown; mode?: unknown }) {
+export async function reply(env: Env, body: { messages?: unknown; model?: unknown; focus?: unknown; mode?: unknown; id?: unknown }) {
   const msgs = Array.isArray(body.messages) ? body.messages : [];
   if (msgs.length > 80) throw new Bad('That conversation is long: start a new one.');
   const turns = msgs.map((m) => {
@@ -71,6 +77,15 @@ export async function reply(env: Env, body: { messages?: unknown; model?: unknow
   const input = [{ role: 'user' as const, content: head }, ...turns];
   if (input[1] && input[1].role === 'user') input.splice(1, 0, { role: 'assistant', content: ask ? '(ready)' : '(scene)' });
   const model = modelOf(body.model);
-  const r = await ai.text(env, model, input, { effort: 'low' });
-  return { text: r.text, model: model.split(':')[1] };
+  const r = await ai.text(env, model, input, { effort: 'low', job: 'tutor' });
+  // the words he used correctly count as a situation (one per chat a day: engine.ts situations)
+  const used = /⟪used:([^⟫]*)⟫/.exec(r.text)?.[1] ?? '';
+  const text = r.text.replace(/\n*⟪used:[^⟫]*⟫\s*/g, '').trim();
+  const words = [...new Set(used.split(/[,，、\s]+/).map((w) => E.key(w)).filter((w) => /^[\u3400-\u9fff]{1,6}$/.test(w)))];
+  if (words.length && turns.length) {
+    const st = E.kwStatus(E.loadKw(files));
+    const rows = words.filter((w) => st.get(w)?.[0] === 'L').map((w) => ({ date: today(), target: w, kind: 'free', result: 'pass', note: `tutor ${String(body.id ?? '').slice(0, 20)}: ${turns[turns.length - 1].content.slice(0, 160)}` }));
+    if (rows.length) await change(env as never, (f) => E.logRows(f, rows)).catch(() => {});
+  }
+  return { text, model: model.split(':')[1] };
 }
