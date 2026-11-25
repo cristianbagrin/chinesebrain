@@ -1,0 +1,82 @@
+/* The shared parts (site/src/cbp/kit): the Settings panel, press and hold, pinyin over characters, keys. Owner: lead.
+   The panel's type is fixed at 16px+ (not scaled by --k), so it never gets small. */
+:root[data-text-size="larger"]{--k:1.05}
+
+/* ---------- Settings: a panel under the gear; on a phone it spans the screen ---------- */
+.settings{position:fixed;z-index:30;top:calc(env(safe-area-inset-top,0px) + var(--bar) + 6px);right:max(16px,env(safe-area-inset-right,0px),4vw);width:min(440px,calc(100vw - 32px));max-height:calc(100dvh - var(--bar) - 28px - env(safe-area-inset-top,0px));overflow:auto;overscroll-behavior:contain;background:var(--surface);border-radius:18px;box-shadow:0 18px 50px rgba(21,23,28,.16),0 0 0 1px var(--hair);animation:stin .2s var(--ease);transform-origin:top right}
+@media (max-width:520px){.settings{right:12px;left:12px;width:auto}}
+@keyframes stin{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.settings{animation:none}}
+.st-in{padding:var(--s3) var(--s5) var(--s5)}
+@media (max-width:520px){.st-in{padding:var(--s3) var(--s4) var(--s4)}}
+.st-top{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:var(--s2);margin:0 calc(-1 * var(--s3)) 0 0;padding:var(--s2) 0;background:var(--surface)}
+.st-top b{margin-right:auto;font-weight:600;font-size:18px}
+.st-top .btn-q{font-size:16px}
+.st-back{margin-left:-14px}
+.st-x{width:36px;height:36px;border:0;border-radius:50%;background:none;font-size:24px;line-height:1;color:var(--ink-3);cursor:pointer}
+.st-x:hover{background:var(--wash);color:var(--ink)}
+/* groups: a heading each, no lines */
+.st-g{padding:var(--s3) 0 0}
+.st-g h3{margin:var(--s3) 0 var(--s1);font-size:16px;font-weight:500;color:var(--ink-3)}
+/* one line per choice: the label left, the options right */
+.st-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;padding:5px 0}
+.st-l{font-size:17px;line-height:1.3;color:var(--ink);min-width:0}
+button.st-row{width:100%;border:0;background:none;font:inherit;text-align:left;cursor:pointer;border-radius:10px;margin:0 -8px;padding:5px 8px;width:calc(100% + 16px)}
+button.st-row:hover{background:var(--bg)}
+.st-k{font-size:16px;color:var(--ink-3)}
+.st-k::after{content:" ›";color:var(--ink-4)}
+/* a switch, the board's: ink when on */
+.st-tg{position:relative;display:block;flex:none;width:46px;height:28px;border:0;box-sizing:border-box;overflow:hidden;border-radius:999px;background:var(--wash-2);padding:0;cursor:pointer;transition:background .2s}
+.st-tg i{position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--surface);box-shadow:0 1px 3px rgba(21,23,28,.25);transition:transform .28s var(--spring),width .15s}
+.st-tg[aria-checked="true"]{background:var(--ink)}
+.st-tg[aria-checked="true"] i{transform:translateX(18px)}
+.st-tg:active i{width:26px}
+.st-tg[aria-checked="true"]:active i{transform:translateX(14px)}
+.st-tg:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:999px}
+/* options side by side */
+.st-o{flex:none;display:inline-flex;gap:2px;padding:3px;border-radius:999px;background:var(--wash)}
+.st-o button{border:0;background:none;border-radius:999px;padding:7px 13px;font-size:16px;font-weight:500;color:var(--ink-3);cursor:pointer;transition:background .2s,color .2s}
+.st-o button[aria-checked="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px var(--shade)}
+.st-o button:hover:not([aria-checked="true"]){color:var(--ink-2)}
+@media (max-width:400px){.st-o button{padding:7px 10px}.st-l{font-size:16px}}
+.st-sz button{padding:5px 13px}
+.sz-normal{font-size:16px}
+.sz-larger{font-size:19px}
+/* rows the Reviews tab draws (review/main.ts) */
+.st-cust .st-row{flex-wrap:nowrap}
+.st-v{font-size:16px;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.st-step{flex:none;display:inline-flex;align-items:center;background:var(--wash);border-radius:999px;padding:3px}
+.st-step button{width:34px;height:34px;border:0;border-radius:50%;background:none;font-size:20px;line-height:1;color:var(--ink-2);cursor:pointer}
+.st-step button:hover{background:var(--surface)}
+.st-step input{width:3.2ch;border:0;background:none;text-align:center;font-size:17px;font-variant-numeric:tabular-nums;color:var(--ink);outline:none}
+.st-range{display:flex;align-items:center;gap:10px;flex:none}
+.st-range input{width:clamp(110px,30vw,170px);accent-color:var(--ink)}
+.st-btn{flex:none;border:0;border-radius:999px;background:var(--wash);color:var(--ink);font-size:16px;font-weight:500;padding:8px 16px;cursor:pointer;white-space:nowrap}
+.st-btn:hover{background:var(--wash-2)}
+.st-btn:disabled{opacity:.5;cursor:default}
+.st-msg{font-size:16px;color:var(--red);margin:4px 0 0}
+.st-msg:empty{display:none}
+/* the shortcut list: the key is the button; pressed, it waits for the new one */
+.st-key{flex:none;display:inline-flex;gap:6px;border:0;background:none;padding:4px;border-radius:10px;cursor:pointer;font-size:16px;color:var(--ink-3)}
+.st-key kbd{font-family:var(--ui);font-size:16px;min-width:32px;padding:4px 9px;border-radius:8px;background:var(--wash);color:var(--ink);box-shadow:inset 0 -1px 0 var(--wash-2)}
+.st-key:hover kbd{background:var(--wash-2)}
+.st-key.mine kbd{background:var(--gold-wash);box-shadow:inset 0 -1px 0 var(--gold-edge)}
+.st-key.on{padding:8px 12px;background:var(--ink);color:var(--on-ink);animation:keywait 1.2s ease-in-out infinite}
+@keyframes keywait{50%{opacity:.7}}
+
+/* ---------- press and hold (kit/hold.ts): the button fills from the left while held ---------- */
+.hold{position:relative;overflow:hidden;isolation:isolate;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+.hold::after{content:"";position:absolute;inset:0;z-index:-1;background:currentColor;opacity:.16;transform:scaleX(0);transform-origin:left;pointer-events:none}
+.hold.holding::after{transform:scaleX(1);transition:transform var(--hold-ms,500ms) linear}
+.hold.held::after{transform:scaleX(1);opacity:.26;transition:opacity .2s}
+/* reduced motion: the fill fades in where it stands */
+.hold.hold-still::after{transform:none;opacity:0}
+.hold.hold-still.holding::after{opacity:.16;transition:opacity var(--hold-ms,500ms) linear}
+.hold.hold-still.held::after{opacity:.26}
+
+/* ---------- pinyin above the characters (kit/ruby.ts) ---------- */
+ruby{ruby-position:over;ruby-align:center}
+rt{font-family:var(--ui);font-size:max(.55em,14px);font-weight:450;letter-spacing:0;color:var(--ink-3);-webkit-text-stroke:0;line-height:1.1}
+.rb{line-height:inherit}
+:where(.rb) ruby{line-height:1}
+.st-row.st-sub{min-height:0;padding:0 0 6px;justify-content:flex-end;margin-top:-6px}

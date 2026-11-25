@@ -5,7 +5,8 @@
    On Today the weeks so far fill the width; on Progress the whole year does (every month named, the weeks to come
    left blank), so the forest under it can stand each tree over its month. HB_render(el, full) draws into any
    container (full = Progress).
-   Also here: the one hover/tap tip anything on the board can use ([data-tip]). Styles: css/today.css. ---------- */
+   Also here: the one tap tip anything on the board can use ([data-tip]): a click or tap shows it, never a hover
+   (no hover tooltips, his rule). Styles: css/today.css. ---------- */
 const HB={done:null,pop:false,k:null};
 // Chinese characters only: English words inside an essay don't count as writing Chinese
 const HB_han=t=>(String(t||'').match(/[㐀-鿿豈-﫿]/g)||[]).length;
@@ -89,7 +90,7 @@ BUS.on('view',v=>{if(v==='today')HB_today();});
 // the day turns over at 4 am: a board left open overnight moves on by itself (and a new week gets its column)
 setInterval(()=>{if(HB.k&&HB.k!==essayToday())HB_today();HB.k=essayToday();},60000);
 
-/* ---------- the tip: one small floating note for anything with data-tip (hover, tap, focus) ---------- */
+/* ---------- the tip: one small floating note for anything with data-tip, on a click or tap (never on hover) ---------- */
 (()=>{
   const tip=document.createElement('div');
   tip.className='hb-tip';tip.setAttribute('role','tooltip');tip.hidden=true;
@@ -107,8 +108,8 @@ setInterval(()=>{if(HB.k&&HB.k!==essayToday())HB_today();HB.k=essayToday();},600
     tip.style.left=Math.round(x)+'px';tip.style.top=Math.round(y)+'px';
   }
   function hide(){if(cur)cur.classList.remove('hb-hot');cur=null;tip.hidden=true;}
-  document.addEventListener('pointerover',e=>{if(e.pointerType==='touch')return;const el=find(e);if(el){if(el!==cur)show(el);}else if(cur)hide();});
-  document.addEventListener('click',e=>{const el=find(e);if(el){if(el===cur&&matchMedia('(hover:none)').matches)hide();else show(el);}else if(cur)hide();});
+  document.addEventListener('click',e=>{const el=find(e);if(el){if(el===cur)hide();else show(el);}else if(cur)hide();});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&cur)hide();});
   addEventListener('scroll',()=>{if(cur)hide();},{passive:true});
   addEventListener('resize',()=>{if(cur)hide();});
   BUS.on('leave',hide);

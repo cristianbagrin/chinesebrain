@@ -54,6 +54,9 @@ async function flush(date){
     }
     s.tries=0;
     draftDone(date,text);
+    // BUS 'essay:written' ({date, chars}): today's essay saved with more Chinese in it than the last time it said so
+    const chars=(text.match(/[㐀-鿿豈-﫿]/g)||[]).length;
+    if(date===essayToday()&&chars>(s.said||0)){s.said=chars;BUS.emit('essay:written',{date,chars});}
     if(!s.next) saveState(date,'saved');
   }catch(e){
     console.error(e); failed=true;

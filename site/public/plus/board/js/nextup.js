@@ -54,16 +54,8 @@ function NU_hide(){
   if(NU.cur) NU.cur.classList.remove('on');
   NU.cur=null; NU.pin=null;
 }
-// a mouse shows it on hover; a finger taps to open and taps again (or anywhere else) to close
+// a tap opens it and taps again (or anywhere else) close it; the keyboard's focus shows it too (no hover: his rule)
 NU_EL.addEventListener('pointerdown',e=>{NU.ptr=e.pointerType||'mouse';});
-NU_EL.addEventListener('pointerover',e=>{
-  if(e.pointerType!=='mouse'||NU.pin) return;
-  const t=e.target.closest('[data-i]'); if(t&&t!==NU.cur) NU_show(t);
-});
-NU_EL.addEventListener('pointerout',e=>{
-  if(e.pointerType!=='mouse'||NU.pin) return;
-  const t=e.target.closest('[data-i]'); if(t&&!t.contains(e.relatedTarget)) NU_hide();
-});
 NU_EL.addEventListener('focusin',e=>{const t=e.target.closest('[data-i]'); if(t&&!NU.pin) NU_show(t);});
 NU_EL.addEventListener('focusout',()=>{if(!NU.pin) NU_hide();});
 NU_EL.addEventListener('click',e=>{
@@ -94,5 +86,3 @@ BUS.on('data',D=>renderNext(D));
   BUS.on('lab',id=>{if(id==='board-k')requestAnimationFrame(()=>[...g.children].forEach(fit));});
 })();
 
-// voices load late on some browsers; asking early makes the first Listen use the Taiwan voice
-try{if('speechSynthesis' in window){speechSynthesis.getVoices();speechSynthesis.onvoiceschanged=()=>speechSynthesis.getVoices();}}catch(e){}

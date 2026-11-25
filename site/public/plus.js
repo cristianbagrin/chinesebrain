@@ -30,6 +30,8 @@
   // the board's scripts, the reviews tab (plus/anki.js) just before boot.js so the board can open on it, then the
   // review card that hooks into the Cards page (plus/review.js)
   const srcs = board.map((f) => `/plus/board/${f}`);
+  // the shared parts (plus/kit.js: settings, shortcuts, sound, press and hold, pinyin) right after core.js
+  srcs.splice(srcs.indexOf('/plus/board/js/core.js') + 1, 0, '/plus/kit.js?v=1');
   if (reviews) srcs.splice(srcs.indexOf('/plus/board/js/boot.js'), 0, '/plus/anki.js?v=5');
   // the tutor (plus/tutor.js), behind its own switch
   const tutor = flags.includes('plus.tutor');

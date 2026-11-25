@@ -1,7 +1,8 @@
 // Chinese Brain Plus, Stage 4: his reviews (Anki rebuilt), as the Reviews tab of the board at /plus. plus.js loads this
 // before the board's boot.js, so the tab is there when the board opens on #reviews. The whole collection lives on the
 // device (store.ts), so reviewing works with no signal; the scheduler is sched.ts (FSRS, as Anki runs it); his own
-// templates and styling draw the cards (render.ts). Inside the tab: Review, Browse, and Settings (the gear).
+// templates and styling draw the cards (render.ts). Inside the tab: Review and Browse; its settings are rows in the one
+// Settings panel (LAB.row, kit/settings.ts), and Card designs opens here from there.
 // Adding cards happens on the Cards page only (plus/review.js, its note goes into the collection: src/cbp/anki.ts).
 import { S, load, put, putMany, sync, api, onChange, type Note, type NoteType, type ColMeta } from './store.ts';
 import { render, strip, wordOf, sortText, search, fieldIndex, type Row } from './render.ts';
@@ -11,18 +12,21 @@ import { exportAnki } from './export.ts';
 
 // the board's own globals (site/public/plus/board/js/core.js, cards.js)
 declare const VIEWS: string[];
-declare const BUS: { on(e: string, f: (...a: any[]) => void): void };
+declare const BUS: { on(e: string, f: (...a: any[]) => void): void; emit(e: string, ...a: unknown[]): void };
 declare function setView(v: string, first?: boolean): void;
 declare let VIEW: string | null;
 declare function sfx(name: string): void;
 declare function hideToast(now?: boolean): void;
 declare function openCard(word: string, src: string): void;
-declare const LAB: { define(id: string, label: string, options: [string, string][], def: string, group: string): string; get(id: string): string };
-LAB.define('deeper-model', 'Five minutes on a word by', [['haiku', 'Haiku'], ['sonnet', 'Sonnet'], ['opus', 'Opus']], 'sonnet', 'Reviews');
+declare const LAB: { get(id: string): string; row(id: string, group: string, o: { html: () => string; bind: (el: HTMLElement) => void }): void };
+// the shared parts (plus/kit.js, site/src/cbp/kit)
+declare const SOUND: { play(src: string | string[], o?: { rate?: number; onEnd?: () => void }): Promise<boolean>; stop(): void; autoplay(): boolean };
+declare const KEYS: { is(e: KeyboardEvent, id: string): boolean; label(id: string): string };
+declare const RUBY: { set(el: Element | ShadowRoot | null | undefined, on: boolean): Promise<void>; shown(): boolean; CSS: string };
+declare const SETTINGS: { open(to?: string): void; close(): void; redraw(): void };
 
 const $ = <T extends Element = HTMLElement>(s: string, el: ParentNode = document) => el.querySelector(s) as T;
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 const TOUCH = matchMedia('(hover: none)').matches;
 type Kind = 'meta' | 'notetype' | 'deck' | 'conf' | 'note' | 'card';
 
@@ -47,8 +51,6 @@ VIEWS.splice(VIEWS.indexOf('today') + 1, 0, 'reviews');
 VIEW_EL.innerHTML = `<div class="rx">
   <header class="rx-top rx-opt">
     <nav class="rx-seg" aria-label="Reviews"><button type="button" data-v="review">Review</button><button type="button" data-v="browse">Browse</button></nav>
-    <span class="rx-sp"></span>
-    <button type="button" class="rx-cog" data-v="settings" aria-label="Settings"></button>
   </header>
   <div class="rx-body"></div>
 </div>`;
@@ -184,7 +186,7 @@ function afterHistory(s: Step, undone: boolean) {
     if (undone && s.card && S.cards.has(s.card)) {
       RV.cur = S.cards.get(s.card)!;
       RV.shown = false;
-      RV.py = false;
+      RV.py = RUBY.shown();
       RV.t0 = Date.now();
       RV.panel = '';
     } else RV.cur = null;
@@ -193,25 +195,18 @@ function afterHistory(s: Step, undone: boolean) {
 }
 
 // ---------- a card on screen ----------
-let player: HTMLAudioElement | null = null;
+/** The card's sounds, one after another, through the one player (a new sound stops the one playing). */
 function playAll(root: ShadowRoot | null | undefined) {
   if (!root) return;
   const list = [...root.querySelectorAll<HTMLElement>('[data-sound]')].map((b) => b.dataset.sound!);
-  player?.pause();
-  const next = () => {
-    const s = list.shift();
-    if (!s) return;
-    player = new Audio(s);
-    player.onended = next;
-    player.play().catch(() => {});
-  };
-  next();
+  if (list.length) void SOUND.play(list);
 }
+/** What played by itself last, so drawing the same side again (an edit, a sync) doesn't play it again. */
+let autoplayed = '';
 const cardCss = (t: NoteType) => t.css.replace(/@import[^;]+;/g, '');
 // his styling, then the board's ground under it: no white box, no "Show Pinyin" link or play buttons (P and V do those)
 const OVER = `:host{display:block}.card{background:transparent!important;min-height:100%;box-sizing:border-box}hr{border:0;border-top:1px solid #E4E6EC;margin:22px 0}
-a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-body{display:block;animation:in .18s ease-out}
-.audio:not(:has(:not(.snd-btn))){display:none}@keyframes in{from{opacity:0}}`;
+a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn))){display:none}`;
 /** Draws one side of a card into `host` with his CSS, kept apart from the page's (a shadow root). */
 function draw(host: HTMLElement, r: Row, side: 'q' | 'a') {
   const t = r.type!, tmpl = t.templates.find((x) => x.ord === r.card.ord) ?? t.templates[0];
@@ -219,17 +214,17 @@ function draw(host: HTMLElement, r: Row, side: 'q' | 'a') {
   const q = render(tmpl.qfmt, ctx);
   const html = side === 'q' ? q : render(tmpl.afmt, ctx, q);
   const root = host.shadowRoot ?? host.attachShadow({ mode: 'open' });
-  root.innerHTML = `<style>${cardCss(t)}${OVER}</style><div class="card card${r.card.ord + 1}">${html}</div>`;
+  root.innerHTML = `<style>${cardCss(t)}${OVER}${RUBY.CSS}</style><div class="card card${r.card.ord + 1}">${html}</div>`;
   return root;
 }
 
 // ---------- views inside the tab ----------
-type View = 'review' | 'browse' | 'settings' | 'designs';
+type View = 'review' | 'browse' | 'designs';
 let view: View = 'review';
 function go(v: View) {
   if (view === 'browse' && v !== 'browse') closeSide();
   view = v;
-  VIEW_EL.querySelectorAll<HTMLElement>('[data-v]').forEach((b) => b.setAttribute('aria-current', String(b.dataset.v === v || (v === 'designs' && b.dataset.v === 'settings'))));
+  VIEW_EL.querySelectorAll<HTMLElement>('[data-v]').forEach((b) => b.setAttribute('aria-current', String(b.dataset.v === v)));
   app.className = 'rx-body v-' + v;
   ($('.rx', VIEW_EL) as HTMLElement).dataset.rx = v;
   paint();
@@ -241,7 +236,6 @@ function paint() {
   if (!ready) return;
   if (view === 'review') showReview();
   else if (view === 'browse') showBrowse();
-  else if (view === 'settings') showSettings();
   else showDesigns();
 }
 VIEW_EL.querySelectorAll<HTMLElement>('[data-v]').forEach(
@@ -250,11 +244,13 @@ VIEW_EL.querySelectorAll<HTMLElement>('[data-v]').forEach(
       const v = b.dataset.v as View;
       sfx('tap');
       if (v === 'browse') resetBrowse();
-      go(v === 'settings' && (view === 'settings' || view === 'designs') ? 'review' : v);
+      go(v);
     }),
 );
 
 // ================= Review =================
+/** A sitting: from the first card on screen until he leaves the tab (BUS 'reviews:start'). */
+let sitting = false;
 const RV = { cur: null as Card | null, shown: false, py: false, t0: 0, sinceNew: 0, panel: '' as '' | 'deeper', merge: null as null | [number, number], deeperFor: 0, flags: false };
 
 function pick(): Card | null {
@@ -277,7 +273,7 @@ function showReview(): void {
   if (!RV.cur || !S.cards.has(RV.cur.id) || RV.cur !== S.cards.get(RV.cur.id) || RV.cur.queue < 0) {
     RV.cur = pick();
     RV.shown = false;
-    RV.py = false;
+    RV.py = RUBY.shown();
     RV.t0 = Date.now();
   }
   const c = RV.cur, t = today(), n = left();
@@ -316,7 +312,17 @@ function showReview(): void {
   </section>`;
   const host = $('.host', app);
   const root = draw(host, r, RV.shown ? 'a' : 'q');
-  if (RV.shown || !root.querySelector('[data-sound]') || true) playAll(root);
+  // each side plays by itself once (Settings › Card audio plays by itself), not again when it's drawn again
+  const side = `${c.id}:${RV.shown ? 'a' : 'q'}`;
+  if (side !== autoplayed) {
+    autoplayed = side;
+    if (SOUND.autoplay()) playAll(root);
+  }
+  if (RV.py) void RUBY.set(root.querySelector('.card'), true);
+  if (!sitting) {
+    sitting = true;
+    BUS.emit('reviews:start');
+  }
   bindReview();
 }
 function bindReview() {
@@ -334,6 +340,18 @@ async function grade(g: number) {
   const rows: [Kind, number, any][] = [['card', c.id, a.card]];
   if (a.leech && !r.note.tags.includes('leech')) rows.push(['note', r.note.id, { ...r.note, tags: [...r.note.tags, 'leech'] }]);
   await change(['Again', 'Hard', 'Good', 'Easy'][g - 1], rows, c.id);
+  const n = left();
+  BUS.emit('reviews:card', { grade: g, card: c.id, word: wordOfNote(r.note), left: n });
+  // today's queue just emptied: once a day
+  if (!n) {
+    const d = String(ck().today);
+    try {
+      if (localStorage.getItem('rv-done') !== d) {
+        localStorage.setItem('rv-done', d);
+        BUS.emit('reviews:done');
+      }
+    } catch {}
+  }
   RV.sinceNew = c.type === 0 ? 0 : RV.sinceNew + 1;
   RV.cur = null;
   RV.flags = false;
@@ -357,8 +375,8 @@ async function act(a: string) {
   if (!c) return;
   if (a === 'py') {
     RV.py = !RV.py;
-    $('.host', app)?.classList.toggle('py', RV.py);
-    return;
+    sfx('tap');
+    return void RUBY.set($('.host', app)?.shadowRoot?.querySelector('.card'), RV.py);
   }
   if (a === 'play') return playAll($('.host', app)?.shadowRoot);
   if (a === 'edit') return editDialog(S.notes.get(c.nid)!);
@@ -573,7 +591,7 @@ function editor(host: HTMLElement, note0: Note, onClose?: () => void) {
       const fa = host.querySelector<HTMLElement>(`.fv[data-o="${ai}"]`), fs = host.querySelector<HTMLElement>(`.fv[data-o="${si}"]`);
       if (!fa || !fs) return;
       const have = /\[sound:([^\]]+)\]/.exec(fa.textContent ?? '');
-      if (have && !again) return void new Audio(have[1]).play().catch(() => {});
+      if (have && !again) return void SOUND.play(have[1]);
       const text = strip(fs.innerHTML.replace(/<br\s*\/?>|<\/div>/gi, '\n')).replace(/[ \t]+/g, ' ').trim();
       if (!text) return toast('The sentence is empty.');
       if (!navigator.onLine) return toast('The voice needs signal.');
@@ -582,8 +600,8 @@ function editor(host: HTMLElement, note0: Note, onClose?: () => void) {
         const { url } = await api('voice', { text });
         fa.textContent = `[sound:${url}]`;
         save();
-        new Audio(url).play().catch(() => {});
         sfx('save');
+        void SOUND.play(url);
       } catch (e) {
         toast(esc((e as Error).message || 'The voice didn’t come through.'));
       } finally {
@@ -846,7 +864,7 @@ async function bulkAct(a: string, sel: Card[]) {
   paintBrowse();
 }
 
-// ================= Settings: only what he'd change, each with what changing it means =================
+// ================= Settings: rows in the one Settings panel (kit/settings.ts), group Reviews =================
 /** About how many reviews a day the cards he has would ask for at this retention, as their memories stand now. */
 function perDay(ret: number) {
   const c = conf(), f = new Fsrs(c.w);
@@ -854,69 +872,92 @@ function perDay(ret: number) {
   for (const x of live()) if (x.queue >= 0 && x.type !== 0 && x.s) n += 1 / Math.max(1, Math.min(c.maxIvl, f.interval(x.s, ret)));
   return Math.round(n);
 }
-function showSettings() {
-  const c = conf();
-  const tuned = (c as Conf & { tuned?: Tuned }).tuned;
-  const fmt = (ms: number) => new Date(ms).toLocaleDateString([], { month: 'short', day: 'numeric' });
-  app.innerHTML = `<section class="rs">
-    <div class="rs-row"><div class="rs-l"><label for="rs-new">New cards a day</label><p>More new cards now means more reviews later.</p></div>
-      <div class="rs-c"><div class="stepper"><button type="button" data-n="-1" aria-label="Fewer">−</button><input id="rs-new" inputmode="numeric" value="${c.newPerDay}"><button type="button" data-n="1" aria-label="More">+</button></div></div></div>
-    <div class="rs-row"><div class="rs-l"><label for="rs-ret">How much to remember</label><p>The chance that you still know a card when it comes back. Higher means you forget less and review more.</p></div>
-      <div class="rs-c"><input type="range" id="rs-ret" min="80" max="97" step="1" value="${Math.round(c.retention * 100)}"><p class="rs-v"><b data-js-text class="rs-pct"></b> <span data-js-text class="rs-load"></span></p></div></div>
-    <div class="rs-row"><div class="rs-l"><span class="rs-h">Memory model</span><p>Fits itself to your own reviews once a month, like Anki's Optimize, and keeps the fit only when it predicts your memory better.</p></div>
-      <div class="rs-c"><p class="rs-v" data-js-text>${tuned ? `Last fit ${fmt(tuned.at)}${tuned.better ? `: ${tuned.better}% closer to how you remember` : ': already a good fit'}` : 'Not fitted here yet'}</p><button type="button" class="btn-q rs-tune">Fit now</button></div></div>
-    <div class="rs-row"><div class="rs-l"><span class="rs-h">Card designs</span><p>Each note type's fields, front and back, and styling, as in Anki.</p></div>
-      <div class="rs-c"><button type="button" class="btn-q" data-go="designs">Open</button></div></div>
-    <div class="rs-row"><div class="rs-l"><span class="rs-h">Back to Anki</span><p>Everything, reviews and pictures included, as one file Anki opens. Anki replaces its collection with it.</p></div>
-      <div class="rs-c"><button type="button" class="btn rs-dl">Download for Anki</button></div></div>
-    <p class="rs-msg" role="status" data-js-text></p></section>`;
-  const msg = $('.rs-msg', app);
-  const ret = $<HTMLInputElement>('#rs-ret', app);
-  const showRet = () => {
-    $('.rs-pct', app).textContent = `${ret.value}%`;
-    $('.rs-load', app).textContent = `about ${perDay(Number(ret.value) / 100)} reviews a day`;
-  };
-  showRet();
-  ret.oninput = showRet;
-  const saveConf = async (name: string, patch: Partial<Conf>) => {
-    try {
-      const cur = conf();
-      await change(name, [['conf', cur.id, { ...cur, ...patch }]]);
-      msg.textContent = '';
-    } catch (e) {
-      msg.textContent = (e as Error).message;
-    }
-  };
-  ret.onchange = () => saveConf('Retention', { retention: Number(ret.value) / 100 });
-  const nw = $<HTMLInputElement>('#rs-new', app);
-  const setNew = (v: number) => {
-    nw.value = String(Math.max(0, Math.min(200, v)));
-    saveConf('New cards a day', { newPerDay: Number(nw.value) });
-  };
-  nw.onchange = () => setNew(parseInt(nw.value) || 0);
-  app.querySelectorAll<HTMLElement>('[data-n]').forEach((b) => (b.onclick = () => setNew((parseInt(nw.value) || 0) + Number(b.dataset.n))));
-  $('[data-go]', app).onclick = () => go('designs');
-  $('.rs-tune', app).onclick = async (e) => {
-    const b = e.currentTarget as HTMLButtonElement;
-    b.disabled = true;
-    b.textContent = 'Fitting…';
-    await tune(true);
-    if (view === 'settings') showSettings();
-  };
-  $('.rs-dl', app).onclick = async (e) => {
-    const b = e.currentTarget as HTMLButtonElement;
-    b.disabled = true;
-    b.textContent = 'Packing…';
-    try {
-      await exportAnki((p) => (b.textContent = p));
-      b.textContent = 'Download for Anki';
-    } catch (err) {
-      msg.textContent = (err as Error).message || 'The file didn’t come together.';
-      b.textContent = 'Download for Anki';
-    }
-    b.disabled = false;
-  };
-}
+const saveConf = async (name: string, patch: Partial<Conf>) => {
+  const cur = conf();
+  await change(name, [['conf', cur.id, { ...cur, ...patch }]]);
+};
+const fmtDay = (ms: number) => new Date(ms).toLocaleDateString([], { month: 'short', day: 'numeric' });
+LAB.row('rv-new', 'Reviews', {
+  html: () => (ready ? `<div class="st-row"><label class="st-l" for="rs-new">New cards a day</label><span class="st-step"><button type="button" data-n="-1" aria-label="Fewer">−</button><input id="rs-new" inputmode="numeric" value="${conf().newPerDay}"><button type="button" data-n="1" aria-label="More">+</button></span></div>` : ''),
+  bind(el) {
+    const nw = el.querySelector<HTMLInputElement>('#rs-new');
+    if (!nw) return;
+    const setNew = (v: number) => {
+      nw.value = String(Math.max(0, Math.min(200, v)));
+      saveConf('New cards a day', { newPerDay: Number(nw.value) });
+    };
+    nw.onchange = () => setNew(parseInt(nw.value) || 0);
+    el.querySelectorAll<HTMLElement>('[data-n]').forEach((b) => (b.onclick = () => (sfx('tap'), setNew((parseInt(nw.value) || 0) + Number(b.dataset.n)))));
+  },
+});
+LAB.row('rv-ret', 'Reviews', {
+  // the chance a card is still known when it comes back, and what that costs a day
+  html: () => (ready ? `<div class="st-row"><label class="st-l" for="rs-ret">How much to remember</label><span class="st-range"><input type="range" id="rs-ret" min="80" max="97" step="1" value="${Math.round(conf().retention * 100)}"><span class="st-v" data-js-text></span></span></div><p class="st-row st-sub"><span class="st-v rs-load" data-js-text></span></p>` : ''),
+  bind(el) {
+    const ret = el.querySelector<HTMLInputElement>('#rs-ret');
+    if (!ret) return;
+    const show = () => {
+      el.querySelector('.st-range .st-v')!.textContent = `${ret.value}%`;
+      el.querySelector('.rs-load')!.textContent = `about ${perDay(Number(ret.value) / 100)} reviews a day`;
+    };
+    show();
+    ret.oninput = show;
+    ret.onchange = () => saveConf('Retention', { retention: Number(ret.value) / 100 });
+  },
+});
+LAB.row('rv-fit', 'Reviews', {
+  // fitted to his own reviews once a month, like Anki's Optimize; kept only when it predicts his memory better
+  html: () => {
+    if (!ready) return '';
+    const tuned = (conf() as Conf & { tuned?: Tuned }).tuned;
+    return `<div class="st-row"><span class="st-l">Memory model</span><button type="button" class="st-btn rs-tune">${tuning ? 'Fitting…' : tuned ? `Fitted ${fmtDay(tuned.at)}` : 'Fit now'}</button></div>`;
+  },
+  bind(el) {
+    const b = el.querySelector<HTMLButtonElement>('.rs-tune');
+    if (!b) return;
+    b.disabled = tuning;
+    b.onclick = async () => {
+      b.disabled = true;
+      b.textContent = 'Fitting…';
+      await tune(true);
+      SETTINGS.redraw();
+    };
+  },
+});
+LAB.row('rv-designs', 'Reviews', {
+  html: () => (ready ? '<button type="button" class="st-row st-go rs-designs"><span class="st-l">Card designs</span><span class="st-k"></span></button>' : ''),
+  bind(el) {
+    const b = el.querySelector<HTMLElement>('.rs-designs');
+    if (b)
+      b.onclick = () => {
+        sfx('tap');
+        SETTINGS.close();
+        setView('reviews');
+        go('designs');
+      };
+  },
+});
+LAB.row('rv-dl', 'Reviews', {
+  // everything, reviews and pictures included, as one file Anki opens (it replaces Anki's collection)
+  html: () => (ready ? '<div class="st-row"><span class="st-l">Back to Anki</span><button type="button" class="st-btn rs-dl">Download</button></div><p class="st-msg" role="status" data-js-text></p>' : ''),
+  bind(el) {
+    const b = el.querySelector<HTMLButtonElement>('.rs-dl');
+    if (!b) return;
+    b.onclick = async () => {
+      const msg = el.querySelector('.st-msg')!;
+      b.disabled = true;
+      b.textContent = 'Packing…';
+      try {
+        await exportAnki((p) => (b.textContent = p));
+        msg.textContent = '';
+      } catch (err) {
+        msg.textContent = (err as Error).message || 'The file didn’t come together.';
+      }
+      b.textContent = 'Download';
+      b.disabled = false;
+    };
+  },
+});
 
 // ---------- the memory model, fitted to his reviews (monthly, on this device, in the background) ----------
 type Tuned = { at: number; before: number; after: number; better: number; reviews: number };
@@ -963,7 +1004,7 @@ function showDesigns() {
   app.innerHTML = `<section class="ty"><div class="ty-top"><button type="button" class="btn-q ty-back" aria-label="Back to settings">‹ Settings</button>
     <div class="br-f" role="radiogroup" aria-label="Note type">${types.map((x) => `<button type="button" role="radio" data-ty="${x.id}" aria-checked="${x.id === t.id}">${esc(x.name.replace(/^Chinese /, '').replace(/^Chinese$/, 'Words'))}</button>`).join('')}</div>
     <div class="br-f" role="radiogroup" aria-label="Part">${(['fields', 'cards', 'css'] as const).map((k) => `<button type="button" role="radio" data-tab="${k}" aria-checked="${TY.tab === k}">${k === 'fields' ? 'Fields' : k === 'cards' ? 'Front and back' : 'Styling'}</button>`).join('')}</div></div><div class="ty-body"></div></section>`;
-  $('.ty-back', app).onclick = () => go('settings');
+  $('.ty-back', app).onclick = () => (go('review'), SETTINGS.open());
   app.querySelectorAll<HTMLElement>('[data-ty]').forEach((b) => (b.onclick = () => ((TY.id = Number(b.dataset.ty)), (TY.tmpl = 0), showDesigns())));
   app.querySelectorAll<HTMLElement>('[data-tab]').forEach((b) => (b.onclick = () => ((TY.tab = b.dataset.tab as typeof TY.tab), showDesigns())));
   const body = $('.ty-body', app);
@@ -1039,47 +1080,46 @@ async function addField(t: NoteType) {
   showDesigns();
 }
 
-// ================= keys =================
-// capture: while this tab is open, Cmd+Z and the letters are the reviews' own (the board's undo is for its other pages)
+// ================= keys (kit/keys.ts: each is his to change) =================
+// capture: while this tab is open, undo and the letters are the reviews' own (the board's undo is for its other pages)
 addEventListener(
   'keydown',
   (e) => {
     if (VIEW !== 'reviews' || e.isComposing) return;
     const t = e.target as HTMLElement;
     const typing = !!t.closest?.('input, textarea, select, [contenteditable="true"]');
-    const mod = MAC ? e.metaKey : e.ctrlKey;
-    const k = e.key.toLowerCase();
-    if (mod && !typing && !e.altKey && (k === 'z' || k === 'y')) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
+    const eat = () => (e.preventDefault(), e.stopImmediatePropagation());
+    if (!typing && (KEYS.is(e, 'undo') || KEYS.is(e, 'redo'))) {
+      eat();
       if (document.querySelector('dialog[open]')) return;
-      return k === 'y' || e.shiftKey ? redo() : undo();
+      return KEYS.is(e, 'redo') ? redo() : undo();
     }
     if (e.key === 'Escape') {
       if (RV.flags) return e.stopImmediatePropagation(), (RV.flags = false), showReview();
       if (view === 'browse' && BR.sel.size && !document.querySelector('dialog[open]')) return e.stopImmediatePropagation(), (BR.sel = new Set()), closeSide(), paintSel();
       return;
     }
-    if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && k === 'v' && ED?.host.isConnected) return e.preventDefault(), e.stopImmediatePropagation(), ED.voice(e.shiftKey);
-    if (typing || e.metaKey || e.ctrlKey || e.altKey || document.querySelector('dialog[open]') || view !== 'review') return;
-    // the flag picker, while open, takes R, G and N for itself
+    // an editor open (the dialog or Browse's side): the sentence's audio, made if there is none (or made again)
+    if (!typing && ED?.host.isConnected && (KEYS.is(e, 'rv.voice') || KEYS.is(e, 'rv.revoice'))) return eat(), ED.voice(KEYS.is(e, 'rv.revoice'));
+    if (typing || document.querySelector('dialog[open]') || view !== 'review') return;
+    // the flag picker, while open, takes its own keys
     if (RV.flags) {
-      const f = { r: 1, g: 3, n: 0, '0': 0 }[k];
-      if (f != null) return e.preventDefault(), e.stopImmediatePropagation(), flagIt(f);
-      if (k === 'f') return e.preventDefault(), act('flag');
+      const f = KEYS.is(e, 'rv.red') ? 1 : KEYS.is(e, 'rv.green') ? 3 : KEYS.is(e, 'rv.noflag') ? 0 : -1;
+      if (f >= 0) return eat(), flagIt(f);
+      if (KEYS.is(e, 'rv.flag')) return e.preventDefault(), act('flag');
     }
     const on = t.closest?.('button');
     if ((e.key === ' ' || e.key === 'Enter') && on && !on.matches('.rw-show,.rw-a')) return;
-    if (e.key === ' ' || e.key === 'Enter') {
+    if (KEYS.is(e, 'rv.show')) {
       e.preventDefault();
       return RV.shown ? grade(3) : act('show');
     }
-    if (/^[1-4]$/.test(e.key) && RV.shown) return e.preventDefault(), grade(Number(e.key));
-    const a = { s: 'suspend', f: 'flag', p: 'py', v: 'play', r: 'play', e: 'edit' }[k];
+    const g = ['rv.again', 'rv.hard', 'rv.good', 'rv.easy'].findIndex((id) => KEYS.is(e, id));
+    if (g >= 0 && RV.shown) return e.preventDefault(), grade(g + 1);
+    const a = ([['rv.suspend', 'suspend'], ['rv.flag', 'flag'], ['rv.pinyin', 'py'], ['rv.play', 'play'], ['rv.edit', 'edit']] as const).find(([id]) => KEYS.is(e, id));
     if (a) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      act(a);
+      eat();
+      act(a[1]);
     }
   },
   true,
@@ -1124,7 +1164,8 @@ function start() {
     try {
       v = (sessionStorage.getItem('cbp-rx') as View) || 'review';
     } catch {}
-    if (VIEW === 'reviews') go(['review', 'browse', 'settings', 'designs'].includes(v) ? v : 'review');
+    if (VIEW === 'reviews') go(['review', 'browse', 'designs'].includes(v) ? v : 'review');
+    SETTINGS.redraw();
     paintDot();
     setTimeout(prefetch, 4000);
     // the monthly fit, when the device is idle
@@ -1138,7 +1179,8 @@ BUS.on('view', (v: string, prev: string) => {
     if (!ready) start().then(() => VIEW === 'reviews' && ready && go(view));
     else go(view);
   } else if (prev === 'reviews') {
-    player?.pause();
+    SOUND.stop();
+    sitting = false;
     dropToast();
     closeSide();
     document.querySelector<HTMLDialogElement>('dialog.rx-dlg[open]')?.close();

@@ -625,8 +625,7 @@ CREATE INDEX ix_revlog_cid ON revlog (cid);
 CREATE INDEX ix_notes_csum ON notes (csum);`;
 
   // site/src/cbp/review/main.ts
-  LAB.define("deeper-model", "Five minutes on a word by", [["haiku", "Haiku"], ["sonnet", "Sonnet"], ["opus", "Opus"]], "sonnet", "Reviews");
-  var $ = (s, el = document) => el.querySelector(s), esc2 = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]), MAC = /Mac|iPhone|iPad/.test(navigator.platform), TOUCH = matchMedia("(hover: none)").matches, TAB = document.createElement("button");
+  var $ = (s, el = document) => el.querySelector(s), esc2 = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]), TOUCH = matchMedia("(hover: none)").matches, TAB = document.createElement("button");
   TAB.type = "button";
   TAB.setAttribute("role", "tab");
   TAB.id = "tab-reviews";
@@ -646,8 +645,6 @@ CREATE INDEX ix_notes_csum ON notes (csum);`;
   VIEW_EL.innerHTML = `<div class="rx">
   <header class="rx-top rx-opt">
     <nav class="rx-seg" aria-label="Reviews"><button type="button" data-v="review">Review</button><button type="button" data-v="browse">Browse</button></nav>
-    <span class="rx-sp"></span>
-    <button type="button" class="rx-cog" data-v="settings" aria-label="Settings"></button>
   </header>
   <div class="rx-body"></div>
 </div>`;
@@ -717,45 +714,37 @@ CREATE INDEX ix_notes_csum ON notes (csum);`;
     s && (await apply(s, "after"), H.undo.push(s), sfx("tap"), afterHistory(s, !1));
   }
   function afterHistory(s, undone) {
-    toast(`${undone ? "Undone" : "Redone"}: ${esc2(s.name)}`), view === "review" ? (undone && s.card && S.cards.has(s.card) ? (RV.cur = S.cards.get(s.card), RV.shown = !1, RV.py = !1, RV.t0 = Date.now(), RV.panel = "") : RV.cur = null, showReview()) : paint();
+    toast(`${undone ? "Undone" : "Redone"}: ${esc2(s.name)}`), view === "review" ? (undone && s.card && S.cards.has(s.card) ? (RV.cur = S.cards.get(s.card), RV.shown = !1, RV.py = RUBY.shown(), RV.t0 = Date.now(), RV.panel = "") : RV.cur = null, showReview()) : paint();
   }
-  var player = null;
   function playAll(root) {
     if (!root) return;
     let list = [...root.querySelectorAll("[data-sound]")].map((b) => b.dataset.sound);
-    player?.pause();
-    let next = () => {
-      let s = list.shift();
-      s && (player = new Audio(s), player.onended = next, player.play().catch(() => {
-      }));
-    };
-    next();
+    list.length && SOUND.play(list);
   }
-  var cardCss = (t) => t.css.replace(/@import[^;]+;/g, ""), OVER = `:host{display:block}.card{background:transparent!important;min-height:100%;box-sizing:border-box}hr{border:0;border-top:1px solid #E4E6EC;margin:22px 0}
-a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-body{display:block;animation:in .18s ease-out}
-.audio:not(:has(:not(.snd-btn))){display:none}@keyframes in{from{opacity:0}}`;
+  var autoplayed = "", cardCss = (t) => t.css.replace(/@import[^;]+;/g, ""), OVER = `:host{display:block}.card{background:transparent!important;min-height:100%;box-sizing:border-box}hr{border:0;border-top:1px solid #E4E6EC;margin:22px 0}
+a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn))){display:none}`;
   function draw(host, r, side) {
     let t = r.type, tmpl = t.templates.find((x) => x.ord === r.card.ord) ?? t.templates[0], ctx = { note: r.note, type: t, card: r.card, deck: S.decks.get(r.card.did)?.name }, q = render(tmpl.qfmt, ctx), html = side === "q" ? q : render(tmpl.afmt, ctx, q), root = host.shadowRoot ?? host.attachShadow({ mode: "open" });
-    return root.innerHTML = `<style>${cardCss(t)}${OVER}</style><div class="card card${r.card.ord + 1}">${html}</div>`, root;
+    return root.innerHTML = `<style>${cardCss(t)}${OVER}${RUBY.CSS}</style><div class="card card${r.card.ord + 1}">${html}</div>`, root;
   }
   var view = "review";
   function go(v) {
-    view === "browse" && v !== "browse" && closeSide(), view = v, VIEW_EL.querySelectorAll("[data-v]").forEach((b) => b.setAttribute("aria-current", String(b.dataset.v === v || v === "designs" && b.dataset.v === "settings"))), app.className = "rx-body v-" + v, $(".rx", VIEW_EL).dataset.rx = v, paint();
+    view === "browse" && v !== "browse" && closeSide(), view = v, VIEW_EL.querySelectorAll("[data-v]").forEach((b) => b.setAttribute("aria-current", String(b.dataset.v === v))), app.className = "rx-body v-" + v, $(".rx", VIEW_EL).dataset.rx = v, paint();
     try {
       sessionStorage.setItem("cbp-rx", v);
     } catch {
     }
   }
   function paint() {
-    ready && (view === "review" ? showReview() : view === "browse" ? showBrowse() : view === "settings" ? showSettings() : showDesigns());
+    ready && (view === "review" ? showReview() : view === "browse" ? showBrowse() : showDesigns());
   }
   VIEW_EL.querySelectorAll("[data-v]").forEach(
     (b) => b.onclick = () => {
       let v = b.dataset.v;
-      sfx("tap"), v === "browse" && resetBrowse(), go(v === "settings" && (view === "settings" || view === "designs") ? "review" : v);
+      sfx("tap"), v === "browse" && resetBrowse(), go(v);
     }
   );
-  var RV = { cur: null, shown: !1, py: !1, t0: 0, sinceNew: 0, panel: "", merge: null, deeperFor: 0, flags: !1 };
+  var sitting = !1, RV = { cur: null, shown: !1, py: !1, t0: 0, sinceNew: 0, panel: "", merge: null, deeperFor: 0, flags: !1 };
   function pick() {
     let { k, q } = todayQueue(), now = q.learn.filter((c) => c.due * 1e3 <= k.now);
     if (now.length) return now[0];
@@ -768,7 +757,7 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
   };
   function showReview() {
     if (RV.panel === "deeper") return showDeeper();
-    (!RV.cur || !S.cards.has(RV.cur.id) || RV.cur !== S.cards.get(RV.cur.id) || RV.cur.queue < 0) && (RV.cur = pick(), RV.shown = !1, RV.py = !1, RV.t0 = Date.now());
+    (!RV.cur || !S.cards.has(RV.cur.id) || RV.cur !== S.cards.get(RV.cur.id) || RV.cur.queue < 0) && (RV.cur = pick(), RV.shown = !1, RV.py = RUBY.shown(), RV.t0 = Date.now());
     let c = RV.cur, t = today(), n = left(), prog = `<div class="rx-prog" aria-hidden="true"><i style="width:${t.done + n ? Math.round(t.done / (t.done + n) * 100) : 100}%"></i></div>`;
     if (paintDot(), !c) {
       let nextLearn = live().filter((x) => x.queue === 1).sort((a, b) => a.due - b.due)[0], anyNew = live().some((x) => x.queue === 0);
@@ -793,8 +782,8 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
     </div>
     ${RV.flags ? flagPicker(c) : ""}
   </section>`;
-    let host = $(".host", app), root = draw(host, r, RV.shown ? "a" : "q");
-    RV.shown || root.querySelector("[data-sound]"), playAll(root), bindReview();
+    let host = $(".host", app), root = draw(host, r, RV.shown ? "a" : "q"), side = `${c.id}:${RV.shown ? "a" : "q"}`;
+    side !== autoplayed && (autoplayed = side, SOUND.autoplay() && playAll(root)), RV.py && RUBY.set(root.querySelector(".card"), !0), sitting || (sitting = !0, BUS.emit("reviews:start")), bindReview();
   }
   function bindReview() {
     app.querySelectorAll("[data-a]").forEach((b) => b.onclick = () => act(b.dataset.a)), app.querySelectorAll("[data-g]").forEach((b) => b.onclick = () => grade(Number(b.dataset.g))), app.querySelectorAll("[data-f]").forEach((b) => b.onclick = () => flagIt(Number(b.dataset.f))), app.querySelectorAll("[data-m]").forEach((b) => b.onclick = () => mergeAct(b.dataset.m));
@@ -803,7 +792,16 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
     let c = RV.cur;
     if (!c || !RV.shown) return;
     let r = rowOf(c), a = answer(c, g, conf(), ck(), Date.now() - RV.t0), rows = [["card", c.id, a.card]];
-    if (a.leech && !r.note.tags.includes("leech") && rows.push(["note", r.note.id, { ...r.note, tags: [...r.note.tags, "leech"] }]), await change(["Again", "Hard", "Good", "Easy"][g - 1], rows, c.id), RV.sinceNew = c.type === 0 ? 0 : RV.sinceNew + 1, RV.cur = null, RV.flags = !1, g === 1 && missed3(a.card))
+    a.leech && !r.note.tags.includes("leech") && rows.push(["note", r.note.id, { ...r.note, tags: [...r.note.tags, "leech"] }]), await change(["Again", "Hard", "Good", "Easy"][g - 1], rows, c.id);
+    let n = left();
+    if (BUS.emit("reviews:card", { grade: g, card: c.id, word: wordOfNote(r.note), left: n }), !n) {
+      let d = String(ck().today);
+      try {
+        localStorage.getItem("rv-done") !== d && (localStorage.setItem("rv-done", d), BUS.emit("reviews:done"));
+      } catch {
+      }
+    }
+    if (RV.sinceNew = c.type === 0 ? 0 : RV.sinceNew + 1, RV.cur = null, RV.flags = !1, g === 1 && missed3(a.card))
       RV.panel = "deeper", RV.deeperFor = a.card.id;
     else if (g >= 3 && right3(a.card)) {
       let other = related(a.card);
@@ -816,10 +814,8 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
     if (a === "show")
       return !c || RV.shown ? void 0 : (RV.shown = !0, showReview());
     if (c) {
-      if (a === "py") {
-        RV.py = !RV.py, $(".host", app)?.classList.toggle("py", RV.py);
-        return;
-      }
+      if (a === "py")
+        return RV.py = !RV.py, sfx("tap"), void RUBY.set($(".host", app)?.shadowRoot?.querySelector(".card"), RV.py);
       if (a === "play") return playAll($(".host", app)?.shadowRoot);
       if (a === "edit") return editDialog(S.notes.get(c.nid));
       if (a === "flag")
@@ -963,8 +959,7 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
         let fa = host.querySelector(`.fv[data-o="${ai}"]`), fs = host.querySelector(`.fv[data-o="${si}"]`);
         if (!fa || !fs) return;
         let have = /\[sound:([^\]]+)\]/.exec(fa.textContent ?? "");
-        if (have && !again) return void new Audio(have[1]).play().catch(() => {
-        });
+        if (have && !again) return void SOUND.play(have[1]);
         let text = strip(fs.innerHTML.replace(/<br\s*\/?>|<\/div>/gi, `
 `)).replace(/[ \t]+/g, " ").trim();
         if (!text) return toast("The sentence is empty.");
@@ -972,8 +967,7 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
         fa.classList.add("busy");
         try {
           let { url } = await api("voice", { text });
-          fa.textContent = `[sound:${url}]`, save(), new Audio(url).play().catch(() => {
-          }), sfx("save");
+          fa.textContent = `[sound:${url}]`, save(), sfx("save"), SOUND.play(url);
         } catch (e) {
           toast(esc2(e.message || "The voice didn\u2019t come through."));
         } finally {
@@ -1132,50 +1126,73 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
     for (let x of live()) x.queue >= 0 && x.type !== 0 && x.s && (n += 1 / Math.max(1, Math.min(c.maxIvl, f.interval(x.s, ret))));
     return Math.round(n);
   }
-  function showSettings() {
-    let c = conf(), tuned = c.tuned, fmt = (ms) => new Date(ms).toLocaleDateString([], { month: "short", day: "numeric" });
-    app.innerHTML = `<section class="rs">
-    <div class="rs-row"><div class="rs-l"><label for="rs-new">New cards a day</label><p>More new cards now means more reviews later.</p></div>
-      <div class="rs-c"><div class="stepper"><button type="button" data-n="-1" aria-label="Fewer">\u2212</button><input id="rs-new" inputmode="numeric" value="${c.newPerDay}"><button type="button" data-n="1" aria-label="More">+</button></div></div></div>
-    <div class="rs-row"><div class="rs-l"><label for="rs-ret">How much to remember</label><p>The chance that you still know a card when it comes back. Higher means you forget less and review more.</p></div>
-      <div class="rs-c"><input type="range" id="rs-ret" min="80" max="97" step="1" value="${Math.round(c.retention * 100)}"><p class="rs-v"><b data-js-text class="rs-pct"></b> <span data-js-text class="rs-load"></span></p></div></div>
-    <div class="rs-row"><div class="rs-l"><span class="rs-h">Memory model</span><p>Fits itself to your own reviews once a month, like Anki's Optimize, and keeps the fit only when it predicts your memory better.</p></div>
-      <div class="rs-c"><p class="rs-v" data-js-text>${tuned ? `Last fit ${fmt(tuned.at)}${tuned.better ? `: ${tuned.better}% closer to how you remember` : ": already a good fit"}` : "Not fitted here yet"}</p><button type="button" class="btn-q rs-tune">Fit now</button></div></div>
-    <div class="rs-row"><div class="rs-l"><span class="rs-h">Card designs</span><p>Each note type's fields, front and back, and styling, as in Anki.</p></div>
-      <div class="rs-c"><button type="button" class="btn-q" data-go="designs">Open</button></div></div>
-    <div class="rs-row"><div class="rs-l"><span class="rs-h">Back to Anki</span><p>Everything, reviews and pictures included, as one file Anki opens. Anki replaces its collection with it.</p></div>
-      <div class="rs-c"><button type="button" class="btn rs-dl">Download for Anki</button></div></div>
-    <p class="rs-msg" role="status" data-js-text></p></section>`;
-    let msg = $(".rs-msg", app), ret = $("#rs-ret", app), showRet = () => {
-      $(".rs-pct", app).textContent = `${ret.value}%`, $(".rs-load", app).textContent = `about ${perDay(Number(ret.value) / 100)} reviews a day`;
-    };
-    showRet(), ret.oninput = showRet;
-    let saveConf = async (name, patch) => {
-      try {
-        let cur = conf();
-        await change(name, [["conf", cur.id, { ...cur, ...patch }]]), msg.textContent = "";
-      } catch (e) {
-        msg.textContent = e.message;
-      }
-    };
-    ret.onchange = () => saveConf("Retention", { retention: Number(ret.value) / 100 });
-    let nw = $("#rs-new", app), setNew = (v) => {
-      nw.value = String(Math.max(0, Math.min(200, v))), saveConf("New cards a day", { newPerDay: Number(nw.value) });
-    };
-    nw.onchange = () => setNew(parseInt(nw.value) || 0), app.querySelectorAll("[data-n]").forEach((b) => b.onclick = () => setNew((parseInt(nw.value) || 0) + Number(b.dataset.n))), $("[data-go]", app).onclick = () => go("designs"), $(".rs-tune", app).onclick = async (e) => {
-      let b = e.currentTarget;
-      b.disabled = !0, b.textContent = "Fitting\u2026", await tune(!0), view === "settings" && showSettings();
-    }, $(".rs-dl", app).onclick = async (e) => {
-      let b = e.currentTarget;
-      b.disabled = !0, b.textContent = "Packing\u2026";
-      try {
-        await exportAnki((p) => b.textContent = p), b.textContent = "Download for Anki";
-      } catch (err) {
-        msg.textContent = err.message || "The file didn\u2019t come together.", b.textContent = "Download for Anki";
-      }
-      b.disabled = !1;
-    };
-  }
+  var saveConf = async (name, patch) => {
+    let cur = conf();
+    await change(name, [["conf", cur.id, { ...cur, ...patch }]]);
+  }, fmtDay = (ms) => new Date(ms).toLocaleDateString([], { month: "short", day: "numeric" });
+  LAB.row("rv-new", "Reviews", {
+    html: () => ready ? `<div class="st-row"><label class="st-l" for="rs-new">New cards a day</label><span class="st-step"><button type="button" data-n="-1" aria-label="Fewer">\u2212</button><input id="rs-new" inputmode="numeric" value="${conf().newPerDay}"><button type="button" data-n="1" aria-label="More">+</button></span></div>` : "",
+    bind(el) {
+      let nw = el.querySelector("#rs-new");
+      if (!nw) return;
+      let setNew = (v) => {
+        nw.value = String(Math.max(0, Math.min(200, v))), saveConf("New cards a day", { newPerDay: Number(nw.value) });
+      };
+      nw.onchange = () => setNew(parseInt(nw.value) || 0), el.querySelectorAll("[data-n]").forEach((b) => b.onclick = () => (sfx("tap"), setNew((parseInt(nw.value) || 0) + Number(b.dataset.n))));
+    }
+  });
+  LAB.row("rv-ret", "Reviews", {
+    // the chance a card is still known when it comes back, and what that costs a day
+    html: () => ready ? `<div class="st-row"><label class="st-l" for="rs-ret">How much to remember</label><span class="st-range"><input type="range" id="rs-ret" min="80" max="97" step="1" value="${Math.round(conf().retention * 100)}"><span class="st-v" data-js-text></span></span></div><p class="st-row st-sub"><span class="st-v rs-load" data-js-text></span></p>` : "",
+    bind(el) {
+      let ret = el.querySelector("#rs-ret");
+      if (!ret) return;
+      let show = () => {
+        el.querySelector(".st-range .st-v").textContent = `${ret.value}%`, el.querySelector(".rs-load").textContent = `about ${perDay(Number(ret.value) / 100)} reviews a day`;
+      };
+      show(), ret.oninput = show, ret.onchange = () => saveConf("Retention", { retention: Number(ret.value) / 100 });
+    }
+  });
+  LAB.row("rv-fit", "Reviews", {
+    // fitted to his own reviews once a month, like Anki's Optimize; kept only when it predicts his memory better
+    html: () => {
+      if (!ready) return "";
+      let tuned = conf().tuned;
+      return `<div class="st-row"><span class="st-l">Memory model</span><button type="button" class="st-btn rs-tune">${tuning ? "Fitting\u2026" : tuned ? `Fitted ${fmtDay(tuned.at)}` : "Fit now"}</button></div>`;
+    },
+    bind(el) {
+      let b = el.querySelector(".rs-tune");
+      b && (b.disabled = tuning, b.onclick = async () => {
+        b.disabled = !0, b.textContent = "Fitting\u2026", await tune(!0), SETTINGS.redraw();
+      });
+    }
+  });
+  LAB.row("rv-designs", "Reviews", {
+    html: () => ready ? '<button type="button" class="st-row st-go rs-designs"><span class="st-l">Card designs</span><span class="st-k"></span></button>' : "",
+    bind(el) {
+      let b = el.querySelector(".rs-designs");
+      b && (b.onclick = () => {
+        sfx("tap"), SETTINGS.close(), setView("reviews"), go("designs");
+      });
+    }
+  });
+  LAB.row("rv-dl", "Reviews", {
+    // everything, reviews and pictures included, as one file Anki opens (it replaces Anki's collection)
+    html: () => ready ? '<div class="st-row"><span class="st-l">Back to Anki</span><button type="button" class="st-btn rs-dl">Download</button></div><p class="st-msg" role="status" data-js-text></p>' : "",
+    bind(el) {
+      let b = el.querySelector(".rs-dl");
+      b && (b.onclick = async () => {
+        let msg = el.querySelector(".st-msg");
+        b.disabled = !0, b.textContent = "Packing\u2026";
+        try {
+          await exportAnki((p) => b.textContent = p), msg.textContent = "";
+        } catch (err) {
+          msg.textContent = err.message || "The file didn\u2019t come together.";
+        }
+        b.textContent = "Download", b.disabled = !1;
+      });
+    }
+  });
   var tuning = !1;
   async function tune(now = !1) {
     let c = conf();
@@ -1205,7 +1222,7 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
     let t = S.types.get(TY.id);
     app.innerHTML = `<section class="ty"><div class="ty-top"><button type="button" class="btn-q ty-back" aria-label="Back to settings">\u2039 Settings</button>
     <div class="br-f" role="radiogroup" aria-label="Note type">${types.map((x) => `<button type="button" role="radio" data-ty="${x.id}" aria-checked="${x.id === t.id}">${esc2(x.name.replace(/^Chinese /, "").replace(/^Chinese$/, "Words"))}</button>`).join("")}</div>
-    <div class="br-f" role="radiogroup" aria-label="Part">${["fields", "cards", "css"].map((k) => `<button type="button" role="radio" data-tab="${k}" aria-checked="${TY.tab === k}">${k === "fields" ? "Fields" : k === "cards" ? "Front and back" : "Styling"}</button>`).join("")}</div></div><div class="ty-body"></div></section>`, $(".ty-back", app).onclick = () => go("settings"), app.querySelectorAll("[data-ty]").forEach((b) => b.onclick = () => (TY.id = Number(b.dataset.ty), TY.tmpl = 0, showDesigns())), app.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => (TY.tab = b.dataset.tab, showDesigns()));
+    <div class="br-f" role="radiogroup" aria-label="Part">${["fields", "cards", "css"].map((k) => `<button type="button" role="radio" data-tab="${k}" aria-checked="${TY.tab === k}">${k === "fields" ? "Fields" : k === "cards" ? "Front and back" : "Styling"}</button>`).join("")}</div></div><div class="ty-body"></div></section>`, $(".ty-back", app).onclick = () => (go("review"), SETTINGS.open()), app.querySelectorAll("[data-ty]").forEach((b) => b.onclick = () => (TY.id = Number(b.dataset.ty), TY.tmpl = 0, showDesigns())), app.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => (TY.tab = b.dataset.tab, showDesigns()));
     let body = $(".ty-body", app), sample = [...S.notes.values()].find((x) => x.mid === t.id) ?? { id: 0, guid: "", mid: t.id, mod: 0, tags: [], flds: t.fields.map((f) => f.name) };
     if (TY.tab === "fields") {
       let fs = t.fields.slice().sort((a, b) => a.ord - b.ord);
@@ -1259,25 +1276,26 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
     "keydown",
     (e) => {
       if (VIEW !== "reviews" || e.isComposing) return;
-      let t = e.target, typing = !!t.closest?.('input, textarea, select, [contenteditable="true"]'), mod = MAC ? e.metaKey : e.ctrlKey, k = e.key.toLowerCase();
-      if (mod && !typing && !e.altKey && (k === "z" || k === "y"))
-        return e.preventDefault(), e.stopImmediatePropagation(), document.querySelector("dialog[open]") ? void 0 : k === "y" || e.shiftKey ? redo() : undo();
+      let t = e.target, typing = !!t.closest?.('input, textarea, select, [contenteditable="true"]'), eat = () => (e.preventDefault(), e.stopImmediatePropagation());
+      if (!typing && (KEYS.is(e, "undo") || KEYS.is(e, "redo")))
+        return eat(), document.querySelector("dialog[open]") ? void 0 : KEYS.is(e, "redo") ? redo() : undo();
       if (e.key === "Escape")
         return RV.flags ? (e.stopImmediatePropagation(), RV.flags = !1, showReview()) : view === "browse" && BR.sel.size && !document.querySelector("dialog[open]") ? (e.stopImmediatePropagation(), BR.sel = /* @__PURE__ */ new Set(), closeSide(), paintSel()) : void 0;
-      if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && k === "v" && ED?.host.isConnected) return e.preventDefault(), e.stopImmediatePropagation(), ED.voice(e.shiftKey);
-      if (typing || e.metaKey || e.ctrlKey || e.altKey || document.querySelector("dialog[open]") || view !== "review") return;
+      if (!typing && ED?.host.isConnected && (KEYS.is(e, "rv.voice") || KEYS.is(e, "rv.revoice"))) return eat(), ED.voice(KEYS.is(e, "rv.revoice"));
+      if (typing || document.querySelector("dialog[open]") || view !== "review") return;
       if (RV.flags) {
-        let f = { r: 1, g: 3, n: 0, 0: 0 }[k];
-        if (f != null) return e.preventDefault(), e.stopImmediatePropagation(), flagIt(f);
-        if (k === "f") return e.preventDefault(), act("flag");
+        let f = KEYS.is(e, "rv.red") ? 1 : KEYS.is(e, "rv.green") ? 3 : KEYS.is(e, "rv.noflag") ? 0 : -1;
+        if (f >= 0) return eat(), flagIt(f);
+        if (KEYS.is(e, "rv.flag")) return e.preventDefault(), act("flag");
       }
       let on = t.closest?.("button");
       if ((e.key === " " || e.key === "Enter") && on && !on.matches(".rw-show,.rw-a")) return;
-      if (e.key === " " || e.key === "Enter")
+      if (KEYS.is(e, "rv.show"))
         return e.preventDefault(), RV.shown ? grade(3) : act("show");
-      if (/^[1-4]$/.test(e.key) && RV.shown) return e.preventDefault(), grade(Number(e.key));
-      let a = { s: "suspend", f: "flag", p: "py", v: "play", r: "play", e: "edit" }[k];
-      a && (e.preventDefault(), e.stopImmediatePropagation(), act(a));
+      let g = ["rv.again", "rv.hard", "rv.good", "rv.easy"].findIndex((id) => KEYS.is(e, id));
+      if (g >= 0 && RV.shown) return e.preventDefault(), grade(g + 1);
+      let a = [["rv.suspend", "suspend"], ["rv.flag", "flag"], ["rv.pinyin", "py"], ["rv.play", "play"], ["rv.edit", "edit"]].find(([id]) => KEYS.is(e, id));
+      a && (eat(), act(a[1]));
     },
     !0
   );
@@ -1310,12 +1328,12 @@ a.hint,.snd-btn{display:none!important}.hint-body{display:none}:host(.py) .hint-
         v = sessionStorage.getItem("cbp-rx") || "review";
       } catch {
       }
-      VIEW === "reviews" && go(["review", "browse", "settings", "designs"].includes(v) ? v : "review"), paintDot(), setTimeout(prefetch, 4e3), setTimeout(() => tune().catch(() => {
+      VIEW === "reviews" && go(["review", "browse", "designs"].includes(v) ? v : "review"), SETTINGS.redraw(), paintDot(), setTimeout(prefetch, 4e3), setTimeout(() => tune().catch(() => {
       }), 2e4);
     })();
   }
   BUS.on("view", (v, prev) => {
-    document.getElementById("tab-" + v)?.scrollIntoView({ block: "nearest", inline: "nearest" }), v === "reviews" ? ready ? go(view) : start().then(() => VIEW === "reviews" && ready && go(view)) : prev === "reviews" && (player?.pause(), dropToast(), closeSide(), document.querySelector("dialog.rx-dlg[open]")?.close()), paintDot();
+    document.getElementById("tab-" + v)?.scrollIntoView({ block: "nearest", inline: "nearest" }), v === "reviews" ? ready ? go(view) : start().then(() => VIEW === "reviews" && ready && go(view)) : prev === "reviews" && (SOUND.stop(), sitting = !1, dropToast(), closeSide(), document.querySelector("dialog.rx-dlg[open]")?.close()), paintDot();
   });
   start();
   setInterval(paintDot, 5 * 6e4);

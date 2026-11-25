@@ -1,8 +1,8 @@
 // The board's offline worker (/plus): the page, the board's and the reviews' scripts, fonts, and the cards' pictures and
 // sounds, kept so reviews work with no signal. Network first for the page and code (always the newest when there's
 // signal), the cache when there's none. The cards themselves live in IndexedDB (src/cbp/review/store.ts).
-const V = 'cbp-plus-1';
-const SHELL = ['/plus', '/plus.js', '/plus/anki.js', '/plus/anki.css', '/plus/review.js', '/plus/review.css', '/plus/runtime.js'];
+const V = 'cbp-plus-2';
+const SHELL = ['/plus', '/plus.js', '/plus/anki.js', '/plus/anki.css', '/plus/review.js', '/plus/review.css', '/plus/runtime.js', '/plus/kit.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(V).then((c) => c.addAll(SHELL)).catch(() => {}).then(() => self.skipWaiting()));
@@ -36,6 +36,8 @@ self.addEventListener('fetch', (e) => {
   const u = new URL(req.url);
   if (u.origin === location.origin) {
     if (u.pathname.startsWith('/api/plus/media/')) return e.respondWith(cacheFirst(req, 'cbp-media'));
+    // the pinyin lexicon: big and versioned (?v=), so kept once and read from the device after that
+    if (u.pathname === '/plus/pinyin.txt') return e.respondWith(cacheFirst(req, 'cbp-pinyin'));
     if (u.pathname === '/plus' || u.pathname === '/plus.js' || (u.pathname.startsWith('/plus/') && u.pathname !== '/plus/sw.js')) return e.respondWith(fresh(req));
     return;
   }

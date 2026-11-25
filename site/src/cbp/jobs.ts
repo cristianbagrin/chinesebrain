@@ -16,6 +16,7 @@ import * as MD from './md.ts';
 import { plan as marksPlan, essayToday, norm } from './essays.ts';
 import { loadFiles, listDocs, getDoc, change, today as taipeiToday } from './plus.ts';
 import { putDoc, media, type Env } from './nightly.ts';
+import { modelFor } from './settings.ts';
 
 export const OPUS = 'anthropic:claude-opus-5-5';
 
@@ -103,7 +104,7 @@ export async function essay(env: Env) {
   for (let tries = 0; tries < 3; tries++) {
     let out;
     try {
-      out = json((await ai.text(env, OPUS, essayPrompt(md, e, open, tracked, errs), { effort: 'medium', job: 'essay' })).text);
+      out = json((await ai.text(env, await modelFor(env, 'essay-model'), essayPrompt(md, e, open, tracked, errs), { effort: 'medium', job: 'essay' })).text);
     } catch (x) {
       if (x instanceof ai.Quota) throw x;
       errs = [String((x as Error).message)];

@@ -376,20 +376,7 @@ ES_D.addEventListener('keydown',e=>{
   if(c&&(e.key==='Enter'||e.key===' ')){e.preventDefault();ES_openTip(c,true);return;}
   if(e.target.classList.contains('es-text')&&e.key==='Enter'){e.preventDefault();ES_startEdit(+e.target.dataset.day,null);}
 });
-// hover: the same hit test on every move (one frame at a time); off the highlight, the tip waits a beat, so the
-// pointer can reach it
-if(ES_FINE){
-  let raf=0,last=null;
-  const hover=()=>{
-    raf=0; if(!last||ES.pinned) return;
-    if(last.target&&last.target.closest&&last.target.closest('#es-tip')){clearTimeout(ES.timer);return;}
-    const c=ES_hit(last.x,last.y);
-    if(c){clearTimeout(ES.timer);if(ES.tip!==c.dataset.k)ES_openTip(c,false,last.x,last.y);}
-    else if(ES.tip&&!ES_bridge(last.x,last.y)) ES_closeTip();
-  };
-  ES_D.addEventListener('pointermove',e=>{if(e.pointerType!=='mouse'&&e.pointerType!=='pen')return;last={x:e.clientX,y:e.clientY,target:e.target};if(!raf)raf=requestAnimationFrame(hover);});
-  ES_D.addEventListener('pointerleave',()=>{last=null;if(ES.tip&&!ES.pinned)ES_closeTip();});
-}
+// a mark opens on a click or tap (or Enter), never on hover (his rule, 2026-11-26)
 document.addEventListener('click',e=>{if(ES.tip&&!e.target.closest('#es-tip')&&!e.target.closest('#ess-days'))ES_closeTip();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')ES_closeTip();});
 // his own text inline is off by default (the essay reads clean); the choice stays on this device

@@ -78,8 +78,28 @@ const pages = { ...site, entryPoints: { site: 'site/src/site.ts', edit: 'site/sr
 
 writeFileSync('site/public/brain/demo.json', demoData(readFileSync('site/public/brain.html', 'utf8')));
 
+// Plus's pinyin (site/src/cbp/pinyin.ts): one reading per word from Chinese Brain's dictionary, the one its own lookup
+// shows first (Taiwan's where the MOE dictionary differs), with the word's frequency for splitting sentences.
+{
+  const text = ['dict', 'names'].map((f) => gunzipSync(readFileSync(`static/data/${f}.tsv.gz`)).toString('utf8')).join('\n');
+  const d = Dictionary.fromTsv(text);
+  const lines = new Map();
+  for (const e of d.entries) {
+    const w = e.trad;
+    if (lines.has(w) || !/^[\u3400-\u9fff\uf900-\ufaff]{1,8}$/.test(w)) continue;
+    const best = d.get(w)[0];
+    const py = (best.tw || best.py).replace(/\?/g, '').trim();
+    if (!py || py.split(/\s+/).length !== [...w].length) continue;
+    lines.set(w, [py, Math.round(best.zipf * 10) / 10]);
+  }
+  // a rare word (no frequency) earns its line only when it reads differently from its characters one by one
+  const one = (c) => (lines.get(c)?.[0] ?? '').toLowerCase();
+  for (const [w, [py, z]] of lines) if (!z && [...w].length > 1 && [...w].map(one).join(' ') === py.toLowerCase()) lines.delete(w);
+  writeFileSync('site/public/plus/pinyin.txt', [...lines].map(([w, [py, z]]) => `${w}\t${py}\t${z}`).join('\n') + '\n');
+}
+
 // Chinese Brain Plus's review page (/plus/review): his Anki collection, offline.
-const review = { ...site, entryPoints: { anki: 'site/src/cbp/review/main.ts', tutor: 'site/src/cbp/tutor/main.ts' }, outdir: 'site/public/plus', target: 'es2022' };
+const review = { ...site, entryPoints: { anki: 'site/src/cbp/review/main.ts', tutor: 'site/src/cbp/tutor/main.ts', kit: 'site/src/cbp/kit/main.ts' }, outdir: 'site/public/plus', target: 'es2022' };
 
 const builds = [firefox, chrome, chromeHook, site, pages, review];
 if (watch) {

@@ -2,19 +2,19 @@
    pen on the right, the tutor's on the page, its words as small chips he can tap into a card. */
 .tu{position:relative;max-width:760px;margin:0 auto;display:flex;flex-direction:column;min-height:calc(100dvh - var(--bar) - 120px)}
 .tu-log{flex:1;display:flex;flex-direction:column;gap:var(--s4);padding-bottom:var(--s5)}
-.tu-m{max-width:88%;line-height:1.7;font-size:var(--fs-m)}
+.tu-m{max-width:88%;line-height:var(--read-lh);font-size:var(--fs-m)}
 .tu-m p{margin:0 0 var(--s2)}
 .tu-m p:last-child{margin:0}
-.tu-m .zh{font-size:calc(19px * var(--k))}
+.tu-m .zh{font-size:var(--fs-zh)}
 .tu-m.them{align-self:flex-start;color:var(--ink)}
 .tu-m.me{align-self:flex-end;background:var(--surface);border:1px solid var(--hair);border-radius:16px 16px 4px 16px;padding:var(--s3) var(--s4)}
-.tu-m.me .pen{font-size:calc(20px * var(--pen-k) * var(--k));-webkit-text-stroke:var(--pen-stroke) currentColor}
+.tu-m.me .pen{font-size:calc(var(--fs-zh) * var(--pen-k));-webkit-text-stroke:var(--pen-stroke) currentColor}
 .tu-wait p{color:var(--ink-4);letter-spacing:.2em}
-.tu-w{font:inherit;font-family:var(--zh);font-size:calc(19px * var(--k));border:0;background:var(--gold-wash);color:var(--ink);border-radius:6px;padding:0 5px;margin:0 1px;cursor:pointer;box-shadow:inset 0 -2px 0 var(--gold-edge);transition:background .15s}
+.tu-w{font:inherit;font-family:var(--zh);font-size:var(--fs-zh);border:0;background:var(--gold-wash);color:var(--ink);border-radius:6px;padding:0 5px;margin:0 1px;cursor:pointer;box-shadow:inset 0 -2px 0 var(--gold-edge);transition:background .15s}
 .tu-w:active{transform:translateY(1px)}
 .tu-in{position:sticky;bottom:var(--s4);display:flex;align-items:flex-end;gap:var(--s2);background:var(--surface);border:1px solid var(--hair);border-radius:18px;padding:var(--s2) var(--s2) var(--s2) var(--s4);box-shadow:0 6px 24px var(--shade)}
 .tu-in.off{opacity:.6}
-.tu-in textarea{flex:1;border:0;outline:0;resize:none;background:none;font-family:var(--zh);font-size:calc(20px * var(--k));line-height:1.5;color:var(--ink);padding:var(--s2) 0;max-height:40vh}
+.tu-in textarea{flex:1;border:0;outline:0;resize:none;background:none;font-family:var(--zh);font-size:var(--fs-zh);line-height:1.5;color:var(--ink);padding:var(--s2) 0;max-height:40vh}
 .tu-send{width:40px;height:40px;flex:none;border:0;border-radius:12px;background:var(--ink);color:var(--on-ink);cursor:pointer;display:grid;place-items:center}
 .tu-send::before{content:"";width:18px;height:18px;background:currentColor;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19V5M5 12l7-7 7 7'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19V5M5 12l7-7 7 7'/%3E%3C/svg%3E") center/contain no-repeat}
 .tu-bar{display:flex;justify-content:center;align-items:center;gap:var(--s3);padding:var(--s4) 0 var(--s2)}

@@ -30,14 +30,16 @@
      -webkit-text-stroke:var(--pen-stroke) currentColor, on every surface that shows his own Chinese writing. */
   
 }
-#view-essays{--k:1;--pen-k:1.10}
-/* the size scale: every size on the board is a token times --k (a Lab slider, "Board size"; default .92, "just
-   above the comfort zone" before). The Essays view keeps --k:1 (he likes it as is). New sizes in any file:
-   use a token, or calc(Npx * var(--k)), never a bare px font size. */
-:root,#view-essays{
-  --fs-xs:calc(14px * var(--k)); --fs-s:calc(15.5px * var(--k)); --fs-m:calc(17px * var(--k)); --fs-l:calc(20px * var(--k));
-  --fs-xl:calc(26px * var(--k)); --fs-2xl:calc(38px * var(--k)); --fs-3xl:calc(60px * var(--k));
-  --essay:calc(20px * var(--k)); --essay-lh:1.6;
+#view-essays{--pen-k:1.10}
+/* the type scale (one for every page, 2026-11-26): every size is a token times --k (.92; Settings › Text size › Larger
+   makes it 1.05). --fs-m is the reading size, the Cards page's (17.5px), for running text on every page; --fs-zh is the
+   reading size of running Chinese (22px, the Cards page's sentences). New sizes in any file: use a token, or
+   calc(Npx * var(--k)), never a bare px font size. Declared on :root only, so a page that changes --k for its own spacing
+   still reads at the same sizes. */
+:root{
+  --fs-xs:calc(15px * var(--k)); --fs-s:calc(17px * var(--k)); --fs-m:calc(19px * var(--k)); --fs-l:calc(22px * var(--k));
+  --fs-zh:calc(24px * var(--k)); --fs-xl:calc(28px * var(--k)); --fs-2xl:calc(40px * var(--k)); --fs-3xl:calc(60px * var(--k));
+  --essay:calc(22px * var(--k)); --essay-lh:1.6; --read-lh:1.6;
   --s1:calc(4px * var(--k)); --s2:calc(8px * var(--k)); --s3:calc(12px * var(--k)); --s4:calc(16px * var(--k));
   --s5:calc(24px * var(--k)); --s6:calc(32px * var(--k)); --s7:calc(48px * var(--k)); --s8:calc(64px * var(--k)); --s9:calc(96px * var(--k));
 }
@@ -56,7 +58,7 @@
 }
 
 *{box-sizing:border-box}
-html{background:var(--bg);scroll-padding-top:calc(env(safe-area-inset-top,0px) + var(--bar) + 16px)}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;background:var(--bg);scroll-padding-top:calc(env(safe-area-inset-top,0px) + var(--bar) + 16px)}
 body{background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:var(--fs-m);line-height:1.5;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
 .zh{font-family:var(--zh);font-weight:400}
@@ -143,3 +145,14 @@ html.opt-on .opt:not(.kept){animation:opt-in .14s var(--ease) both}
 @keyframes opt-in{from{opacity:0}}
 /* four pages on a phone: the tabs close up so the bar still fits a 375px screen */
 @media (max-width:440px){.bar-in{gap:8px}.seg{gap:11px}.seg button{font-size:15px}.toc{font-size:15px}.snd,.labbtn{width:30px}}
+/* the tabs never get cut off: on a narrow screen they scroll sideways (the open one is brought into view, core.js), and
+   the right side keeps only what fits: the TOCFL number and the gear */
+@media (max-width:760px){
+  .bar-in{gap:var(--s3)}
+  .seg{flex:1 1 auto;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;overscroll-behavior-x:contain;-webkit-mask:linear-gradient(90deg,#000 calc(100% - 20px),transparent);mask:linear-gradient(90deg,#000 calc(100% - 20px),transparent);padding-right:20px}
+  .seg::-webkit-scrollbar{display:none}
+  .seg button{flex:none;white-space:nowrap}
+  .bar-r{flex:none}
+  .toc .l{display:none}.toc .s{display:inline}.toc{margin-right:0}
+}
+@media (max-width:440px){.toc>.s:nth-child(2){display:none}}

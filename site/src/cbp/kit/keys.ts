@@ -1,0 +1,141 @@
+/* Every shortcut in Plus, in one place, each one his to change (Settings › Shortcuts, or F12). Handlers ask
+     KEYS.is(e, 'rv.play')      does this keydown press the key bound to that action?
+   instead of testing e.key themselves; KEYS.label('rv.play') is how the key is written ("V", "⌘↵").
+   Bindings he changes are saved with his settings (account: settings.ts `keys`), so the phone's keyboard and the laptop
+   agree. A combo is written "mod+shift+z": mod is ⌘ on a Mac and Ctrl elsewhere; keys are e.key lowercased, with
+   "space", "enter", "escape", "arrowleft", "f1"… Several combos for one action are kept apart by spaces.
+   `ctx` says when an action listens (the flag picker open, an editor open, the cursor in a field): two actions only
+   clash when they share a page and a ctx. Typing in a text box is never a shortcut, apart from the `field` ones.
+   New key in a module: add it to DEFS here (the list shows what's here), then KEYS.is(e, id) in the handler. */
+export type Def = { id: string; label: string; group: string; keys: string[]; ctx?: string; fixed?: boolean };
+const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
+
+const D = (group: string, ctx: string | undefined, rows: [string, string, string][]): Def[] => rows.map(([id, label, keys]) => ({ id, label, group, keys: keys.split(' '), ctx }));
+export const DEFS: Def[] = [
+  ...D('Everywhere', undefined, [
+    ['extras', 'Extras', 'f1'],
+    ['settings', 'Settings', 'mod+,'],
+    ['shortcuts', 'Shortcuts', 'f12'],
+    ['undo', 'Undo', 'mod+z'],
+    ['redo', 'Redo', 'mod+shift+z mod+y'],
+  ]),
+  ...D('Reviews', undefined, [
+    ['rv.show', 'Show answer', 'space enter'],
+    ['rv.again', 'Again', '1'],
+    ['rv.hard', 'Hard', '2'],
+    ['rv.good', 'Good', '3'],
+    ['rv.easy', 'Easy', '4'],
+    ['rv.play', 'Play', 'v r'],
+    ['rv.pinyin', 'Pinyin', 'p'],
+    ['rv.edit', 'Edit', 'e'],
+    ['rv.flag', 'Flag', 'f'],
+    ['rv.suspend', 'Suspend', 's'],
+  ]),
+  ...D('Reviews', 'flags', [
+    ['rv.red', 'Red flag', 'r'],
+    ['rv.green', 'Green flag', 'g'],
+    ['rv.noflag', 'No flag', 'n 0'],
+  ]),
+  ...D('Reviews', 'editing', [
+    ['rv.voice', 'Play the sentence', 'v'],
+    ['rv.revoice', 'Make its audio again', 'shift+v'],
+  ]),
+  ...D('Cards', undefined, [
+    ['cd.prev', 'Previous word', 'arrowleft'],
+    ['cd.next', 'Next word', 'arrowright'],
+    ['cd.write', 'Write it, then card it', 'enter'],
+    ['cd.voice', 'Play the sentence', 'v'],
+    ['cd.images', 'Pictures on the web', 'i'],
+  ]),
+  ...D('Cards', 'field', [
+    ['cd.add', 'Add', 'mod+enter'],
+    ['cd.mark', 'Mark the word', 'mod+u'],
+  ]),
+  ...D('Cards', 'sentence', [
+    ['cd.copy', 'Copy the sentence', 'space'],
+    ['cd.pinyin', 'Pinyin over the sentence', 'shift+enter'],
+  ]),
+  ...D('Today', undefined, [
+    ['test.a', 'Choice A', 'a'],
+    ['test.b', 'Choice B', 'b'],
+    ['test.c', 'Choice C', 'c'],
+    ['test.d', 'Choice D', 'd'],
+  ]),
+  ...D('Essays', 'field', [
+    ['im.up', 'Move up', 'mod+shift+arrowup'],
+    ['im.down', 'Move down', 'mod+shift+arrowdown'],
+  ]),
+];
+const BY = new Map(DEFS.map((d) => [d.id, d]));
+let mine: Record<string, string> = {};
+let saveHook: ((keys: Record<string, string>) => void) | null = null;
+
+/** The combo a keydown makes, written the way bindings are. */
+export function combo(e: KeyboardEvent): string {
+  let k = e.key;
+  if (e.altKey && /^Key[A-Z]$/.test(e.code)) k = e.code.slice(3);
+  else if (e.altKey && /^Digit\d$/.test(e.code)) k = e.code.slice(5);
+  k = k === ' ' ? 'space' : k.toLowerCase();
+  if (k === 'esc') k = 'escape';
+  const m: string[] = [];
+  if (MAC ? e.metaKey : e.ctrlKey) m.push('mod');
+  if (MAC && e.ctrlKey) m.push('ctrl');
+  if (!MAC && e.metaKey) m.push('meta');
+  if (e.altKey) m.push('alt');
+  // Shift is part of what's typed for symbols (?, !); it counts for letters, digits and the named keys
+  if (e.shiftKey && (k.length > 1 || /[a-z0-9]/.test(k))) m.push('shift');
+  return [...m, k].join('+');
+}
+const keysOf = (id: string) => (mine[id] != null ? mine[id].split(' ').filter(Boolean) : BY.get(id)?.keys ?? []);
+const MODS = ['control', 'shift', 'alt', 'meta', 'os', 'capslock', 'fn'];
+
+export const KEYS = {
+  defs: DEFS,
+  is: (e: KeyboardEvent, id: string) => !e.isComposing && keysOf(id).includes(combo(e)),
+  keys: keysOf,
+  label(id: string) {
+    const k = keysOf(id)[0];
+    return k ? pretty(k) : '';
+  },
+  pretty,
+  combo,
+  isModifier: (e: KeyboardEvent) => MODS.includes(e.key.toLowerCase()),
+  /** Binds an action to one combo (null: back to its default). An action it clashes with gets this one's old key. */
+  bind(id: string, k: string | null) {
+    const d = BY.get(id);
+    if (!d) return;
+    const was = keysOf(id);
+    if (k) {
+      for (const o of DEFS) {
+        if (o.id === id || !clash(d, o) || !keysOf(o.id).includes(k)) continue;
+        const rest = keysOf(o.id).filter((x) => x !== k);
+        mine[o.id] = (rest.length ? rest : was.slice(0, 1)).join(' ');
+        if (mine[o.id] === o.keys.join(' ')) delete mine[o.id];
+      }
+      mine[id] = k;
+      if (k === d.keys.join(' ')) delete mine[id];
+    } else delete mine[id];
+    saveHook?.({ ...mine });
+  },
+  reset() {
+    mine = {};
+    saveHook?.({});
+  },
+  changed: (id: string) => mine[id] != null,
+  /** settings.ts: what's saved on his account, and where changes go. */
+  load(saved: Record<string, string>, onSave: (keys: Record<string, string>) => void) {
+    mine = { ...saved };
+    saveHook = onSave;
+  },
+};
+const clash = (a: Def, b: Def) => (a.group === b.group || a.group === 'Everywhere' || b.group === 'Everywhere') && (a.ctx ?? '') === (b.ctx ?? '');
+
+const NAMES: Record<string, string> = MAC
+  ? { mod: '⌘', shift: '⇧', alt: '⌥', ctrl: '⌃', enter: '↵', space: 'Space', escape: 'Esc', arrowleft: '←', arrowright: '→', arrowup: '↑', arrowdown: '↓', backspace: '⌫', tab: '⇥' }
+  : { mod: 'Ctrl+', shift: 'Shift+', alt: 'Alt+', meta: 'Win+', enter: 'Enter', space: 'Space', escape: 'Esc', arrowleft: '←', arrowright: '→', arrowup: '↑', arrowdown: '↓', backspace: 'Backspace', tab: 'Tab' };
+function pretty(k: string) {
+  return k
+    .split('+')
+    .map((p, i, a) => (i === a.length - 1 ? NAMES[p] ?? (p.length === 1 ? p.toUpperCase() : p.toUpperCase()) : NAMES[p] ?? p))
+    .join('');
+}

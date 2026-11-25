@@ -9,12 +9,14 @@
 // Each run's report is kept in meta (`nightly`), and the connector's `nightly` tool shows it.
 import * as E from './engine.ts';
 import * as ai from './ai.ts';
+import { modelFor } from './settings.ts';
 import { exportText, type Item } from './brain.ts';
 import { plan as marksPlan, essayToday, norm } from './essays.ts';
 import { loadFiles, listDocs, getDoc, hex, today as taipeiToday } from './plus.ts';
 import { keepMedia } from './cards.ts';
 
 /** The jobs and their models: tests are graded by Sonnet (his pick), written and essays corrected by Opus. */
+// the defaults; Settings › AI can change the grader, the test writer and the essay marker (settings.ts, saved to his account)
 export const GRADER = 'anthropic:claude-sonnet-5-5';
 export const TEST_WRITER = 'anthropic:claude-sonnet-5-5'; // a test every day: Opus cost ~$0.25 a write (measured Nov 25), Sonnet half
 export const ESSAY_MODEL = 'anthropic:claude-opus-5-5';
@@ -174,7 +176,7 @@ A model answer: ${it.model}
 
 The situation: ${a.ask ?? it.ask ?? ''}${it.hear ? `\nThe line he heard: ${it.hear}` : ''}${it.read ? `\nThe line he read: ${it.read}` : ''}
 His answer: ${a.answer}`;
-  const out = json((await ai.text(env, GRADER, p, { effort: 'medium', job: 'grading' })).text);
+  const out = json((await ai.text(env, await modelFor(env, 'grade-model'), p, { effort: 'medium', job: 'grading' })).text);
   const r = String(out.result ?? '').toLowerCase();
   if (!E.RESULTS.includes(r)) throw new Error('no result');
   return { result: r, natural: String(out.natural ?? ''), why: String(out.why ?? '') };
@@ -294,7 +296,7 @@ export async function writeTest(env: Env, files: E.Files, today: string, said: s
   const plan = E.dailyPlan(files, today, { short });
   let problems: string[] = [];
   for (let tries = 0; tries < 2; tries++) {
-    const out = json((await ai.text(env, TEST_WRITER, testPrompt(files, today, plan, problems), { effort: 'medium', maxTokens: 24000, job: 'daily test' })).text);
+    const out = json((await ai.text(env, await modelFor(env, 'test-model'), testPrompt(files, today, plan, problems), { effort: 'medium', maxTokens: 24000, job: 'daily test' })).text);
     const doc: { items: Record<string, unknown>[]; id?: string; missed?: number } = { items: Array.isArray(out.items) ? out.items : [] };
     problems = E.testProblems(files, doc, !!o.refresh || !!o.force);
     if (problems.length) {

@@ -5,6 +5,7 @@ import * as E from './engine.ts';
 import * as ai from './ai.ts';
 import { loadFiles, today, change } from './plus.ts';
 import { modelOf, Bad } from './cards.ts';
+import { modelFor } from './settings.ts';
 
 type Env = Parameters<typeof loadFiles>[0] & Parameters<typeof ai.text>[0];
 
@@ -76,7 +77,7 @@ export async function reply(env: Env, body: { messages?: unknown; model?: unknow
   const head = ask ? `${ASK}\n\nWhat he's learning:\n${context(files, today())}\n\nHis first question follows.` : `${RULES}\n\n${context(files, today())}${focus}\n\nStart the scene now.`;
   const input = [{ role: 'user' as const, content: head }, ...turns];
   if (input[1] && input[1].role === 'user') input.splice(1, 0, { role: 'assistant', content: ask ? '(ready)' : '(scene)' });
-  const model = modelOf(body.model);
+  const model = body.model ? modelOf(body.model) : await modelFor(env as never, 'tutor-model');
   const r = await ai.text(env, model, input, { effort: 'low', job: 'tutor' });
   // the words he used correctly count as a situation (one per chat a day: engine.ts situations)
   const used = /⟪used:([^⟫]*)⟫/.exec(r.text)?.[1] ?? '';

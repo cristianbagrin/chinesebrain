@@ -38,10 +38,10 @@
   </form>
   <div class="tu-bar">
     <div class="tu-mode" role="radiogroup" aria-label="Mode">
-      <button type="button" role="radio" data-mode="scene" title="A scene from your week: you answer, it pushes back">Scene</button>
-      <button type="button" role="radio" data-mode="ask" title="Ask anything: a contrast, how to say it, a sentence to check">Ask</button>
+      <button type="button" role="radio" data-mode="scene">Scene</button>
+      <button type="button" role="radio" data-mode="ask">Ask</button>
     </div>
-    <button type="button" class="tu-new" title="Start over">New</button>
+    <button type="button" class="tu-new">New</button>
   </div>
   <button type="button" class="tu-card" hidden>Card it</button>
 </div>`;
@@ -68,7 +68,7 @@
   }
   function paint() {
     let msgs = talk?.msgs ?? [];
-    LOG.innerHTML = msgs.map((m) => `<div class="tu-m ${m.role === "user" ? "me" : "them"}">${m.role === "user" ? `<p class="zh pen">${esc(m.content).replace(/\n/g, "<br>")}</p>` : rich(m.content)}</div>`).join("") + (busy ? '<div class="tu-m them tu-wait"><p>\u2026</p></div>' : ""), LOG.lastElementChild?.scrollIntoView({ block: "end", behavior: "smooth" }), BOX.disabled = busy || !talk, FORM.classList.toggle("off", busy || !talk);
+    LOG.innerHTML = msgs.map((m) => `<div class="tu-m ${m.role === "user" ? "me" : "them"}">${m.role === "user" ? `<p class="zh pen">${esc(m.content).replace(/\n/g, "<br>")}</p>` : rich(m.content)}</div>`).join("") + (busy ? '<div class="tu-m them tu-wait"><p>\u2026</p></div>' : ""), RUBY.shown() && LOG.querySelectorAll(".tu-m.them").forEach((m) => void RUBY.on(m)), LOG.lastElementChild?.scrollIntoView({ block: "end", behavior: "smooth" }), BOX.disabled = busy || !talk, FORM.classList.toggle("off", busy || !talk);
   }
   async function save() {
     talk && await api("db", { col: "tutor", id: talk.id, op: "set", data: talk }).catch(() => null);
@@ -144,6 +144,7 @@
   CARD.addEventListener("pointerdown", (e) => e.preventDefault());
   CARD.addEventListener("click", () => card(CARD.dataset.w ?? ""));
   TAB.addEventListener("click", () => setView("tutor"));
+  BUS.on("lab", (id) => id === "pinyin" && loaded && paint());
   new MutationObserver(() => {
     !VIEW_EL.hidden && !loaded && load(), VIEW_EL.hidden || setTimeout(() => BOX.focus(), 50);
   }).observe(VIEW_EL, { attributes: !0, attributeFilter: ["hidden"] });

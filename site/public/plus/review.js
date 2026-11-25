@@ -18,12 +18,8 @@
   // His three note types (the switch comes up with Option, like the Word field): a Word (almost always) is a sentence
   // with the word marked, three cards; a Phrase is something said whole and is for no one word (no Word field), one
   // card, picture → the phrase, so it needs a picture; a Radical is a character part with its story.
-  // which model does which job (Settings › Cards; the card writing itself is the board's own "Cards written by")
-  const MODELS = [['haiku', 'Haiku'], ['sonnet', 'Sonnet'], ['opus', 'Opus']];
+  // which model does which job (Settings › AI: 'pinyin-model', 'idea-model', 'draw-model', kit/settings.ts)
   const modelId = (id) => `claude-${LAB.get(id)}-5-5`;
-  LAB.define('pinyin-model', 'Pinyin by', MODELS, 'sonnet', 'Cards');
-  LAB.define('idea-model', 'Picture ideas by', MODELS, 'sonnet', 'Cards');
-  LAB.define('draw-model', 'Drawings by', [['both', 'Both'], ['mai', 'MAI'], ['flux', 'Flux']], 'both', 'Cards');
   const TYPES = [['Chinese', 'Word'], ['Chinese phrases', 'Phrase'], ['Chinese radicals', 'Radical']];
   const token = () => {
     try {
@@ -439,7 +435,6 @@
   }
 
   // ---------- the voice ----------
-  let player = null;
   async function speak() {
     const w = CD.cur, st = w && state(w);
     if (!st || RV.voiceBusy || !plain(st.chinese)) return;
@@ -459,9 +454,7 @@
       }
     }
     if (!st.audio) return;
-    player?.pause();
-    player = new Audio(st.audio);
-    player.play().catch(() => {});
+    SOUND.play(st.audio);
   }
 
   // ---------- pinyin, done for him ----------
@@ -610,7 +603,7 @@
     }
     if (!e.target.closest('.rv-f')) return;
     // Cmd+U marks the word (Chrome would open the page's source otherwise); Cmd+B and Cmd+I are the browser's own
-    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'u') {
+    if (KEYS.is(e, 'cd.mark')) {
       e.preventDefault();
       e.stopPropagation();
       mark(e.target.closest('.rv-f'));
@@ -624,7 +617,7 @@
       changed();
       return;
     }
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    if (KEYS.is(e, 'cd.add')) {
       e.preventDefault();
       add();
     }
@@ -850,10 +843,10 @@
     return copy(sn);
   };
   document.addEventListener('keydown', (e) => {
-    if (VIEW !== 'cards' || !CD.cur || e.isComposing || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (VIEW !== 'cards' || !CD.cur || e.isComposing) return;
     const t = e.target;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-    if (e.key === 'v' || e.key === 'V') {
+    if (KEYS.is(e, 'cd.voice')) {
       e.preventDefault();
       speak();
     }

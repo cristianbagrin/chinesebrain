@@ -99,15 +99,14 @@ function histSound(e,dir){
 function undo(){const e=HIST.undo.pop();if(!e)return;e.card?CD_apply(e,'before'):IM_apply(e,'before');HIST.redo.push(e);sfx(histSound(e,'before'));}
 function redo(){const e=HIST.redo.pop();if(!e)return;e.card?CD_apply(e,'after'):IM_apply(e,'after');HIST.undo.push(e);sfx(histSound(e,'after'));}
 document.addEventListener('keydown',e=>{
-  if(!(e.metaKey||e.ctrlKey)||e.altKey) return;
-  const k=String(e.key).toLowerCase(); if(k!=='z'&&k!=='y') return;
+  const isU=KEYS.is(e,'undo'), isR=KEYS.is(e,'redo'); if(!isU&&!isR) return;
   const a=document.activeElement;
   if(a&&(/^(INPUT|TEXTAREA)$/.test(a.tagName)||a.isContentEditable)){
     // typing keeps the browser's undo; a list field he hasn't typed in yet hands Cmd+Z to the list
     if(!(a.dataset.f&&getText(a)===(a.dataset.start||''))) return;
     a.blur();
   }
-  e.preventDefault(); (k==='y'||e.shiftKey)?redo():undo();
+  e.preventDefault(); isR?redo():undo();
 });
 function IM_msg(t){const el=document.getElementById('ess-done');el.querySelector('.im-err')?.remove();el.insertAdjacentHTML('beforeend',`<p class="im-empty im-err">${esc(t)}</p>`);}
 function IM_toggle(s){
@@ -281,9 +280,10 @@ IM_EL.addEventListener('focusout',e=>{
 IM_EL.addEventListener('keydown',e=>{
   const el=e.target.closest('[data-f]');
   const rowId=e.target.closest('.es-row')?.dataset.r;
-  // Cmd+Shift+↑/↓ (or Alt+Shift) moves the row
-  if(rowId&&(e.key==='ArrowUp'||e.key==='ArrowDown')&&e.shiftKey&&(e.metaKey||e.ctrlKey||e.altKey)){
-    e.preventDefault(); if(el) IM_commit(el); IM_moveBy(rowId,e.key==='ArrowUp'?-1:1); return;
+  // Cmd+Shift+↑/↓ moves the row (KEYS 'im.up', 'im.down')
+  const mv=KEYS.is(e,'im.up')?-1:KEYS.is(e,'im.down')?1:0;
+  if(rowId&&mv){
+    e.preventDefault(); if(el) IM_commit(el); IM_moveBy(rowId,mv); return;
   }
   if(!el||e.isComposing||e.keyCode===229) return;
   const id=el.dataset.id, x=ES.items[id], txt=getText(el), at=caretAt(el);

@@ -11,6 +11,7 @@
 import { DurableObject, WorkerEntrypoint } from 'cloudflare:workers';
 import { annotate, clean, PAGES } from './src/copy.ts';
 import * as plus from './src/cbp/plus.ts';
+import * as settings from './src/cbp/settings.ts';
 import * as taste from './src/cbp/taste.ts';
 import * as ai from './src/cbp/ai.ts';
 import * as cards from './src/cbp/cards.ts';
@@ -842,6 +843,8 @@ async function api(request, env, path) {
         if (path === 'plus/drawings') return await cards.drawings(env, body);
         if (path === 'plus/grab') return await cards.grab(env, body);
         if (path === 'plus/pinyin') return await cards.pinyin(env, body);
+        // his settings, saved to the account (src/cbp/settings.ts)
+        if (path === 'plus/settings') return await settings.save(env, body);
         if (path === 'plus/voice') return await cards.voice(env, body);
         // the tutor (src/cbp/tutor.ts)
         if (path === 'plus/tutor') {
@@ -860,6 +863,7 @@ async function api(request, env, path) {
     if (path === 'plus/anki/pull') return anki.pull(env, Number(q.get('since')) || 0);
     if (path === 'plus/anki/check') return anki.check(env);
     if (path === 'plus/anki/media-map') return json(await anki.mediaMap(env));
+    if (path === 'plus/settings') return settings.settings(env);
     if (path === 'plus/taste') return taste.board(env);
     if (path === 'plus/taste/results') return taste.results(env);
     if (path === 'plus/taste/img') return taste.img(env, q.get('item') ?? '', Number(q.get('n')));

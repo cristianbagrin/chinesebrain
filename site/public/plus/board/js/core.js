@@ -38,26 +38,42 @@ const REDUCED=()=>matchMedia('(prefers-reduced-motion:reduce)').matches;
      'items'             ES.items (To improve) changed            'view' (v, prev)  a view was opened
      'leave' (prev)      a view is being left (close tips, stop edits)   'lab' (id, value)  an experiment changed
      'nodb'              no database in this view (saved copy only)
-   LAB: the choices in Settings (lab.js); each sets data-<id> on <html> so CSS can switch too.
+     Signals for the habit and the companion (wave 1, 2026-11-26); listen with BUS.on(name, fn):
+     'reviews:start'     the first card of a reviews sitting is on screen (review/main.ts)
+     'reviews:card'  ({grade, card, word, left})  a card was answered: grade 1 Again, 2 Hard, 3 Good, 4 Easy; left = cards
+                         still due today
+     'reviews:done'      today's queue just emptied (fires once a day, when the last due card is answered)
+     'essay:written' ({date, chars})  today's essay was saved with text in it (write.js; once per save that grows it)
+   LAB: the choices in Settings (kit/settings.ts draws the panel); each sets data-<id> on <html> so CSS can switch too.
+     LAB.define(id,label,[[value,label]…],default,group,{scope:'account'})  account choices are saved to his account
+     (GET/POST /api/plus/settings) and cached here as 'lab-acct'; the rest stay on this device as lab:<id>.
+     LAB.row(id,group,{html(),bind(el)})  a row drawn by its owner (the Reviews tab's).
    celebrate(kind, opts): fun moments (fun.js); kinds: essay, test, week, crossoff, cards. */
 const BUS={h:{},on(ev,fn){(this.h[ev]=this.h[ev]||[]).push(fn);},emit(ev,...a){(this.h[ev]||[]).forEach(fn=>{try{fn(...a);}catch(e){console.error(ev,e);}});}};
-const LAB={defs:{},order:[],
+const LAB={defs:{},order:[],rows:{},
+  acct:(()=>{try{return JSON.parse(lsGet('lab-acct')||'{}')||{};}catch(e){return {};}})(),
   // define('essay-ui','Writing page',[['ruled','Ruled'],['open','Open page']],'ruled','Today')
-  define(id,label,options,def,group){
+  define(id,label,options,def,group,opt){
     if(!this.defs[id]) this.order.push(id);
-    this.defs[id]={id,label,options,def,group:group||'Board'};
+    const scope=(opt&&opt.scope)||'device';
+    this.defs[id]={id,label,options,def,group:group||'Everyday',scope};
     const q=new URLSearchParams(location.search).get('lab')||'';
     const fromUrl=q.split(',').map(x=>x.split(':')).find(([k])=>k===id);
-    let v=fromUrl?fromUrl[1]:lsGet('lab:'+id);
+    let v=fromUrl?fromUrl[1]:scope==='account'?((this.acct.values||{})[id]??lsGet('lab:'+id)):lsGet('lab:'+id);
     if(!options.some(([o])=>o===v)) v=def;
     this.defs[id].v=v;
     document.documentElement.setAttribute('data-'+id,v);
     return v;
   },
+  row(id,group,o){this.rows[id]={id,group,...o};},
   get(id){return this.defs[id]?this.defs[id].v:null;},
-  set(id,v){const d=this.defs[id];if(!d||d.v===v)return;d.v=v;lsSet('lab:'+id,v);
+  // from: 'server' when his account sent it (so it isn't sent back)
+  set(id,v,from){const d=this.defs[id];if(!d||d.v===v)return;d.v=v;
+    if(d.scope==='account'){(this.acct.values=this.acct.values||{})[id]=v;this.saveAcct();if(from!=='server'&&this.push)this.push();}
+    else lsSet('lab:'+id,v);
     document.documentElement.setAttribute('data-'+id,v);
-    BUS.emit('lab',id,v);}
+    BUS.emit('lab',id,v);},
+  saveAcct(){lsSet('lab-acct',JSON.stringify(this.acct));}
 };
 // 2026-11-01: fonts and sizes are decided (base.css): board 92%, his writing 117% on Today and 110% on Essays, 0.25px.
 function celebrate(kind,opts){try{window.FUN&&window.FUN.celebrate&&window.FUN.celebrate(kind,opts||{});}catch(e){console.error(e);}}
@@ -188,6 +204,8 @@ function setView(v,first){
     const t=document.getElementById('tab-'+x); t.setAttribute('aria-selected',String(x===v)); t.tabIndex=x===v?0:-1;
   });
   moveThumb();
+  // on a narrow screen the tabs scroll: the open one comes into sight
+  try{const t=document.getElementById('tab-'+v);if(TABS.scrollWidth>TABS.clientWidth)t.scrollIntoView({block:'nearest',inline:'nearest'});}catch(e){}
   if(!first) window.scrollTo(0,SCROLL[v]||0);
   if(v==='essays'&&ES.lastReview) lsSet('seen-review',ES.lastReview);
   BUS.emit('view',v,prev);
@@ -211,22 +229,16 @@ addEventListener('resize',moveThumb);
 try{document.fonts&&document.fonts.ready.then(moveThumb);}catch(e){}
 
 
-/* ---------- Option to see more (Alt off a Mac): anything marked .opt shows only while the extras are on. A tap of Option
-   alone turns them on, another tap turns them off (his pick 2026-11-23; before: Control held, Option held, Cmd held);
-   Escape turns them off too. Option used in a shortcut or with a click doesn't count. A click on an extra (or into it) keeps it
-   on screen after they go off (.kept), until the page that holds it moves on (the owner removes .kept). ---------- */
-const OPT_KEY='Alt';
-const OPT={on:false,down:false,other:false};
+/* ---------- F1 for the extras (his pick 2026-11-26; Option before): anything marked .opt shows only while the extras are
+   on. F1 turns them on, F1 again (or Escape) turns them off; the key is his to change (KEYS 'extras'). A click on an extra
+   (or into it) keeps it on screen after they go off (.kept), until the page that holds it moves on (the owner removes .kept). ---------- */
+const OPT={on:false};
 function optSet(on){if(OPT.on===on)return;OPT.on=on;document.documentElement.classList.toggle('opt-on',on);}
 const optOff=()=>optSet(false);
 addEventListener('keydown',e=>{
-  if(e.key===OPT_KEY){if(!e.repeat){OPT.down=true;OPT.other=false;}return;}
-  if(OPT.down)OPT.other=true;
-  else if(e.key==='Escape'&&OPT.on)optSet(false);
+  if(window.KEYS&&KEYS.is(e,'extras')){e.preventDefault();if(!e.repeat)optSet(!OPT.on);return;}
+  if(e.key==='Escape'&&OPT.on)optSet(false);
 },true);
-addEventListener('keyup',e=>{if(e.key===OPT_KEY){if(OPT.down&&!OPT.other)optSet(!OPT.on);OPT.down=false;}},true);
-addEventListener('pointerdown',()=>{if(OPT.down)OPT.other=true;},true);
-addEventListener('blur',()=>{OPT.down=false;});
 addEventListener('pointerdown',e=>{if(!OPT.on)return;const o=e.target.closest&&e.target.closest('.opt');if(o)o.classList.add('kept');},true);
 // a right-click on an extra while they're on does what a click would, with no menu
 addEventListener('contextmenu',e=>{

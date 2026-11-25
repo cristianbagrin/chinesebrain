@@ -15,8 +15,7 @@
    ahead when the board opens on a computer. ---------- */
 const CD={docs:{},kit:null,busy:{},open:null,cur:null,ahead:false,loaded:false};
 const CD_MODELS={haiku:'claude-haiku-5-5',opus:'claude-opus-5-5',sonnet:'claude-sonnet-5-5'};
-LAB.define('card-model','Cards written by',[['haiku','Haiku'],['sonnet','Sonnet'],['opus','Opus']],'sonnet','Cards');
-LAB.define('card-ahead','Next five written ahead',[['on','On'],['off','Off']],'on','Cards');
+// Settings › AI: 'card-model' and 'card-ahead' (defined in kit/settings.ts, saved to his account)
 const cardId=w=>'w'+[...String(w)].map(c=>c.codePointAt(0).toString(16)).join('-');
 const cardOf=w=>CD.docs[cardId(w)]||null;
 // a card in the line format (the first cards, from Nov 4, were plain text: those get rewritten when opened)
@@ -445,7 +444,8 @@ function CD_paintAll(){
 }
 // a sentence's pinyin shows while he wants it (click or Enter on the sentence); it stays shown through repaints
 CD.py=new Set();
-function CD_py(sn){const k=sn.dataset.k;CD.py.has(k)?CD.py.delete(k):CD.py.add(k);sn.classList.toggle('py',CD.py.has(k));sn.setAttribute('aria-expanded',String(CD.py.has(k)));sfx('tap');}
+// the pinyin goes above the characters (RUBY, kit/ruby.ts); the card's own pinyin line stays hidden
+function CD_py(sn){const k=sn.dataset.k;CD.py.has(k)?CD.py.delete(k):CD.py.add(k);const on=CD.py.has(k);sn.classList.toggle('py',on);sn.setAttribute('aria-expanded',String(on));sn.querySelectorAll('.cd-szh').forEach(p=>RUBY.set(p,on));sfx('tap');}
 function CD_inert(){}
 // a word's card, on the Cards page: written now if it isn't yet (unless opt.write is false)
 function openCard(word,src,opt={}){
@@ -489,11 +489,14 @@ function CD_step(dir){
   const rubber=(x,d)=>x*d*.55/(d+.55*Math.abs(x));
   const set=(x,t)=>{sheet.style.transition=t||'none';sheet.style.translate=x?`${x}px 0`:'';};
   sheet.addEventListener('pointerdown',e=>{
-    if(e.pointerType!=='touch'||e.target.closest('input,textarea,[contenteditable=true],button,a'))return;
+    // a finger selecting text (or with a selection on the page) isn't a swipe: the card moving under a selection was the
+    // "page zooms out while I select" on the iPhone (2026-11-26)
+    if(e.pointerType!=='touch'||e.target.closest('input,textarea,[contenteditable=true],button,a')||!getSelection().isCollapsed)return;
     g={id:e.pointerId,x:e.clientX,y:e.clientY,on:false,h:[[e.timeStamp,e.clientX]]};
   });
   addEventListener('pointermove',e=>{
     if(!g||e.pointerId!==g.id)return;
+    if(!getSelection().isCollapsed){g=null;set(0);return;}
     const dx=e.clientX-g.x, dy=e.clientY-g.y;
     if(!g.on){if(Math.hypot(dx,dy)<10)return; if(Math.abs(dx)<Math.abs(dy)*1.4){g=null;return;} g.on=true;g.x0=dx;}
     g.h.push([e.timeStamp,e.clientX]); if(g.h.length>6)g.h.shift();
@@ -595,12 +598,14 @@ CD_EL.querySelector('.cd-ask').addEventListener('submit',e=>{
 });
 document.addEventListener('keydown',e=>{
   if(VIEW!=='cards'||CD.open===null||!CD.cur||e.isComposing) return;
-  const t=e.target; if(t&&(t.tagName==='INPUT'||t.isContentEditable)||e.metaKey||e.ctrlKey||e.altKey) return;
-  if(e.key==='i'){e.preventDefault();window.open(imgURL(CD.cur),'_blank','noopener');}
-  else if(e.key==='ArrowRight'){e.preventDefault();CD_step(1);}
-  else if(e.key==='ArrowLeft'){e.preventDefault();CD_step(-1);}
-  else if(e.key===' '&&t&&t.classList&&t.classList.contains('cd-sent')){e.preventDefault();CD_copy(t);}
-  else if(e.key==='Enter'&&!e.shiftKey){
+  const t=e.target; if(t&&(t.tagName==='INPUT'||t.isContentEditable)) return;
+  const sent=t&&t.classList&&t.classList.contains('cd-sent');
+  if(KEYS.is(e,'cd.images')){e.preventDefault();window.open(imgURL(CD.cur),'_blank','noopener');}
+  else if(KEYS.is(e,'cd.next')){e.preventDefault();CD_step(1);}
+  else if(KEYS.is(e,'cd.prev')){e.preventDefault();CD_step(-1);}
+  else if(sent&&KEYS.is(e,'cd.copy')){e.preventDefault();CD_copy(t);}
+  else if(sent&&KEYS.is(e,'cd.pinyin')){e.preventDefault();CD_py(t);}
+  else if(KEYS.is(e,'cd.write')){
     // Enter writes a card not written yet, else cards it (a focused tab or ‹ › doesn't take Enter for itself)
     const on=t&&t.closest&&t.closest('button,a'); if(on&&!on.matches('.cd-tab,.cd-ib,.cd-done')) return;
     e.preventDefault();
@@ -608,7 +613,6 @@ document.addEventListener('keydown',e=>{
     if(!cardOK(d)){if(!CD.busy[cardId(CD.cur)])makeCard(CD.cur,CD_src(CD.cur),{redo:true});}
     else if(!d.carded) CD_cardIt();
   }
-  else if(e.key==='Enter'&&e.shiftKey&&t&&t.classList&&t.classList.contains('cd-sent')){e.preventDefault();CD_py(t);}
 });
 
 /* ---------- Next up: carded words leave at once ("Any word" is on the Cards page's bar) ---------- */
@@ -641,6 +645,8 @@ function NU_try(q){
   el.addEventListener('pointerdown',e=>{if(e.target===el)go();});
 }
 
+// a sentence showing its pinyin keeps it through repaints (the pinyin is drawn into the text, so it's put back)
+{const paint=CD_paintAll;CD_paintAll=function(...a){paint.apply(this,a);CD_EL.querySelectorAll('.cd-sent.py .cd-szh').forEach(p=>RUBY.on(p));};}
 BUS.on('data',writeAhead);
 BUS.on('lab',id=>{if(id==='card-ahead')writeAhead();});
 (function wait(n){

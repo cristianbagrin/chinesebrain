@@ -8,6 +8,7 @@
 //   clean     once a day (worker.js scheduled), like Anki's Check Media: what nothing points to any more goes
 import * as ai from './ai.ts';
 import { hex } from './plus.ts';
+import * as PY from './pinyin.ts';
 
 type R2Object = { body: ReadableStream; httpMetadata?: { contentType?: string } };
 type Env = {
@@ -28,6 +29,7 @@ type Env = {
   AZURE_SPEECH_REGION?: string;
   ANTHROPIC_API_KEY?: string;
   POLLINATIONS_KEY?: string;
+  ASSETS?: { fetch(r: Request | string): Promise<Response> };
 };
 
 export const CARD_MODEL = 'anthropic:claude-sonnet-5-5';
@@ -214,14 +216,33 @@ export async function drawings(env: Env, b: { word?: unknown; meaning?: unknown;
 }
 
 // ---------- pinyin ----------
-/** POST plus/pinyin {text}: the sentence's Taiwan reading, for the Pinyin field he never has to see. */
+/** The lexicon (site/public/plus/pinyin.txt, from the site's own files), kept between requests. */
+let LEX: Promise<PY.Lex> | null = null;
+export function lexicon(env: Env) {
+  if (!env.ASSETS) return Promise.reject(new Error('no lexicon'));
+  return (LEX ??= env.ASSETS.fetch('https://plus.local/plus/pinyin.txt')
+    .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`lexicon ${r.status}`))))
+    .then(PY.parseLex)
+    .catch((e) => ((LEX = null), Promise.reject(e))));
+}
+/** POST plus/pinyin {text}: the sentence's Taiwan reading, for the Pinyin field he never has to see. Code reads it
+ *  (pinyin.ts: the dictionary's Taiwan readings, 不 and 一's tones); Claude only checks a sentence holding a character
+ *  no rule can read for sure (數, 倒, 傳…), starting from the code's reading. */
 export async function pinyin(env: Env, b: { text?: unknown; model?: unknown }) {
   const text = String(b.text ?? '').trim().slice(0, 600);
   if (!text) return { pinyin: '' };
-  const r = await ai.text(env, modelOf(b.model), `Write the pinyin of this Traditional Chinese text with tone marks, as a Taiwanese speaker says it: Taiwan readings (垃圾 lèsè, 星期 xīngqí, 期 qí, 研究 yánjiù, 誰 shéi), 不 and 一 with their changed tones (bú shì, yí gè, yì tiān), no third-tone sandhi written, neutral tone only where Taiwan dictionaries have it (的 de, 了 le, 嗎 ma, 們 men) and full tones where Taiwan keeps them (東西 dōngxī, 朋友 péngyǒu, 時候 shíhòu, 知道 zhīdào), one pinyin syllable per character. Join the syllables of a dictionary word and keep particles and measure words apart (Wǒmen míngtiān dā huǒchē), capitalize the first word of each sentence, keep the punctuation as English punctuation, and keep the line breaks and any "- " at the start of a line. Reply with the pinyin only.
+  let draft = '';
+  try {
+    const lex = await lexicon(env);
+    draft = PY.sentence(lex, text);
+    if (!PY.unsure(lex, text)) return { pinyin: draft, by: 'code' };
+  } catch (e) {
+    console.error(e);
+  }
+  const r = await ai.text(env, modelOf(b.model), `Write the pinyin of this Traditional Chinese text with tone marks, as a Taiwanese speaker says it: Taiwan readings (垃圾 lèsè, 星期 xīngqí, 期 qí, 研究 yánjiù, 誰 shéi), 不 and 一 with their changed tones (bú shì, yí gè, yì tiān), no third-tone sandhi written, neutral tone only where Taiwan dictionaries have it (的 de, 了 le, 嗎 ma, 們 men) and full tones where Taiwan keeps them (東西 dōngxī, 朋友 péngyǒu, 時候 shíhòu, 知道 zhīdào), one pinyin syllable per character. Join the syllables of a dictionary word and keep particles and measure words apart (Wǒmen míngtiān dā huǒchē), capitalize the first word of each sentence, keep the punctuation as English punctuation, and keep the line breaks and any "- " at the start of a line. Reply with the pinyin only.${draft ? `\n\nA dictionary's reading to start from (fix only what's wrong, usually a character that reads two ways): ${draft}` : ''}
 
 ${text}`, { effort: 'low', job: 'pinyin' });
-  return { pinyin: r.text.trim() };
+  return { pinyin: r.text.trim(), by: 'claude' };
 }
 
 // ---------- the voice ----------

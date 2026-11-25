@@ -289,7 +289,7 @@ function PR_alerts(){
   const key=A&&A.list&&A.list.length?'alerts:'+A.day:null;
   el.hidden=!key||lsGet(key)==='seen';
   if(el.hidden) return;
-  el.innerHTML=`<p class="side-h">Checks · ${fmtDate(A.day)}</p><ul>${A.list.map(x=>`<li${/^Proposal: /.test(x)?' class="pr-prop"':''}>${mix(x)}</li>`).join('')}</ul><button class="pr-x-btn" type="button" title="Seen" aria-label="Seen">×</button>`;
+  el.innerHTML=`<p class="side-h">Checks · ${fmtDate(A.day)}</p><ul>${A.list.map(x=>`<li${/^Proposal: /.test(x)?' class="pr-prop"':''}>${mix(x)}</li>`).join('')}</ul><button class="pr-x-btn" type="button" aria-label="Seen">×</button>`;
   el.querySelector('button').onclick=()=>{lsSet(key,'seen');el.hidden=true;};
 }
 
@@ -299,7 +299,7 @@ function PR_uses(){
   const el=document.getElementById('pr-uses'), U=STATE.uses||{}, by=[[],[],[]];
   for(const [w,n] of Object.entries(U)) if(n<3) by[n].push(w);
   el.hidden=!Object.keys(U).length; if(el.hidden) return;
-  const row=(n,ws)=>ws.length?`<div class="pu-row"><span class="pu-n" title="${n} of 3 situations">${'●'.repeat(n)}${'○'.repeat(3-n)}</span><span class="pu-ws">${ws.slice(0,40).map(w=>`<span class="zh">${esc(w)}</span>`).join(' ')}${ws.length>40?` <span class="pu-more">+${ws.length-40}</span>`:''}</span></div>`:'';
+  const row=(n,ws)=>ws.length?`<div class="pu-row"><span class="pu-n" aria-label="${n} of 3 situations">${'●'.repeat(n)}${'○'.repeat(3-n)}</span><span class="pu-ws">${ws.slice(0,40).map(w=>`<span class="zh">${esc(w)}</span>`).join(' ')}${ws.length>40?` <span class="pu-more">+${ws.length-40}</span>`:''}</span></div>`:'';
   el.innerHTML=`<p class="side-h">On the way to known</p>${row(2,by[2])}${row(1,by[1])}${row(0,by[0])}`;
 }
 

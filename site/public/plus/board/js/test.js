@@ -80,7 +80,7 @@ async function grade(s){
   if(!sm){renderQuiz();return;}
   Q.grading[s.id]=true; renderQuiz();
   try{
-    const opts={modelTier:'default'};
+    const opts={modelTier:'default',model:`claude-${LAB.get('grade-model')||'sonnet'}-5-5`}; // Settings › AI › Tests graded by
     // a photo item: Claude sees the same photo, where this view can send images
     if(s.it.img&&!s.retry){try{const lim=await sm.limits();if(lim&&lim.images){const r=await fetch(s.it.img);if(r.ok){opts.images=[await r.blob()];s.photo=true;}}}catch(e){}}
     const out=await sm.json(gradePrompt(s),opts);
@@ -101,24 +101,12 @@ async function grade(s){
     s.a.later=true;
   }finally{delete Q.grading[s.id];renderQuiz();}
 }
-let PLAYER=null, QZ_keys=()=>{};
-// the Azure recording when the item has one; the browser's voice if it is missing or will not play
-// onEnd runs once it has finished playing
+let QZ_keys=()=>{};
+// the Azure recording when the item has one; the browser's voice if it is missing or will not play (both through SOUND,
+// kit/sound.ts: one voice at a time). onEnd runs once it has finished playing
 async function play(it,rate,onEnd){
-  try{PLAYER&&PLAYER.pause();speechSynthesis.cancel();}catch(e){}
-  if(it.audio){
-    try{PLAYER=new Audio(it.audio);PLAYER.playbackRate=rate;PLAYER.onended=onEnd;await PLAYER.play();return true;}catch(e){console.error(e);}
-  }
-  return speak(it.hear,rate,onEnd);
-}
-function speak(text,rate=1,onEnd){
-  try{
-    if(!('speechSynthesis' in window)) return false;
-    const u=new SpeechSynthesisUtterance(text), vs=speechSynthesis.getVoices();
-    const v=vs.find(v=>/zh[-_]TW/i.test(v.lang))||vs.find(v=>/^zh/i.test(v.lang)&&!/HK|yue/i.test(v.lang));
-    if(v){u.voice=v;u.lang=v.lang;}else u.lang='zh-TW';
-    u.rate=rate; if(onEnd) u.onend=onEnd; speechSynthesis.cancel(); speechSynthesis.speak(u); return true;
-  }catch(e){return false;}
+  if(it.audio&&await SOUND.play(it.audio,{rate,onEnd})) return true;
+  return SOUND.speak(String(it.hear||'').replace(/^[mfg]\s*[:：]\s*/gm,''),{rate,onEnd});
 }
 const SPEAKER='<svg width="16" height="16" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 5h2.5L8 2.2v9.6L4.5 9H2z" fill="currentColor"/><path d="M10 4.5a3.2 3.2 0 0 1 0 5M11.6 3a5.4 5.4 0 0 1 0 8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
 // a monthly-test scene: the photo, and any real text laid over it (or a newspaper on its own)
@@ -254,7 +242,7 @@ function renderQuiz(){
       };
       el.querySelectorAll('.q-ch').forEach(b=>b.onclick=()=>pick(+b.dataset.i));
       document.removeEventListener('keydown',QZ_keys);
-      QZ_keys=e=>{const i='abcd'.indexOf(e.key.toLowerCase());if(i>=0&&!e.metaKey&&!e.ctrlKey&&!e.altKey&&VIEW==='today'&&!/INPUT|TEXTAREA/.test(document.activeElement?.tagName||'')&&!document.activeElement?.isContentEditable){e.preventDefault();pick(i);}};
+      QZ_keys=e=>{const i=['test.a','test.b','test.c','test.d'].findIndex(id=>KEYS.is(e,id));if(i>=0&&VIEW==='today'&&!/INPUT|TEXTAREA/.test(document.activeElement?.tagName||'')&&!document.activeElement?.isContentEditable){e.preventDefault();pick(i);}};
       document.addEventListener('keydown',QZ_keys);
       return;
     }
@@ -319,7 +307,9 @@ function renderAnswers(){
   if(!el){el=document.createElement('section');el.id='answers';el.className='answers';el.setAttribute('aria-label','Answers');q.before(el);}
   const A=(STATE.answers||[]).filter(x=>lsGet('ans:'+x.day+x.q)!=='read');
   el.hidden=!A.length; if(!A.length){el.innerHTML='';return;}
-  el.innerHTML=A.map((x,i)=>`<div class="ans"><p class="ans-q">${zh(x.q)}</p><p class="ans-a">${zh(x.a)}</p><button type="button" class="ans-x" data-i="${i}" title="Read" aria-label="Read">×</button></div>`).join('');
+  el.innerHTML=A.map((x,i)=>`<div class="ans"><p class="ans-q">${zh(x.q)}</p><p class="ans-a">${zh(x.a)}</p><button type="button" class="ans-x" data-i="${i}" aria-label="Read">×</button></div>`).join('');
   el.querySelectorAll('.ans-x').forEach(b=>b.onclick=()=>{const x=A[+b.dataset.i];lsSet('ans:'+x.day+x.q,'read');renderAnswers();});
 }
 BUS.on('data',()=>renderAnswers());
+// Settings › Pinyin shown: the test's Chinese with its pinyin above (kit/ruby.ts); never inside his answer
+{const draw=renderQuiz;renderQuiz=function(...a){const o=draw.apply(this,a);if(RUBY.shown())document.querySelectorAll('#quiz :is(.q-ask,.q-read,.q-heard,.q-ch,.q-nat,.q-why)').forEach(x=>RUBY.on(x));return o;};}
