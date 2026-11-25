@@ -43,3 +43,23 @@ test('weekdays next to dates are checked against the calendar', () => {
   assert.equal(weekdayProblems('12/6 星期六', '2026-12-02').length, 1);
   assert.deepEqual(weekdayProblems('1月2日（六）', '2026-12-02'), []);
 });
+
+import * as E from '../site/src/cbp/engine.ts';
+test('a word counts its situations: one per test day, essay day, tutor chat day; three make it known', () => {
+  const log = 'date\ttarget\tkind\tresult\tnote\n';
+  const files: E.Files = new Map([[E.LOG, log], [E.KW, '順路\tL\t2026-11-20\n']]);
+  E.logRows(files, [{ date: '2026-11-21', target: '順路', kind: 'old', result: 'pass', note: 'a' }, { date: '2026-11-21', target: '順路', kind: 'listen', result: 'pass', note: 'b' }]);
+  assert.equal(E.situations(E.readLog(files), '順路', '2026-11-20').length, 1);
+  E.logRows(files, [{ date: '2026-11-22', target: '順路', kind: 'essay', result: 'pass', note: 'DAY 70' }]);
+  assert.match(files.get(E.KW)!, /順路\tL/);
+  const r = E.logRows(files, [{ date: '2026-11-23', target: '順路', kind: 'free', result: 'pass', note: 'tutor 2026: …' }]);
+  assert.match(r, /L→K/);
+  assert.match(files.get(E.KW)!, /順路\tK\t2026-11-23/);
+});
+
+test('a TOCFL item needs four different choices and a key', () => {
+  const files: E.Files = new Map([[E.LOG, 'date\ttarget\tkind\tresult\tnote\n']]);
+  const it = { label: 'x', kind: 'tocfl', target: 'TOCFL reading', ask: '請選出最適合的詞', read: '他很有（　）', model: '經驗', check: 'c' };
+  assert.equal(E.testProblems(files, { items: [{ ...it, choices: ['經過', '經常', '經驗', '工作'], key: 2 }] }).length, 0);
+  assert.equal(E.testProblems(files, { items: [{ ...it, choices: ['經過', '經過', '經驗', '工作'], key: 4 }] }).length, 2);
+});

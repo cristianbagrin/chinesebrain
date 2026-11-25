@@ -33,7 +33,7 @@
   if (reviews) srcs.splice(srcs.indexOf('/plus/board/js/boot.js'), 0, '/plus/anki.js?v=5');
   // the tutor (plus/tutor.js), behind its own switch
   const tutor = flags.includes('plus.tutor');
-  if (tutor) srcs.splice(srcs.indexOf('/plus/board/js/boot.js'), 0, '/plus/tutor.js?v=3');
+  if (tutor) srcs.splice(srcs.indexOf('/plus/board/js/boot.js'), 0, '/plus/tutor.js?v=4');
   for (const src of [...srcs, '/plus/review.js']) {
     const s = document.createElement('script');
     s.src = src;
