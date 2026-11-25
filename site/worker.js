@@ -722,6 +722,12 @@ async function plusMachine(request, env, url) {
     if (url.pathname === '/api/plus/push/clean') return json(await cards.clean(env));
     // the 10 pm job and the essay corrections, run now (src/cbp/nightly.ts): ?day=YYYY-MM-DD, ?notest=1
     if (url.pathname === '/api/plus/push/nightly') return long(async () => nightly.nightly(env, await ownerBrain(env), { day: url.searchParams.get('day') ?? undefined, noTest: url.searchParams.get('notest') === '1' }));
+    // his Todoist "Chinese" project as the nightly would read it, closing nothing
+    if (url.pathname === '/api/plus/push/todoist') {
+      const said = [];
+      await nightly.drainTodoist(env, new Map(await plus.loadFiles(env)), plus.today(), said, true);
+      return json(said);
+    }
     // CBP's word statuses back to his Chinese Brain account (nightly.ts writeBack); ?dry=1 lists, ?from=YYYY-MM-DD looks further back
     if (url.pathname === '/api/plus/push/brain-back') {
       const said = [], dry = url.searchParams.get('dry') === '1', from = url.searchParams.get('from');

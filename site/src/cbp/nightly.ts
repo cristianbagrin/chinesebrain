@@ -42,8 +42,8 @@ type BrainWord = { w: string; s: 'fresh' | 'learning' | 'known'; p?: string; g?:
  *  one-line answer on his board (board/data `answers`); then the task is closed. Unclear ones stay open. Sonnet reads
  *  them, and only when there are any. */
 const TODOIST = 'https://api.todoist.com/api/v1';
-export async function drainTodoist(env: Env, files: E.Files, day: string, said: string[]) {
-  if (!env.TODOIST_TOKEN) return [];
+export async function drainTodoist(env: Env, files: E.Files, day: string, said: string[], dry = false) {
+  if (!env.TODOIST_TOKEN) return dry ? (said.push('No TODOIST_TOKEN.'), []) : [];
   const get = async (path: string) => {
     const r = await fetch(TODOIST + path, { headers: { Authorization: `Bearer ${env.TODOIST_TOKEN}` } });
     if (!r.ok) throw new Error(`Todoist ${r.status}`);
@@ -53,6 +53,8 @@ export async function drainTodoist(env: Env, files: E.Files, day: string, said: 
   const p = projects.find((x) => /^chinese$|中文/i.test(String(x.name).trim()));
   if (!p) return said.push('! Todoist: no project named Chinese'), [];
   const tasks = (await get(`/tasks?project_id=${p.id}&limit=100`)).results;
+  // a look only: what it would read, nothing called, nothing closed
+  if (dry) return said.push(`Todoist: project "${String(p.name)}", ${tasks.length} open task(s)`, ...tasks.slice(0, 20).map((t) => `  ${String(t.content).slice(0, 80)}`)), [];
   if (!tasks.length) return [];
   const st = E.kwStatus(E.loadKw(files));
   const prompt = `Chris (learning Taiwanese Chinese, high A2) jots things into a Todoist list during his day. Read each and reply with only {"items": [{"id": string, "kind": "word" | "question" | "unclear", "word": string, "pinyin": string, "gloss": string, "lane": "Life" | "Taiwan", "answer": string}]}.
