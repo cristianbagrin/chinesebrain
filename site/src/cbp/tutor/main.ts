@@ -49,21 +49,33 @@ document.getElementById('view-essays')!.after(VIEW_EL);
 VIEWS.splice(VIEWS.indexOf('essays') + 1, 0, 'tutor');
 VIEW_EL.innerHTML = `<div class="tu">
   <div class="tu-log" aria-live="polite"></div>
-  <form class="tu-in">
-    <textarea rows="2" lang="zh-Hant" aria-label="Your answer" placeholder="你的回答…"></textarea>
-    <button type="submit" class="tu-send" aria-label="Send"></button>
-  </form>
-  <div class="tu-bar">
-    <div class="tu-mode" role="radiogroup" aria-label="Mode">
-      <button type="button" role="radio" data-mode="scene">Scene</button>
-      <button type="button" role="radio" data-mode="ask">Ask</button>
+  <div class="tu-dock">
+    <form class="tu-in">
+      <textarea rows="1" lang="zh-Hant" aria-label="Your answer"></textarea>
+      <button type="submit" class="tu-send" aria-label="Send"></button>
+    </form>
+    <div class="tu-bar">
+      <div class="tu-mode" role="radiogroup" aria-label="Mode">
+        <button type="button" role="radio" data-mode="scene">Scene</button>
+        <button type="button" role="radio" data-mode="ask">Ask</button>
+      </div>
+      <button type="button" class="tu-new">New</button>
     </div>
-    <button type="button" class="tu-new">New</button>
   </div>
   <button type="button" class="tu-card" hidden>Card it</button>
 </div>`;
 const LOG = $('.tu-log', VIEW_EL), FORM = $<HTMLFormElement>('.tu-in', VIEW_EL), BOX = $<HTMLTextAreaElement>('textarea', VIEW_EL);
-const CARD = $<HTMLButtonElement>('.tu-card', VIEW_EL);
+const CARD = $<HTMLButtonElement>('.tu-card', VIEW_EL), DOCK = $('.tu-dock', VIEW_EL);
+// the composer is fixed to the bottom of the screen (switching Scene and Ask never moves it); the log keeps room for it
+new ResizeObserver(() => VIEW_EL.style.setProperty('--tu-dock', `${DOCK.offsetHeight}px`)).observe(DOCK);
+// the box grows with what he types, up to a few lines, and shrinks back when it's sent
+function fit() {
+  BOX.style.height = 'auto';
+  BOX.style.height = `${Math.min(BOX.scrollHeight, innerHeight * 0.4)}px`;
+  FORM.classList.toggle('empty', !BOX.value.trim());
+}
+FORM.classList.add('empty');
+BOX.addEventListener('input', fit);
 
 let talk: Talk | null = null, busy = false, loaded = false;
 let mode: Mode = (() => {
@@ -77,7 +89,6 @@ let mode: Mode = (() => {
 const talks: Partial<Record<Mode, Talk>> = {};
 function showMode() {
   for (const b of VIEW_EL.querySelectorAll<HTMLElement>('.tu-mode button')) b.setAttribute('aria-checked', String(b.dataset.mode === mode));
-  BOX.placeholder = mode === 'ask' ? '問我… / Ask anything…' : '你的回答…';
   BOX.setAttribute('aria-label', mode === 'ask' ? 'Your question' : 'Your answer');
 }
 
@@ -153,6 +164,7 @@ FORM.addEventListener('submit', (e) => {
   const t = BOX.value.trim();
   if (!t || busy || !talk) return;
   BOX.value = '';
+  fit();
   talk.msgs.push({ role: 'user', content: t });
   turn();
 });

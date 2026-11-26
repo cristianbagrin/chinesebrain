@@ -42,8 +42,8 @@
 .nu-row{position:relative;grid-column:1/-1;display:grid;grid-template-columns:subgrid;align-items:center;outline-offset:6px}
 .nu-w{font-size:calc(40px * var(--k));line-height:1.15;color:var(--ink);white-space:nowrap}
 .nu-m{display:flex;flex-direction:column;min-width:0}
-.nu-py{font-size:var(--fs-m);line-height:1.4;color:var(--ink-2)}
-.nu-gl{font-size:var(--fs-m);line-height:1.4;color:var(--ink-3);overflow-wrap:anywhere}
+.nu-py{font-size:var(--fs-m);line-height:var(--lh-snug);color:var(--ink-2)}
+.nu-gl{font-size:var(--fs-m);line-height:var(--lh-snug);color:var(--ink-3);overflow-wrap:anywhere}
 .nu-gl .zh{font-size:calc(18px * var(--k))}
 .nu-row.on .nu-gl{color:var(--ink-2)}
 /* the popover: only what isn't on screen (the example) */
@@ -51,7 +51,7 @@
 .nu-pop[hidden]{display:none}
 .nu-pop .nu-py{font-size:var(--fs-m);color:var(--ink-2)}
 .nu-pop .nu-gl{font-size:var(--fs-m);color:var(--ink)}
-.nu-pop .nu-ex{font-family:var(--zh);font-size:var(--fs-l);line-height:1.5;color:var(--ink)}
+.nu-pop .nu-ex{font-family:var(--zh);font-size:var(--fs-l);line-height:var(--lh-zh);color:var(--ink)}
 .nu-pop .nu-ex .zh{font-size:1em}
 .nu-pop .nu-gl+.nu-ex{margin-top:calc(6px * var(--k))}
 @keyframes nupop{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}

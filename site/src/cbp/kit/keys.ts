@@ -18,6 +18,11 @@ export const DEFS: Def[] = [
     ['shortcuts', 'Shortcuts', 'f12'],
     ['undo', 'Undo', 'mod+z'],
     ['redo', 'Redo', 'mod+shift+z mod+y'],
+    // from any page (a field being typed in, or a page's own key, wins: go.ts)
+    ['go.today', 'Today', 't'],
+    ['go.cards', 'Cards', 'c'],
+    ['go.reviews', 'Reviews', 'r'],
+    ['go.browse', 'Browse', 'b'],
   ]),
   ...D('Reviews', undefined, [
     ['rv.show', 'Show answer', 'space enter'],
@@ -25,7 +30,7 @@ export const DEFS: Def[] = [
     ['rv.hard', 'Hard', '2'],
     ['rv.good', 'Good', '3'],
     ['rv.easy', 'Easy', '4'],
-    ['rv.play', 'Play', 'v r'],
+    ['rv.play', 'Play', 'v'],
     ['rv.pinyin', 'Pinyin', 'p'],
     ['rv.edit', 'Edit', 'e'],
     ['rv.flag', 'Flag', 'f'],
@@ -48,13 +53,13 @@ export const DEFS: Def[] = [
     ['cd.images', 'Pictures on the web', 'i'],
   ]),
   ...D('Cards', 'field', [
-    ['cd.add', 'Add', 'mod+enter'],
+    ['cd.add', 'Add and move on', 'mod+shift+enter'],
     ['cd.mark', 'Highlight', 'mod+shift+h'],
   ]),
   // Cards: add and stay, Gemini, rich text in the card's fields
   ...D('Cards', undefined, [['cd.gemini', 'Gemini', 'g']]),
   ...D('Cards', 'field', [
-    ['cd.addstay', 'Add and stay', 'mod+shift+enter'],
+    ['cd.addstay', 'Add and stay', 'mod+enter'],
     ['cd.bold', 'Bold', 'mod+b'],
     ['cd.italic', 'Italic', 'mod+i'],
     ['cd.underline', 'Underline', 'mod+u'],
@@ -64,7 +69,8 @@ export const DEFS: Def[] = [
     ['cd.copy', 'Copy the sentence', 'space'],
     ['cd.pinyin', 'Pinyin over the sentence', 'shift+enter'],
   ]),
-  ...D('Today', undefined, [
+  // a test's choices take their letters while it's on screen, so they may share them with the Go-to keys (go.ts)
+  ...D('Today', 'test', [
     ['test.a', 'Choice A', 'a'],
     ['test.b', 'Choice B', 'b'],
     ['test.c', 'Choice C', 'c'],

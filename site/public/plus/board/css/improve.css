@@ -24,12 +24,12 @@
 .es-ri:hover,.es-ri:focus-within{background:var(--wash)}
 .es-t{min-width:0;display:grid;gap:2px;justify-items:start}
 .es-t>*{max-width:100%}
-.es-w{font-family:var(--zh);font-weight:400;font-size:max(var(--fs-zh),var(--es-imp,21px));line-height:1.5;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere;outline:0;border-radius:4px;min-height:1.5em;cursor:text}
+.es-w{font-family:var(--zh);font-weight:400;font-size:max(var(--fs-zh),var(--es-imp,21px));line-height:var(--lh-zh);color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere;outline:0;border-radius:4px;min-height:1.5em;cursor:text}
 .es-w .es-en,.imt-t .es-en{font:inherit}
 .es-w u.d,.imt-t u.d{text-decoration-line:underline;text-decoration-color:var(--red);text-decoration-thickness:2px;text-underline-offset:.3em;text-decoration-skip-ink:none}
 .es-w:empty::before{content:attr(data-ph);color:var(--ink-4);pointer-events:none}
 .es-w:focus{box-shadow:0 0 0 6px var(--surface);background:var(--surface)}
-.es-o{font-family:var(--zh);font-size:var(--fs-zh);line-height:1.5;overflow-wrap:anywhere;user-select:text}
+.es-o{font-family:var(--zh);font-size:var(--fs-zh);line-height:var(--lh-zh);overflow-wrap:anywhere;user-select:text}
 .es-o .es-en{font:inherit}
 /* the box: Notion's to-do checkbox; ticked, it fills and the tick draws itself */
 .es-box{position:relative;display:grid;place-items:center;width:18px;height:18px;margin-top:.42em;border-radius:3px;border:1.5px solid var(--ink-3);background:var(--surface);color:var(--on-ink);cursor:pointer;padding:0;transition:background .15s,border-color .15s,transform .12s}
@@ -96,6 +96,6 @@
 .imt-in{display:grid;grid-template-columns:18px minmax(0,1fr);gap:0 var(--s3);align-items:start;padding:7px 10px;margin:0 -10px;border-radius:var(--r-s);cursor:pointer;transition:background .15s}
 .imt-in:hover{background:var(--wash)}
 .imt-li.done:not(.jump) .imt-in{cursor:default;background:none}
-.imt-t{font-family:var(--zh);font-weight:400;font-size:var(--fs-l);line-height:1.6;color:var(--ink);overflow-wrap:anywhere}
+.imt-t{font-family:var(--zh);font-weight:400;font-size:var(--fs-l);line-height:var(--lh-zh);color:var(--ink);overflow-wrap:anywhere}
 .imt-in .es-box{margin-top:.38em}
 #improve-today .im-empty{padding-left:0}

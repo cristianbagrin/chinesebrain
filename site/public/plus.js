@@ -31,11 +31,11 @@
   // review card that hooks into the Cards page (plus/review.js)
   const srcs = board.map((f) => `/plus/board/${f}`);
   // the shared parts (plus/kit.js: settings, shortcuts, sound, press and hold, pinyin) right after core.js
-  srcs.splice(srcs.indexOf('/plus/board/js/core.js') + 1, 0, '/plus/kit.js?v=2');
+  srcs.splice(srcs.indexOf('/plus/board/js/core.js') + 1, 0, '/plus/kit.js?v=3');
   if (reviews) srcs.splice(srcs.indexOf('/plus/board/js/boot.js'), 0, '/plus/anki.js?v=7');
   // the tutor (plus/tutor.js), behind its own switch
   const tutor = flags.includes('plus.tutor');
-  if (tutor) srcs.splice(srcs.indexOf('/plus/board/js/boot.js'), 0, '/plus/tutor.js?v=4');
+  if (tutor) srcs.splice(srcs.indexOf('/plus/board/js/boot.js'), 0, '/plus/tutor.js?v=5');
   for (const src of [...srcs, '/plus/review.js']) {
     const s = document.createElement('script');
     s.src = src;
@@ -49,7 +49,7 @@
     document.head.append(l);
   };
   link('stylesheet', '/plus/review.css');
-  if (tutor) link('stylesheet', '/plus/tutor.css?v=3');
+  if (tutor) link('stylesheet', '/plus/tutor.css?v=4');
   if (reviews) {
     link('stylesheet', '/plus/anki.css?v=6');
     link('manifest', '/plus/app.webmanifest');

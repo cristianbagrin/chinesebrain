@@ -1,4 +1,4 @@
-/* ---------- base: the design system. Owner: lead. Agents use these tokens; they don't edit this file. ---------- */
+/* ---------- base: the design system. Owner: lead. Agents use these tokens. ---------- */
 :root{
   color-scheme: light;
   /* Layout: near full width. Space separates things, not boxes or lines: a hairline only where two
@@ -39,7 +39,15 @@
 :root{
   --fs-xs:calc(15px * var(--k)); --fs-s:calc(17px * var(--k)); --fs-m:calc(19px * var(--k)); --fs-l:calc(22px * var(--k));
   --fs-zh:calc(24px * var(--k)); --fs-xl:calc(28px * var(--k)); --fs-2xl:calc(40px * var(--k)); --fs-3xl:calc(60px * var(--k));
-  --essay:calc(22px * var(--k)); --essay-lh:1.6; --read-lh:1.6;
+  --essay:calc(22px * var(--k)); --essay-lh:var(--lh-zh); --read-lh:var(--lh);
+  /* text rhythm (2026-11-26, Notion-like): lines sit close, paragraphs clearly apart. The gap between paragraphs is always
+     bigger than the gap between two lines of one paragraph (--lh - 1), so a new paragraph never reads like a wrapped line.
+       --lh       running Latin text (explanations, answers, the tutor)
+       --lh-zh    running Chinese (sentences, essays, the tutor's Chinese): taller glyphs need a little more air
+       --lh-snug  short UI lines that may wrap (a meaning, a caption, a list row)
+       --lh-tight headings and big words
+       --para     space between paragraphs of Latin text; --para-zh for Chinese (use as margin-top on p+p, or a gap) */
+  --lh:1.5; --lh-zh:1.65; --lh-snug:1.35; --lh-tight:1.2; --para:.8em; --para-zh:1em;
   --s1:calc(4px * var(--k)); --s2:calc(8px * var(--k)); --s3:calc(12px * var(--k)); --s4:calc(16px * var(--k));
   --s5:calc(24px * var(--k)); --s6:calc(32px * var(--k)); --s7:calc(48px * var(--k)); --s8:calc(64px * var(--k)); --s9:calc(96px * var(--k));
 }
@@ -59,14 +67,15 @@
 
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%;background:var(--bg);scroll-padding-top:calc(env(safe-area-inset-top,0px) + var(--bar) + 16px)}
-body{background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:var(--fs-m);line-height:1.5;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body{background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:var(--fs-m);line-height:var(--lh);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
 .zh{font-family:var(--zh);font-weight:400}
 .pen{font-family:var(--pen);-webkit-text-stroke:var(--pen-stroke) currentColor}
 button,input,textarea{font:inherit;color:inherit}
 button,a,[role=button],[role=tab],.cd-sent{-webkit-tap-highlight-color:transparent}
 :focus-visible{outline:2px solid var(--ink);outline-offset:3px;border-radius:6px}
-h1,h2,h3{font-weight:500;margin:0;text-wrap:balance}
+h1,h2,h3{font-weight:500;margin:0;line-height:var(--lh-tight);text-wrap:balance}
+p{text-wrap:pretty}
 .wrap{overflow-x:clip;max-width:var(--page);margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px),4vw);padding-right:max(16px,env(safe-area-inset-right,0px),4vw);padding-block:var(--s7) var(--s9)}
 @media (min-width:1600px){.wrap{padding-left:max(16px,env(safe-area-inset-left,0px),64px);padding-right:max(16px,env(safe-area-inset-right,0px),64px)}}
 

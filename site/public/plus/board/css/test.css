@@ -5,15 +5,16 @@
 .quiz.q-fin{border-color:var(--hair)}
 .quiz.q-fin .q-top{background:var(--wash)}
 .quiz p{margin:0}
+.quiz p+p{margin-top:var(--para)}
 .q-top{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s1) var(--s4);min-height:calc(36px * var(--k));padding:calc(7px * var(--k)) calc(24px * var(--k));background:var(--gold-wash)}
 .q-pips{display:inline-flex;align-items:center;gap:calc(7px * var(--k))}
 .q-lab{font-size:var(--fs-xs);color:var(--gold-ink);opacity:.8}
 .q-body{display:grid;gap:var(--s4);padding:calc(20px * var(--k)) calc(24px * var(--k)) calc(22px * var(--k))}
 .q-body>*{max-width:calc(720px * var(--k))}
-.q-ask{font-size:var(--fs-l);line-height:1.45;color:var(--ink);text-wrap:pretty;overflow-wrap:anywhere}
+.q-ask{font-size:var(--fs-l);line-height:var(--lh);color:var(--ink);text-wrap:pretty;overflow-wrap:anywhere}
 .q-ask .zh{font-size:1.04em}
 /* a reading item: the characters only, big */
-.q-read{font-family:var(--zh);font-size:calc(27px * var(--k));line-height:1.55;letter-spacing:.02em;color:var(--ink);overflow-wrap:anywhere}
+.q-read{font-family:var(--zh);font-size:calc(27px * var(--k));line-height:var(--lh-zh);letter-spacing:.02em;color:var(--ink);overflow-wrap:anywhere}
 .q-ans{display:grid;gap:var(--s2)}
 /* his answer is his writing: the pen */
 .q-in{display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;cursor:text;outline:0;font-family:var(--pen);font-size:calc(19px * var(--k) * var(--pen-k));-webkit-text-stroke:var(--pen-stroke) currentColor;line-height:1.5;
@@ -49,14 +50,14 @@
 .q-verdict{display:grid;gap:var(--s2)}
 .q-res{display:flex;align-items:center;gap:var(--s2);font-size:var(--fs-xs);color:var(--ink-3)}
 .q-res .qp{width:calc(13px * var(--k));height:calc(13px * var(--k))}
-.q-nat{font-size:calc(23px * var(--k));line-height:1.5;color:var(--ink);overflow-wrap:anywhere}
+.q-nat{font-size:calc(23px * var(--k));line-height:var(--lh-zh);color:var(--ink);overflow-wrap:anywhere}
 .q-nat u,.q-sn u{text-decoration:underline 2px var(--ink-4);text-underline-offset:calc(6px * var(--k));text-decoration-skip-ink:none}
 .q-you{display:flex;gap:var(--s3);align-items:baseline;font-size:var(--fs-s);color:var(--ink-3);overflow-wrap:anywhere}
 .q-you .zh{font-size:calc(20px * var(--k))}
 .q-k{flex:none;min-width:calc(44px * var(--k));font-size:var(--fs-xs);color:var(--ink-4)}
 /* what he typed, in his pen */
 .q-mine .zh{font-family:var(--pen);font-size:calc(19px * var(--k) * var(--pen-k));-webkit-text-stroke:var(--pen-stroke) currentColor}
-.q-why{font-size:var(--fs-s);line-height:1.55;color:var(--ink-2);overflow-wrap:anywhere}
+.q-why{font-size:var(--fs-s);line-height:var(--lh);color:var(--ink-2);overflow-wrap:anywhere}
 .q-why .zh{font-size:calc(20px * var(--k))}
 .q-verdict+.q-row{margin-top:var(--s1)}
 

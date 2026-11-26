@@ -3,12 +3,15 @@
 //   SOUND     one voice at a time (sound.ts)            HOLD   press and hold, with a fill (hold.ts)
 //   RUBY      pinyin above the characters (ruby.ts)      KEYS   every shortcut, his to change (keys.ts)
 //   SETTINGS  the one Settings panel (settings.ts); the choices themselves are LAB's (core.js)
+//   go.ts     T, C, R, B open Today, Cards, Reviews, Browse from any page
 // The type tokens and the styles for these are in board/css/base.css and board/css/kit.css.
 import { SOUND } from './sound.ts';
 import { HOLD } from './hold.ts';
 import { RUBY } from './ruby.ts';
 import { KEYS } from './keys.ts';
 import { SETTINGS } from './settings.ts';
+// T, C, R, B: to the pages from anywhere (go.ts)
+import './go.ts';
 // Habit: the habit's rules (day done, rest day, never miss twice, reviews a day), shared with the server
 import * as HABIT from '../habit.ts';
 // (end Habit)

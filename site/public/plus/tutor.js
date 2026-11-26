@@ -32,20 +32,29 @@
   VIEWS.splice(VIEWS.indexOf("essays") + 1, 0, "tutor");
   VIEW_EL.innerHTML = `<div class="tu">
   <div class="tu-log" aria-live="polite"></div>
-  <form class="tu-in">
-    <textarea rows="2" lang="zh-Hant" aria-label="Your answer" placeholder="\u4F60\u7684\u56DE\u7B54\u2026"></textarea>
-    <button type="submit" class="tu-send" aria-label="Send"></button>
-  </form>
-  <div class="tu-bar">
-    <div class="tu-mode" role="radiogroup" aria-label="Mode">
-      <button type="button" role="radio" data-mode="scene">Scene</button>
-      <button type="button" role="radio" data-mode="ask">Ask</button>
+  <div class="tu-dock">
+    <form class="tu-in">
+      <textarea rows="1" lang="zh-Hant" aria-label="Your answer"></textarea>
+      <button type="submit" class="tu-send" aria-label="Send"></button>
+    </form>
+    <div class="tu-bar">
+      <div class="tu-mode" role="radiogroup" aria-label="Mode">
+        <button type="button" role="radio" data-mode="scene">Scene</button>
+        <button type="button" role="radio" data-mode="ask">Ask</button>
+      </div>
+      <button type="button" class="tu-new">New</button>
     </div>
-    <button type="button" class="tu-new">New</button>
   </div>
   <button type="button" class="tu-card" hidden>Card it</button>
 </div>`;
-  var LOG = $(".tu-log", VIEW_EL), FORM = $(".tu-in", VIEW_EL), BOX = $("textarea", VIEW_EL), CARD = $(".tu-card", VIEW_EL), talk = null, busy = !1, loaded = !1, mode = (() => {
+  var LOG = $(".tu-log", VIEW_EL), FORM = $(".tu-in", VIEW_EL), BOX = $("textarea", VIEW_EL), CARD = $(".tu-card", VIEW_EL), DOCK = $(".tu-dock", VIEW_EL);
+  new ResizeObserver(() => VIEW_EL.style.setProperty("--tu-dock", `${DOCK.offsetHeight}px`)).observe(DOCK);
+  function fit() {
+    BOX.style.height = "auto", BOX.style.height = `${Math.min(BOX.scrollHeight, innerHeight * 0.4)}px`, FORM.classList.toggle("empty", !BOX.value.trim());
+  }
+  FORM.classList.add("empty");
+  BOX.addEventListener("input", fit);
+  var talk = null, busy = !1, loaded = !1, mode = (() => {
     try {
       return localStorage.getItem("tutor-mode") === "ask" ? "ask" : "scene";
     } catch {
@@ -54,7 +63,7 @@
   })(), talks = {};
   function showMode() {
     for (let b of VIEW_EL.querySelectorAll(".tu-mode button")) b.setAttribute("aria-checked", String(b.dataset.mode === mode));
-    BOX.placeholder = mode === "ask" ? "\u554F\u6211\u2026 / Ask anything\u2026" : "\u4F60\u7684\u56DE\u7B54\u2026", BOX.setAttribute("aria-label", mode === "ask" ? "Your question" : "Your answer");
+    BOX.setAttribute("aria-label", mode === "ask" ? "Your question" : "Your answer");
   }
   var zhSpan = (t) => t.replace(/([\u3400-\u9fff，。？！、「」『』：；…（）]+)/g, '<span class="zh">$1</span>');
   function rich(t) {
@@ -105,7 +114,7 @@
   FORM.addEventListener("submit", (e) => {
     e.preventDefault();
     let t = BOX.value.trim();
-    !t || busy || !talk || (BOX.value = "", talk.msgs.push({ role: "user", content: t }), turn());
+    !t || busy || !talk || (BOX.value = "", fit(), talk.msgs.push({ role: "user", content: t }), turn());
   });
   BOX.addEventListener("keydown", (e) => {
     e.key === "Enter" && !e.shiftKey && !e.isComposing && (e.preventDefault(), FORM.requestSubmit());
