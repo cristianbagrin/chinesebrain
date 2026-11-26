@@ -22,6 +22,8 @@
 .tu-ic{display:grid;place-items:center;width:36px;height:36px;border:0;border-radius:50%;background:none;color:var(--ink-3);cursor:pointer;transition:background .12s,color .12s}
 .tu-ic svg{width:18px;height:18px}
 .tu-pin[aria-pressed="true"]{background:var(--ink);color:var(--on-ink)}
+/* pinning only means something beside a page wide enough to keep using */
+@media (max-width:899px){.tu-pin{display:none}}
 .tu-scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:var(--s5) var(--s4) var(--s4)}
 .tu{position:relative}
 /* the button in the hot corner: there only while the pointer is in the corner */

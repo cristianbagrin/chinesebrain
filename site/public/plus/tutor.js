@@ -118,9 +118,7 @@
     (PANE.contains(a) || !a || a === document.body) && (e.preventDefault(), closePane());
   });
   addEventListener("keydown", (e) => {
-    if (e.defaultPrevented || e.isComposing || e.repeat || !KEYS.is(e, "tutor")) return;
-    let t = e.target;
-    t?.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])') && !PANE.contains(t) || document.querySelector("dialog[open]") || PANE.contains(t) && t?.closest?.("textarea") || (e.preventDefault(), toggle());
+    e.defaultPrevented || e.isComposing || e.repeat || !KEYS.is(e, "tutor") || (e.target instanceof Element ? e.target : null)?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])') || document.querySelector("dialog[open]") || (e.preventDefault(), toggle());
   });
   var REDUCED = matchMedia("(prefers-reduced-motion: reduce)"), swiping = !1, paneW = () => PANE.offsetWidth + 24;
   function at(x) {
@@ -139,12 +137,12 @@
     }
     if (tr.axis !== "x") return !1;
     let dt = t - tr.t;
-    dt > 0 && (tr.v = tr.v * 0.3 + (x - tr.x) / dt * 0.7), tr.x = x;
+    dt > 0 && (tr.v = tr.v * 0.3 + (x - tr.x) / dt * 0.7), tr.x = x, tr.t = t;
     let p = tr.from + (x - tr.x0);
     return p < 0 && (p = -Math.sqrt(-p) * 2), at(Math.min(p, paneW())), !0;
   }
-  function end() {
-    tr?.axis === "x" ? settle(tr.from + (tr.x - tr.x0), tr.v) : tr && !isOpen() && (PANE.inert = !0), tr = null, setTimeout(() => swiping = !1);
+  function end(e) {
+    tr?.axis === "x" ? settle(tr.from + (tr.x - tr.x0), e && e.timeStamp - tr.t > 100 ? 0 : tr.v) : tr && !isOpen() && (PANE.inert = !0), tr = null, setTimeout(() => swiping = !1);
   }
   addEventListener(
     "touchstart",
@@ -169,8 +167,8 @@
   $(".tu-top", PANE).addEventListener("pointerdown", (e) => {
     if (e.pointerType !== "mouse" || e.button !== 0 || e.target.closest("button")) return;
     tr = begin(e.clientX, e.clientY, e.timeStamp, 0);
-    let move = (m) => step(m.clientX, m.clientY, m.timeStamp), up = () => {
-      removeEventListener("pointermove", move), end();
+    let move = (m) => step(m.clientX, m.clientY, m.timeStamp), up = (u) => {
+      removeEventListener("pointermove", move), end(u);
     };
     addEventListener("pointermove", move), addEventListener("pointerup", up, { once: !0 });
   });

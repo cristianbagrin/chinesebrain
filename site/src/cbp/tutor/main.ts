@@ -180,9 +180,8 @@ document.addEventListener('keydown', (e) => {
 // the shortcut (KEYS 'tutor'), like the go-to keys: not while typing elsewhere, not over a dialog, not for a key a page used
 addEventListener('keydown', (e) => {
   if (e.defaultPrevented || e.isComposing || e.repeat || !KEYS.is(e, 'tutor')) return;
-  const t = e.target as HTMLElement | null;
-  if ((t?.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])') && !PANE.contains(t)) || document.querySelector('dialog[open]')) return;
-  if (PANE.contains(t) && t?.closest?.('textarea')) return;
+  const t = e.target instanceof Element ? e.target : null;
+  if (t?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])') || document.querySelector('dialog[open]')) return;
   e.preventDefault();
   toggle();
 });
@@ -220,14 +219,16 @@ function step(x: number, y: number, t: number): boolean {
   const dt = t - tr.t;
   if (dt > 0) tr.v = tr.v * 0.3 + ((x - tr.x) / dt) * 0.7;
   tr.x = x;
+  tr.t = t;
   let p = tr.from + (x - tr.x0);
   // past open: a little give (rubber band), never further
   if (p < 0) p = -Math.sqrt(-p) * 2;
   at(Math.min(p, paneW()));
   return true;
 }
-function end() {
-  if (tr?.axis === 'x') settle(tr.from + (tr.x - tr.x0), tr.v);
+function end(e?: Event) {
+  // a finger that stopped before it lifted: no flick, only the distance counts
+  if (tr?.axis === 'x') settle(tr.from + (tr.x - tr.x0), e && e.timeStamp - tr.t > 100 ? 0 : tr.v);
   else if (tr && !isOpen()) PANE.inert = true;
   tr = null;
   setTimeout(() => (swiping = false));
@@ -262,9 +263,9 @@ $('.tu-top', PANE).addEventListener('pointerdown', (e) => {
   if (e.pointerType !== 'mouse' || e.button !== 0 || (e.target as Element).closest('button')) return;
   tr = begin(e.clientX, e.clientY, e.timeStamp, 0);
   const move = (m: PointerEvent) => step(m.clientX, m.clientY, m.timeStamp);
-  const up = () => {
+  const up = (u: PointerEvent) => {
     removeEventListener('pointermove', move);
-    end();
+    end(u);
   };
   addEventListener('pointermove', move);
   addEventListener('pointerup', up, { once: true });

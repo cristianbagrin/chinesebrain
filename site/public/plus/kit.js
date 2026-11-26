@@ -578,7 +578,11 @@
   dlg.addEventListener("pointerdown", (e) => {
     if (!PHONE.matches || e.button !== 0 || !e.target.closest(".st-grab,.st-head") || e.target.closest("button")) return;
     let y0 = e.clientY, h = dlg.offsetHeight, dy = 0, last = { y: y0, t: e.timeStamp }, v = 0;
-    dlg.setPointerCapture(e.pointerId), dlg.classList.add("drag");
+    try {
+      dlg.setPointerCapture(e.pointerId);
+    } catch {
+    }
+    dlg.classList.add("drag");
     let move = (m) => {
       let d = m.clientY - y0;
       dy = d > 0 ? d : -Math.sqrt(-d) * 2, dlg.style.transform = `translateY(${dy}px)`;

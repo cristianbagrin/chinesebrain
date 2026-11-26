@@ -350,7 +350,9 @@ dlg.addEventListener('pointerdown', (e) => {
   if (!PHONE.matches || e.button !== 0 || !(e.target as HTMLElement).closest('.st-grab,.st-head') || (e.target as HTMLElement).closest('button')) return;
   const y0 = e.clientY, h = dlg.offsetHeight;
   let dy = 0, last = { y: y0, t: e.timeStamp }, v = 0;
-  dlg.setPointerCapture(e.pointerId);
+  try {
+    dlg.setPointerCapture(e.pointerId);
+  } catch {}
   dlg.classList.add('drag');
   const move = (m: PointerEvent) => {
     const d = m.clientY - y0;
