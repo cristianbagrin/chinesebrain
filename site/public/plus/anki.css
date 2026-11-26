@@ -19,8 +19,9 @@
 }
 
 /* ---------- review ---------- */
-.rx-prog{height:2px;border-radius:2px;background:var(--wash-2);max-width:240px;margin:0 auto var(--s5);overflow:hidden}
-.rx-prog i{display:block;height:100%;background:var(--green);border-radius:3px;transition:width .5s var(--ease)}
+/* how far through today: a hairline, always there; full and green once today is done */
+.rx-prog{height:1.5px;border-radius:1px;background:var(--wash-2);max-width:240px;margin:0 auto var(--s5);overflow:hidden}
+.rx-prog i{display:block;height:100%;background:var(--green);transition:width .5s var(--ease)}
 .rw{position:relative;max-width:760px;margin:0 auto;display:flex;flex-direction:column;min-height:calc(100dvh - var(--bar) - 190px)}
 .rw-card{flex:1;position:relative}
 .rw-card .host{min-height:100%}
@@ -39,6 +40,11 @@
 @media (hover:hover){.rw-a1:hover{background:#F6DEDC}.rw-a2:hover{background:var(--wash-2)}.rw-a3:hover{background:#D9EDE1}.rw-a4:hover{background:#E0E7F2}.rw-show:hover{box-shadow:0 10px 26px -12px rgba(21,23,28,.7)}}
 .rw-more{display:flex;justify-content:center;flex-wrap:wrap;gap:2px;padding:var(--s1) 0 var(--s4)}
 .rw-more .btn-q{color:var(--ink-3)}
+/* a side with sound: the card plays it on a tap, and so does the speaker (a phone doesn't play by itself) */
+.rw-snd{display:inline-grid;place-items:center;padding-inline:14px}
+.rw-snd[hidden]{display:none!important}
+.host.loud{cursor:pointer}
+.rx button,.rw-card{touch-action:manipulation}
 .rw-flagb[aria-expanded=true]{background:var(--wash);color:var(--ink)}
 /* the flag picker: R, G, N while it's open */
 .rw-flags{position:absolute;left:50%;bottom:calc(var(--s7) + 76px);transform:translateX(-50%);z-index:4;display:flex;gap:6px;padding:6px;background:var(--surface);border-radius:16px;box-shadow:0 14px 40px -10px rgba(21,23,28,.28),0 0 0 1px var(--hair);animation:rx-pop .2s var(--spring) both;transform-origin:50% 100%}
@@ -159,6 +165,15 @@
 @media (max-width:860px){.tm{grid-template-columns:1fr}.code,.tm-pv{min-height:30vh}}
 @media (prefers-reduced-motion:reduce){.rx-prog i{transition:none}}
 
+/* a phone: the answer buttons sit low and big, under the thumb; nothing wider than the screen */
+@media (max-width:520px){
+  .rw{min-height:calc(100dvh - var(--bar) - 150px)}
+  .rw-g{gap:6px}
+  .rw-a,.rw-show{min-height:54px;padding:14px 4px}
+  .rw-show{width:100%}
+  .rw-merge{padding:var(--s3)}
+  .rw-flags{bottom:calc(var(--s6) + 72px)}
+}
 /* five pages on a phone: the tabs scroll sideways, the countdown and buttons stay where they are */
 @media (max-width:520px){
   .bar-in>#tabs{flex:1 1 auto;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;overscroll-behavior-x:contain;-webkit-mask:linear-gradient(to right,#000 calc(100% - 18px),transparent);mask:linear-gradient(to right,#000 calc(100% - 18px),transparent)}

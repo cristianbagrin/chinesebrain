@@ -22,7 +22,7 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 export type Ctx = { note: Note; type: NoteType; card: { ord: number }; deck?: string };
 
 /** One side of a card, as HTML. Sounds become play buttons (data-sound). */
-export function render(tmpl: string, x: Ctx, front?: string): string {
+export function render(tmpl: string, x: Ctx, front?: string, mark?: string): string {
   const fields = new Map(x.type.fields.map((f) => [f.name, x.note.flds[f.ord] ?? '']));
   const t = x.type.templates.find((t) => t.ord === x.card.ord);
   const special: Record<string, string> = { FrontSide: front ?? '', Tags: esc(x.note.tags.join(' ')), Deck: esc(x.deck ?? ''), Subdeck: esc((x.deck ?? '').split('::').pop() ?? ''), Card: esc(t?.name ?? ''), Type: esc(x.type.name) };
@@ -40,6 +40,8 @@ export function render(tmpl: string, x: Ctx, front?: string): string {
     const name = parts.pop()!.trim();
     const filters = parts.map((p) => p.trim());
     let v = value(name);
+    // marking (frontShows): a field of the note that has something in it puts the mark where it lands
+    if (mark !== undefined && !(name in special) && !filters.includes('hint')) return nonEmpty(v) ? mark : '';
     for (const f of filters.reverse()) {
       if (f === 'text') v = esc(strip(v));
       else if (f === 'hint') {
@@ -55,12 +57,27 @@ export function render(tmpl: string, x: Ctx, front?: string): string {
 /** [sound:…] → a button that plays it. */
 export const sounds = (html: string) => html.replace(/\[sound:([^\]]+)\]/g, (_, src) => `<button type="button" class="snd-btn" data-sound="${esc(src)}" aria-label="Play"></button>`);
 
-/** Does this card type's front show anything for this note (Anki's rule for which cards exist)? */
+/** Does this card type's front show anything for this note? Anki's rule for which cards exist: the front names at least
+ *  one field that has something in it (static text, {{FrontSide}}, {{Tags}} and hint links don't count). A card whose
+ *  front would be empty (Pic → word on a note with no picture) is left out of reviews. */
 export function frontShows(type: NoteType, note: Note, ord: number) {
   const t = type.templates.find((t) => t.ord === ord);
   if (!t) return false;
-  const html = render(t.qfmt, { note, type, card: { ord } });
-  return nonEmpty(html.replace(/<a class="hint"[\s\S]*?<\/a>/g, ''));
+  return render(t.qfmt, { note, type, card: { ord } }, undefined, '\u0001').includes('\u0001');
+}
+const SHOWS = new Map<number, [number, number, boolean]>();
+/** The cards worth showing: those whose front shows something (frontShows), remembered per card until its note or
+ *  note type changes, so the day's queue can ask on every answer. */
+export function showable<C extends { id: number; nid: number; ord: number }>(cards: C[], noteOf: (nid: number) => Note | undefined, typeOf: (n: Note) => NoteType | undefined): C[] {
+  return cards.filter((c) => {
+    const n = noteOf(c.nid), t = n && typeOf(n);
+    if (!n || !t) return false;
+    const k = SHOWS.get(c.id);
+    if (k && k[0] === n.mod && k[1] === t.mod) return k[2];
+    const v = frontShows(t, n, c.ord);
+    SHOWS.set(c.id, [n.mod, t.mod, v]);
+    return v;
+  });
 }
 
 export const fieldIndex = (type: NoteType, name: string) => type.fields.find((f) => f.name.toLowerCase() === name.toLowerCase())?.ord ?? -1;

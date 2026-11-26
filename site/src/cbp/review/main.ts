@@ -5,7 +5,7 @@
 // Settings panel (LAB.row, kit/settings.ts), and Card designs opens here from there.
 // Adding cards happens on the Cards page only (plus/review.js, its note goes into the collection: src/cbp/anki.ts).
 import { S, load, put, putMany, sync, api, onChange, type Note, type NoteType, type ColMeta } from './store.ts';
-import { render, strip, wordOf, sortText, search, fieldIndex, type Row } from './render.ts';
+import { render, strip, wordOf, sortText, search, fieldIndex, showable, type Row } from './render.ts';
 import { answer, clock, queue, label, missed3, right3, historyOf, type Card, type Conf, type Rev } from '../sched.ts';
 import { Fsrs, optimize, loss } from '../fsrs.ts';
 import { exportAnki } from './export.ts';
@@ -24,6 +24,11 @@ declare const SOUND: { play(src: string | string[], o?: { rate?: number; onEnd?:
 declare const KEYS: { is(e: KeyboardEvent, id: string): boolean; label(id: string): string };
 declare const RUBY: { set(el: Element | ShadowRoot | null | undefined, on: boolean): Promise<void>; shown(): boolean; CSS: string };
 declare const SETTINGS: { open(to?: string): void; close(): void; redraw(): void };
+declare const FUN: { celebrate(kind: string, o?: { x?: number; y?: number }): void } | undefined;
+// the Cards page's (board/js/cards.js), for a combined card
+declare const CD: { docs: Record<string, { dropped?: unknown; carded?: unknown } | undefined> } | undefined;
+declare function cardId(w: string): string;
+declare let cardPrompt: ((kit: unknown, word: string) => string) | undefined;
 
 const $ = <T extends Element = HTMLElement>(s: string, el: ParentNode = document) => el.querySelector(s) as T;
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -67,6 +72,9 @@ const rowOf = (c: Card): Row | null => {
 };
 const cardsOf = (nid: number) => [...S.cards.values()].filter((c) => c.nid === nid).sort((a, b) => a.ord - b.ord);
 const live = () => [...S.cards.values()].filter((c) => S.notes.has(c.nid));
+/** The cards reviews can show: a card whose front would be empty (no picture for Pic → word) is skipped, as Anki would
+ *  never have made it; it comes back by itself once the note has what its front needs. */
+const studyable = () => showable(live(), (id) => S.notes.get(id), typeOf);
 /** What a note is about: its Word field, else its sort field, else its first field. */
 const wordOfNote = (n: Note) => wordOf(typeOf(n), n) || sortText(typeOf(n), n) || strip(n.flds.find((f) => strip(f)) ?? '');
 const wordOfCard = (c: Card) => {
@@ -106,12 +114,12 @@ const more = () => {
 };
 function todayQueue() {
   const k = ck(), t = today();
-  return { k, t, q: queue(live(), conf(), k, new Set(t.seen), Math.max(0, t.fresh - more().fresh), t.revs) };
+  return { k, t, q: queue(studyable(), conf(), k, new Set(t.seen), Math.max(0, t.fresh - more().fresh), t.revs) };
 }
 /** The next review due after today (earliest first), one card per note today; for reviewing ahead. */
 function ahead(): Card | null {
   const k = ck(), seen = today().seen;
-  return live().filter((c) => (c.queue === 2 || c.queue === 3) && c.due > k.today && !seen.has(c.nid)).sort((a, b) => a.due - b.due || a.id - b.id)[0] ?? null;
+  return studyable().filter((c) => (c.queue === 2 || c.queue === 3) && c.due > k.today && !seen.has(c.nid)).sort((a, b) => a.due - b.due || a.id - b.id)[0] ?? null;
 }
 
 // ---------- toasts (the board's look: .toast) ----------
@@ -206,7 +214,8 @@ let autoplayed = '';
 const cardCss = (t: NoteType) => t.css.replace(/@import[^;]+;/g, '');
 // his styling, then the board's ground under it: no white box, no "Show Pinyin" link or play buttons (P and V do those)
 const OVER = `:host{display:block}.card{background:transparent!important;min-height:100%;box-sizing:border-box}hr{border:0;border-top:1px solid #E4E6EC;margin:22px 0}
-a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn))){display:none}`;
+a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn))){display:none}
+img{max-width:100%!important;max-height:min(46vh,460px)!important;width:auto!important;height:auto!important;object-fit:contain!important}`;
 /** Draws one side of a card into `host` with his CSS, kept apart from the page's (a shadow root). */
 function draw(host: HTMLElement, r: Row, side: 'q' | 'a') {
   const t = r.type!, tmpl = t.templates.find((x) => x.ord === r.card.ord) ?? t.templates[0];
@@ -276,9 +285,9 @@ function showReview(): void {
     RV.py = RUBY.shown();
     RV.t0 = Date.now();
   }
-  const c = RV.cur, t = today(), n = left();
-  // how far through today: a thin line, no numbers
-  const prog = `<div class="rx-prog" aria-hidden="true"><i style="width:${t.done + n ? Math.round((t.done / (t.done + n)) * 100) : 100}%"></i></div>`;
+  const c = RV.cur, t = today(), n = c ? Math.max(1, left()) : 0;
+  // how far through today: a hairline, no numbers; full once nothing is left
+  const prog = `<div class="rx-prog" aria-hidden="true"><i style="width:${n ? Math.round((t.done / (t.done + n)) * 100) : 100}%"></i></div>`;
   paintDot();
   if (!c) {
     const nextLearn = live().filter((x) => x.queue === 1).sort((a, b) => a.due - b.due)[0];
@@ -296,6 +305,7 @@ function showReview(): void {
           showReview();
         }),
     );
+    doneToday();
     return;
   }
   const r = rowOf(c)!;
@@ -305,13 +315,18 @@ function showReview(): void {
     <div class="rw-card"><div class="host${RV.py ? ' py' : ''}"></div></div>
     <div class="rw-bar">${RV.shown ? `<div class="rw-g">${['Again', 'Hard', 'Good', 'Easy'].map((x, i) => `<button type="button" class="rw-a rw-a${i + 1}" data-g="${i + 1}">${x}</button>`).join('')}</div>` : `<button type="button" class="rw-show" data-a="show">Show answer</button>`}</div>
     <div class="rw-more rx-opt">
-      ${TOUCH ? `<button type="button" class="btn-q" data-a="py">Pinyin</button><button type="button" class="btn-q" data-a="play">Play</button>` : ''}
+      ${TOUCH ? `<button type="button" class="btn-q" data-a="py">Pinyin</button>` : ''}<button type="button" class="btn-q rw-snd" data-a="play" aria-label="Play" hidden>${SPEAKER}</button>
       <button type="button" class="btn-q" data-a="edit">Edit</button><button type="button" class="btn-q rw-flagb" data-a="flag" aria-haspopup="dialog" aria-expanded="${RV.flags}">Flag</button><button type="button" class="btn-q" data-a="suspend">Suspend</button>
     </div>
     ${RV.flags ? flagPicker(c) : ''}
   </section>`;
   const host = $('.host', app);
   const root = draw(host, r, RV.shown ? 'a' : 'q');
+  // a side with sound: a tap on the card plays it (a phone doesn't play by itself), and the speaker does the same
+  const loud = !!root.querySelector('[data-sound]');
+  $('.rw-snd', app).hidden = !loud;
+  host.classList.toggle('loud', loud);
+  if (loud) host.onclick = (e) => !e.composedPath().some((x) => x instanceof HTMLElement && x.matches('a,button,input,[contenteditable]')) && !String(getSelection() ?? '') && playAll(root);
   // each side plays by itself once (Settings › Card audio plays by itself), not again when it's drawn again
   const side = `${c.id}:${RV.shown ? 'a' : 'q'}`;
   if (side !== autoplayed) {
@@ -332,6 +347,31 @@ function bindReview() {
   app.querySelectorAll<HTMLElement>('[data-m]').forEach((b) => (b.onclick = () => mergeAct(b.dataset.m!)));
 }
 
+/** Today's reviews just ran out, after he answered (or suspended, or deleted) one here: BUS 'reviews:done', once a day,
+ *  with confetti on the end screen. The habit and the character listen for it. */
+let acted = false, doneDay = '';
+function doneToday() {
+  if (!acted) return;
+  acted = false;
+  const d = String(ck().today);
+  try {
+    if (localStorage.getItem('rv-done') === d) doneDay = d;
+    else localStorage.setItem('rv-done', d);
+  } catch {}
+  if (doneDay === d) return;
+  doneDay = d;
+  BUS.emit('reviews:done');
+}
+BUS.on('reviews:done', () => {
+  const el = VIEW === 'reviews' ? app.querySelector('.rw-done') : null;
+  if (!el) return;
+  const b = el.getBoundingClientRect();
+  try {
+    FUN?.celebrate('test', { x: b.left + b.width / 2, y: b.top + b.height / 2 });
+  } catch {}
+});
+const SPEAKER = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 9.5h3.2L12 5.6v12.8l-4.8-3.9H4z" fill="currentColor"/><path d="M15.5 8.8a4.5 4.5 0 0 1 0 6.4M18.2 6.2a8.2 8.2 0 0 1 0 11.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+
 async function grade(g: number) {
   const c = RV.cur;
   if (!c || !RV.shown) return;
@@ -340,18 +380,8 @@ async function grade(g: number) {
   const rows: [Kind, number, any][] = [['card', c.id, a.card]];
   if (a.leech && !r.note.tags.includes('leech')) rows.push(['note', r.note.id, { ...r.note, tags: [...r.note.tags, 'leech'] }]);
   await change(['Again', 'Hard', 'Good', 'Easy'][g - 1], rows, c.id);
-  const n = left();
-  BUS.emit('reviews:card', { grade: g, card: c.id, word: wordOfNote(r.note), left: n });
-  // today's queue just emptied: once a day
-  if (!n) {
-    const d = String(ck().today);
-    try {
-      if (localStorage.getItem('rv-done') !== d) {
-        localStorage.setItem('rv-done', d);
-        BUS.emit('reviews:done');
-      }
-    } catch {}
-  }
+  acted = true;
+  BUS.emit('reviews:card', { grade: g, card: c.id, word: wordOfNote(r.note), left: left() });
   RV.sinceNew = c.type === 0 ? 0 : RV.sinceNew + 1;
   RV.cur = null;
   RV.flags = false;
@@ -387,6 +417,7 @@ async function act(a: string) {
   if (a === 'suspend') {
     await change('Suspend', [['card', c.id, { ...c, queue: -1 }]], c.id);
     sfx('drop');
+    acted = true;
     RV.cur = null;
     showReview();
     toast(`Suspended <span class="zh">${esc(wordOfCard(c))}</span>`, true);
@@ -434,6 +465,7 @@ function showDeeper(): void {
         const d = b.dataset.d;
         if (d === 'skip') return endDeeper();
         if (d === 'del') {
+          acted = true;
           await deleteNote(r.note.id);
           endDeeper();
           return;
@@ -532,18 +564,58 @@ async function mergeAct(m: string) {
   }
   combine(x, y);
 }
-/** One card about the difference: Claude writes it on the Cards page, he makes the note there; the two old cards rest
- *  (suspended, Undo brings them back). */
+/** One card about the difference: Claude writes it on the Cards page and he makes the note there, as with any card. Once
+ *  that note reaches the collection, the two old cards rest (suspended; Undo brings them back). If he drops the card
+ *  instead, or never makes it, nothing was suspended. */
+type Pair = { words: string; nids: [number, number]; at: number };
+const pairs = (): Pair[] => (S.meta.get('combine')?.list as Pair[]) ?? [];
 async function combine(x: number, y: number) {
-  const [a, b] = [S.notes.get(x)!, S.notes.get(y)!];
+  const [a, b] = [S.notes.get(x), S.notes.get(y)];
+  if (!a || !b) return;
   const words = `${wordOfNote(a)}、${wordOfNote(b)}`;
-  const old = [...cardsOf(x), ...cardsOf(y)].filter((c) => c.queue >= 0);
-  await change('Combine', old.map((c) => ['card', c.id, { ...c, queue: -1, flags: (c.flags & 7) === 3 ? c.flags & ~7 : c.flags }]));
-  setView('cards');
+  await put('meta', 'combine', { list: [...pairs().filter((p) => p.words !== words), { words, nids: [x, y], at: Date.now() }] });
+  // openCard moves to the Cards page itself (setView first made that page open on the card it had before)
   try {
     openCard(words, 'any');
   } catch {}
-  toast(`Writing <span class="zh">${esc(words)}</span>. The old cards are suspended.`, true);
+}
+/** The pairs waiting on a combined card: its note arrived (the old cards rest), it was dropped, or it's two weeks old. */
+let settling = false;
+async function settlePairs() {
+  const list = pairs();
+  if (!ready || settling || !list.length) return;
+  settling = true;
+  try {
+    const keep: Pair[] = [];
+    for (const p of list) {
+      const parts = p.words.split('、');
+      const made = [...S.notes.values()].find((n) => n.id > p.at - 60e3 && !p.nids.includes(n.id) && parts.every((w) => wordOfNote(n).includes(w)));
+      const doc = typeof CD !== 'undefined' && typeof cardId === 'function' ? CD.docs[cardId(p.words)] : undefined;
+      if (made) {
+        const old = [...cardsOf(p.nids[0]), ...cardsOf(p.nids[1])].filter((c) => c.queue >= 0);
+        if (old.length) {
+          await change('Combine', old.map((c) => ['card', c.id, { ...c, queue: -1, flags: (c.flags & 7) === 3 ? c.flags & ~7 : c.flags }]));
+          if (VIEW === 'reviews') toast(`<span class="zh">${esc(p.words)}</span>: the old cards rest`, true);
+        }
+      } else if (!doc?.dropped && Date.now() - p.at < 14 * 864e5) keep.push(p);
+    }
+    if (keep.length !== list.length) await put('meta', 'combine', { list: keep });
+  } finally {
+    settling = false;
+  }
+}
+// the card Claude writes for a pair is about the difference (the Cards page's prompt, with this added for a pair)
+if (typeof cardPrompt === 'function') {
+  const base = cardPrompt;
+  cardPrompt = (kit, word) => {
+    const p = pairs().find((x) => x.words === word);
+    if (!p) return base(kit, word);
+    const [a, b] = p.words.split('、');
+    return `${base(kit, word)}
+
+=== A PAIR ===
+${a} and ${b} are both easy for him now. This card replaces their two cards: it is about the difference between them, the one thing he could still mix up. word: ${word}. pinyin: both readings. meaning: the difference, in a few words. ex: exactly two sentences, one where only ${a} fits and one where only ${b} fits. know: 2 or 3 points on when a Taiwanese person reaches for which. One char: line per distinct character, no how: lines, no second: line.`;
+  };
 }
 
 // ================= the editor: his fields, and a quiet delete =================
@@ -585,9 +657,11 @@ function editor(host: HTMLElement, note0: Note, onClose?: () => void) {
   // V (not typing): the sentence read aloud into the Audio field, made now if it has none (Shift+V makes it again)
   const ai = t.fields.find((f) => /^audio$/i.test(f.name))?.ord ?? -1;
   const si = t.fields.find((f) => /^chinese$/i.test(f.name))?.ord ?? 0;
+  let voicing = false;
   ED = {
     host,
     voice: async (again: boolean) => {
+      if (voicing) return;
       const fa = host.querySelector<HTMLElement>(`.fv[data-o="${ai}"]`), fs = host.querySelector<HTMLElement>(`.fv[data-o="${si}"]`);
       if (!fa || !fs) return;
       const have = /\[sound:([^\]]+)\]/.exec(fa.textContent ?? '');
@@ -596,6 +670,7 @@ function editor(host: HTMLElement, note0: Note, onClose?: () => void) {
       if (!text) return toast('The sentence is empty.');
       if (!navigator.onLine) return toast('The voice needs signal.');
       fa.classList.add('busy');
+      voicing = true;
       try {
         const { url } = await api('voice', { text });
         fa.textContent = `[sound:${url}]`;
@@ -605,6 +680,7 @@ function editor(host: HTMLElement, note0: Note, onClose?: () => void) {
       } catch (e) {
         toast(esc((e as Error).message || 'The voice didn’t come through.'));
       } finally {
+        voicing = false;
         fa.classList.remove('busy');
       }
     },
@@ -1100,7 +1176,8 @@ addEventListener(
       return;
     }
     // an editor open (the dialog or Browse's side): the sentence's audio, made if there is none (or made again)
-    if (!typing && ED?.host.isConnected && (KEYS.is(e, 'rv.voice') || KEYS.is(e, 'rv.revoice'))) return eat(), ED.voice(KEYS.is(e, 'rv.revoice'));
+    // (a held key repeats: only the first press counts, or one V made two recordings and played both)
+    if (!typing && ED?.host.isConnected && (KEYS.is(e, 'rv.voice') || KEYS.is(e, 'rv.revoice'))) return eat(), e.repeat ? undefined : ED.voice(KEYS.is(e, 'rv.revoice'));
     if (typing || document.querySelector('dialog[open]') || view !== 'review') return;
     // the flag picker, while open, takes its own keys
     if (RV.flags) {
@@ -1119,7 +1196,7 @@ addEventListener(
     const a = ([['rv.suspend', 'suspend'], ['rv.flag', 'flag'], ['rv.pinyin', 'py'], ['rv.play', 'play'], ['rv.edit', 'edit']] as const).find(([id]) => KEYS.is(e, id));
     if (a) {
       eat();
-      act(a[1]);
+      if (!e.repeat || a[1] !== 'play') act(a[1]);
     }
   },
   true,
@@ -1136,6 +1213,7 @@ function paintDot() {
 }
 onChange((what) => {
   paintSync();
+  if (what === 'pulled') void settlePairs();
   if (what !== 'pulled' || VIEW !== 'reviews') return paintDot();
   // another device answered or changed something: the card on screen stays unless it changed
   if (view === 'review' && !RV.shown && !document.querySelector('dialog[open]') && !VIEW_EL.contains(document.activeElement)) showReview();
@@ -1167,6 +1245,7 @@ function start() {
     if (VIEW === 'reviews') go(['review', 'browse', 'designs'].includes(v) ? v : 'review');
     SETTINGS.redraw();
     paintDot();
+    void settlePairs();
     setTimeout(prefetch, 4000);
     // the monthly fit, when the device is idle
     setTimeout(() => tune().catch(() => {}), 20_000);
@@ -1177,7 +1256,12 @@ BUS.on('view', (v: string, prev: string) => {
   document.getElementById('tab-' + v)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   if (v === 'reviews') {
     if (!ready) start().then(() => VIEW === 'reviews' && ready && go(view));
-    else go(view);
+    else {
+      go(view);
+      // what other devices (and the Cards page) did comes in now; a combined card's note settles its pair (settlePairs)
+      void sync();
+    }
+    void settlePairs();
   } else if (prev === 'reviews') {
     SOUND.stop();
     sitting = false;
@@ -1186,6 +1270,12 @@ BUS.on('view', (v: string, prev: string) => {
     document.querySelector<HTMLDialogElement>('dialog.rx-dlg[open]')?.close();
   }
   paintDot();
+});
+// Settings › Pinyin: the card on screen follows at once
+BUS.on('lab', (id: string) => {
+  if (id !== 'pinyin' || view !== 'review' || !RV.cur) return;
+  RV.py = RUBY.shown();
+  void RUBY.set($('.host', app)?.shadowRoot?.querySelector('.card'), RV.py);
 });
 // the collection loads with the board, so the dot shows from any page
 start();

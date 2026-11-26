@@ -335,7 +335,7 @@
 
   // site/src/cbp/review/render.ts
   var strip = (html) => String(html ?? "").replace(/<br\s*\/?>/gi, " ").replace(/<[^>]+>/g, "").replace(/\[sound:[^\]]*\]/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim(), nonEmpty = (html) => !!strip(html) || /<img\b|\[sound:/i.test(html ?? ""), esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-  function render(tmpl, x, front) {
+  function render(tmpl, x, front, mark) {
     let fields = new Map(x.type.fields.map((f) => [f.name, x.note.flds[f.ord] ?? ""])), t = x.type.templates.find((t2) => t2.ord === x.card.ord), special = { FrontSide: front ?? "", Tags: esc(x.note.tags.join(" ")), Deck: esc(x.deck ?? ""), Subdeck: esc((x.deck ?? "").split("::").pop() ?? ""), Card: esc(t?.name ?? ""), Type: esc(x.type.name) }, value = (name) => name in special ? special[name] : fields.get(name) ?? "", s = tmpl;
     for (let guard = 0; guard < 50; guard++) {
       let before = s;
@@ -344,6 +344,7 @@
     let hints = 0;
     return s = s.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, spec) => {
       let parts = spec.split(":"), name = parts.pop().trim(), filters = parts.map((p) => p.trim()), v = value(name);
+      if (mark !== void 0 && !(name in special) && !filters.includes("hint")) return nonEmpty(v) ? mark : "";
       for (let f of filters.reverse())
         if (f === "text") v = esc(strip(v));
         else if (f === "hint") {
@@ -354,6 +355,21 @@
     }), sounds(s);
   }
   var sounds = (html) => html.replace(/\[sound:([^\]]+)\]/g, (_, src) => `<button type="button" class="snd-btn" data-sound="${esc(src)}" aria-label="Play"></button>`);
+  function frontShows(type, note, ord) {
+    let t = type.templates.find((t2) => t2.ord === ord);
+    return t ? render(t.qfmt, { note, type, card: { ord } }, void 0, "").includes("") : !1;
+  }
+  var SHOWS = /* @__PURE__ */ new Map();
+  function showable(cards, noteOf, typeOf2) {
+    return cards.filter((c) => {
+      let n = noteOf(c.nid), t = n && typeOf2(n);
+      if (!n || !t) return !1;
+      let k = SHOWS.get(c.id);
+      if (k && k[0] === n.mod && k[1] === t.mod) return k[2];
+      let v = frontShows(t, n, c.ord);
+      return SHOWS.set(c.id, [n.mod, t.mod, v]), v;
+    });
+  }
   var fieldIndex = (type, name) => type.fields.find((f) => f.name.toLowerCase() === name.toLowerCase())?.ord ?? -1;
   function wordOf(type, note) {
     if (!type) return strip(note.flds[0]);
@@ -651,7 +667,7 @@ CREATE INDEX ix_notes_csum ON notes (csum);`;
   var app = $(".rx-body", VIEW_EL), col = () => S.meta.get("col"), ck = () => clock(col().day0, col().rollover), conf = () => S.confs.get(col().conf) ?? [...S.confs.values()][0], typeOf = (n) => S.types.get(n.mid), rowOf = (c) => {
     let note = S.notes.get(c.nid);
     return note ? { card: c, note, type: typeOf(note) } : null;
-  }, cardsOf = (nid) => [...S.cards.values()].filter((c) => c.nid === nid).sort((a, b) => a.ord - b.ord), live = () => [...S.cards.values()].filter((c) => S.notes.has(c.nid)), wordOfNote = (n) => wordOf(typeOf(n), n) || sortText(typeOf(n), n) || strip(n.flds.find((f) => strip(f)) ?? ""), wordOfCard = (c) => {
+  }, cardsOf = (nid) => [...S.cards.values()].filter((c) => c.nid === nid).sort((a, b) => a.ord - b.ord), live = () => [...S.cards.values()].filter((c) => S.notes.has(c.nid)), studyable = () => showable(live(), (id) => S.notes.get(id), typeOf), wordOfNote = (n) => wordOf(typeOf(n), n) || sortText(typeOf(n), n) || strip(n.flds.find((f) => strip(f)) ?? ""), wordOfCard = (c) => {
     let n = S.notes.get(c.nid);
     return n ? wordOfNote(n) : "";
   }, dueText = (c, k = ck()) => {
@@ -675,11 +691,11 @@ CREATE INDEX ix_notes_csum ON notes (csum);`;
   };
   function todayQueue() {
     let k = ck(), t = today();
-    return { k, t, q: queue(live(), conf(), k, new Set(t.seen), Math.max(0, t.fresh - more().fresh), t.revs) };
+    return { k, t, q: queue(studyable(), conf(), k, new Set(t.seen), Math.max(0, t.fresh - more().fresh), t.revs) };
   }
   function ahead() {
     let k = ck(), seen = today().seen;
-    return live().filter((c) => (c.queue === 2 || c.queue === 3) && c.due > k.today && !seen.has(c.nid)).sort((a, b) => a.due - b.due || a.id - b.id)[0] ?? null;
+    return studyable().filter((c) => (c.queue === 2 || c.queue === 3) && c.due > k.today && !seen.has(c.nid)).sort((a, b) => a.due - b.due || a.id - b.id)[0] ?? null;
   }
   var toastEl = null, toastT;
   function toast(msg, undoable = !1) {
@@ -722,7 +738,8 @@ CREATE INDEX ix_notes_csum ON notes (csum);`;
     list.length && SOUND.play(list);
   }
   var autoplayed = "", cardCss = (t) => t.css.replace(/@import[^;]+;/g, ""), OVER = `:host{display:block}.card{background:transparent!important;min-height:100%;box-sizing:border-box}hr{border:0;border-top:1px solid #E4E6EC;margin:22px 0}
-a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn))){display:none}`;
+a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn))){display:none}
+img{max-width:100%!important;max-height:min(46vh,460px)!important;width:auto!important;height:auto!important;object-fit:contain!important}`;
   function draw(host, r, side) {
     let t = r.type, tmpl = t.templates.find((x) => x.ord === r.card.ord) ?? t.templates[0], ctx = { note: r.note, type: t, card: r.card, deck: S.decks.get(r.card.did)?.name }, q = render(tmpl.qfmt, ctx), html = side === "q" ? q : render(tmpl.afmt, ctx, q), root = host.shadowRoot ?? host.attachShadow({ mode: "open" });
     return root.innerHTML = `<style>${cardCss(t)}${OVER}${RUBY.CSS}</style><div class="card card${r.card.ord + 1}">${html}</div>`, root;
@@ -758,7 +775,7 @@ a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn)
   function showReview() {
     if (RV.panel === "deeper") return showDeeper();
     (!RV.cur || !S.cards.has(RV.cur.id) || RV.cur !== S.cards.get(RV.cur.id) || RV.cur.queue < 0) && (RV.cur = pick(), RV.shown = !1, RV.py = RUBY.shown(), RV.t0 = Date.now());
-    let c = RV.cur, t = today(), n = left(), prog = `<div class="rx-prog" aria-hidden="true"><i style="width:${t.done + n ? Math.round(t.done / (t.done + n) * 100) : 100}%"></i></div>`;
+    let c = RV.cur, t = today(), n = c ? Math.max(1, left()) : 0, prog = `<div class="rx-prog" aria-hidden="true"><i style="width:${n ? Math.round(t.done / (t.done + n) * 100) : 100}%"></i></div>`;
     if (paintDot(), !c) {
       let nextLearn = live().filter((x) => x.queue === 1).sort((a, b) => a.due - b.due)[0], anyNew = live().some((x) => x.queue === 0);
       app.innerHTML = `${prog}<section class="rw rw-end"><p class="rw-done zh">\u4ECA\u5929\u8907\u7FD2\u5B8C\u4E86</p>
@@ -768,7 +785,7 @@ a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn)
           let m = more();
           b.dataset.more === "new" ? m.fresh += 10 : m.ahead = !0, sfx("tap"), showReview();
         }
-      );
+      ), doneToday();
       return;
     }
     let r = rowOf(c), flag = c.flags & 7;
@@ -777,31 +794,45 @@ a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn)
     <div class="rw-card"><div class="host${RV.py ? " py" : ""}"></div></div>
     <div class="rw-bar">${RV.shown ? `<div class="rw-g">${["Again", "Hard", "Good", "Easy"].map((x, i) => `<button type="button" class="rw-a rw-a${i + 1}" data-g="${i + 1}">${x}</button>`).join("")}</div>` : '<button type="button" class="rw-show" data-a="show">Show answer</button>'}</div>
     <div class="rw-more rx-opt">
-      ${TOUCH ? '<button type="button" class="btn-q" data-a="py">Pinyin</button><button type="button" class="btn-q" data-a="play">Play</button>' : ""}
+      ${TOUCH ? '<button type="button" class="btn-q" data-a="py">Pinyin</button>' : ""}<button type="button" class="btn-q rw-snd" data-a="play" aria-label="Play" hidden>${SPEAKER}</button>
       <button type="button" class="btn-q" data-a="edit">Edit</button><button type="button" class="btn-q rw-flagb" data-a="flag" aria-haspopup="dialog" aria-expanded="${RV.flags}">Flag</button><button type="button" class="btn-q" data-a="suspend">Suspend</button>
     </div>
     ${RV.flags ? flagPicker(c) : ""}
   </section>`;
-    let host = $(".host", app), root = draw(host, r, RV.shown ? "a" : "q"), side = `${c.id}:${RV.shown ? "a" : "q"}`;
+    let host = $(".host", app), root = draw(host, r, RV.shown ? "a" : "q"), loud = !!root.querySelector("[data-sound]");
+    $(".rw-snd", app).hidden = !loud, host.classList.toggle("loud", loud), loud && (host.onclick = (e) => !e.composedPath().some((x) => x instanceof HTMLElement && x.matches("a,button,input,[contenteditable]")) && !String(getSelection() ?? "") && playAll(root));
+    let side = `${c.id}:${RV.shown ? "a" : "q"}`;
     side !== autoplayed && (autoplayed = side, SOUND.autoplay() && playAll(root)), RV.py && RUBY.set(root.querySelector(".card"), !0), sitting || (sitting = !0, BUS.emit("reviews:start")), bindReview();
   }
   function bindReview() {
     app.querySelectorAll("[data-a]").forEach((b) => b.onclick = () => act(b.dataset.a)), app.querySelectorAll("[data-g]").forEach((b) => b.onclick = () => grade(Number(b.dataset.g))), app.querySelectorAll("[data-f]").forEach((b) => b.onclick = () => flagIt(Number(b.dataset.f))), app.querySelectorAll("[data-m]").forEach((b) => b.onclick = () => mergeAct(b.dataset.m));
   }
+  var acted = !1, doneDay = "";
+  function doneToday() {
+    if (!acted) return;
+    acted = !1;
+    let d = String(ck().today);
+    try {
+      localStorage.getItem("rv-done") === d ? doneDay = d : localStorage.setItem("rv-done", d);
+    } catch {
+    }
+    doneDay !== d && (doneDay = d, BUS.emit("reviews:done"));
+  }
+  BUS.on("reviews:done", () => {
+    let el = VIEW === "reviews" ? app.querySelector(".rw-done") : null;
+    if (!el) return;
+    let b = el.getBoundingClientRect();
+    try {
+      FUN?.celebrate("test", { x: b.left + b.width / 2, y: b.top + b.height / 2 });
+    } catch {
+    }
+  });
+  var SPEAKER = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 9.5h3.2L12 5.6v12.8l-4.8-3.9H4z" fill="currentColor"/><path d="M15.5 8.8a4.5 4.5 0 0 1 0 6.4M18.2 6.2a8.2 8.2 0 0 1 0 11.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
   async function grade(g) {
     let c = RV.cur;
     if (!c || !RV.shown) return;
     let r = rowOf(c), a = answer(c, g, conf(), ck(), Date.now() - RV.t0), rows = [["card", c.id, a.card]];
-    a.leech && !r.note.tags.includes("leech") && rows.push(["note", r.note.id, { ...r.note, tags: [...r.note.tags, "leech"] }]), await change(["Again", "Hard", "Good", "Easy"][g - 1], rows, c.id);
-    let n = left();
-    if (BUS.emit("reviews:card", { grade: g, card: c.id, word: wordOfNote(r.note), left: n }), !n) {
-      let d = String(ck().today);
-      try {
-        localStorage.getItem("rv-done") !== d && (localStorage.setItem("rv-done", d), BUS.emit("reviews:done"));
-      } catch {
-      }
-    }
-    if (RV.sinceNew = c.type === 0 ? 0 : RV.sinceNew + 1, RV.cur = null, RV.flags = !1, g === 1 && missed3(a.card))
+    if (a.leech && !r.note.tags.includes("leech") && rows.push(["note", r.note.id, { ...r.note, tags: [...r.note.tags, "leech"] }]), await change(["Again", "Hard", "Good", "Easy"][g - 1], rows, c.id), acted = !0, BUS.emit("reviews:card", { grade: g, card: c.id, word: wordOfNote(r.note), left: left() }), RV.sinceNew = c.type === 0 ? 0 : RV.sinceNew + 1, RV.cur = null, RV.flags = !1, g === 1 && missed3(a.card))
       RV.panel = "deeper", RV.deeperFor = a.card.id;
     else if (g >= 3 && right3(a.card)) {
       let other = related(a.card);
@@ -820,7 +851,7 @@ a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn)
       if (a === "edit") return editDialog(S.notes.get(c.nid));
       if (a === "flag")
         return RV.flags = !RV.flags, showReview();
-      a === "suspend" && (await change("Suspend", [["card", c.id, { ...c, queue: -1 }]], c.id), sfx("drop"), RV.cur = null, showReview(), toast(`Suspended <span class="zh">${esc2(wordOfCard(c))}</span>`, !0));
+      a === "suspend" && (await change("Suspend", [["card", c.id, { ...c, queue: -1 }]], c.id), sfx("drop"), acted = !0, RV.cur = null, showReview(), toast(`Suspended <span class="zh">${esc2(wordOfCard(c))}</span>`, !0));
     }
   }
   var FLAG_NAME = { 1: "Red", 3: "Green" };
@@ -854,7 +885,7 @@ a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn)
         let d = b.dataset.d;
         if (d === "skip") return endDeeper();
         if (d === "del") {
-          await deleteNote(r.note.id), endDeeper();
+          acted = !0, await deleteNote(r.note.id), endDeeper();
           return;
         }
         if (d === "done") {
@@ -925,14 +956,48 @@ a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn)
       return await put("meta", "mergeNo", { pairs: [...mergeNo(), pairKey(x, y)] }), showReview();
     combine(x, y);
   }
+  var pairs = () => S.meta.get("combine")?.list ?? [];
   async function combine(x, y) {
-    let [a, b] = [S.notes.get(x), S.notes.get(y)], words = `${wordOfNote(a)}\u3001${wordOfNote(b)}`, old = [...cardsOf(x), ...cardsOf(y)].filter((c) => c.queue >= 0);
-    await change("Combine", old.map((c) => ["card", c.id, { ...c, queue: -1, flags: (c.flags & 7) === 3 ? c.flags & -8 : c.flags }])), setView("cards");
+    let [a, b] = [S.notes.get(x), S.notes.get(y)];
+    if (!a || !b) return;
+    let words = `${wordOfNote(a)}\u3001${wordOfNote(b)}`;
+    await put("meta", "combine", { list: [...pairs().filter((p) => p.words !== words), { words, nids: [x, y], at: Date.now() }] });
     try {
       openCard(words, "any");
     } catch {
     }
-    toast(`Writing <span class="zh">${esc2(words)}</span>. The old cards are suspended.`, !0);
+  }
+  var settling = !1;
+  async function settlePairs() {
+    let list = pairs();
+    if (!(!ready || settling || !list.length)) {
+      settling = !0;
+      try {
+        let keep = [];
+        for (let p of list) {
+          let parts = p.words.split("\u3001"), made = [...S.notes.values()].find((n) => n.id > p.at - 6e4 && !p.nids.includes(n.id) && parts.every((w) => wordOfNote(n).includes(w))), doc = typeof CD < "u" && typeof cardId == "function" ? CD.docs[cardId(p.words)] : void 0;
+          if (made) {
+            let old = [...cardsOf(p.nids[0]), ...cardsOf(p.nids[1])].filter((c) => c.queue >= 0);
+            old.length && (await change("Combine", old.map((c) => ["card", c.id, { ...c, queue: -1, flags: (c.flags & 7) === 3 ? c.flags & -8 : c.flags }])), VIEW === "reviews" && toast(`<span class="zh">${esc2(p.words)}</span>: the old cards rest`, !0));
+          } else !doc?.dropped && Date.now() - p.at < 14 * 864e5 && keep.push(p);
+        }
+        keep.length !== list.length && await put("meta", "combine", { list: keep });
+      } finally {
+        settling = !1;
+      }
+    }
+  }
+  if (typeof cardPrompt == "function") {
+    let base = cardPrompt;
+    cardPrompt = (kit, word) => {
+      let p = pairs().find((x) => x.words === word);
+      if (!p) return base(kit, word);
+      let [a, b] = p.words.split("\u3001");
+      return `${base(kit, word)}
+
+=== A PAIR ===
+${a} and ${b} are both easy for him now. This card replaces their two cards: it is about the difference between them, the one thing he could still mix up. word: ${word}. pinyin: both readings. meaning: the difference, in a few words. ex: exactly two sentences, one where only ${a} fits and one where only ${b} fits. know: 2 or 3 points on when a Taiwanese person reaches for which. One char: line per distinct character, no how: lines, no second: line.`;
+    };
   }
   var pasteNote = /* @__PURE__ */ new WeakMap();
   function editor(host, note0, onClose) {
@@ -952,10 +1017,11 @@ a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn)
     }), $('[data-e="del"]', host).onclick = async () => {
       clearTimeout(saveT), await deleteNote(note.id), onClose?.();
     };
-    let ai = t.fields.find((f) => /^audio$/i.test(f.name))?.ord ?? -1, si = t.fields.find((f) => /^chinese$/i.test(f.name))?.ord ?? 0;
+    let ai = t.fields.find((f) => /^audio$/i.test(f.name))?.ord ?? -1, si = t.fields.find((f) => /^chinese$/i.test(f.name))?.ord ?? 0, voicing = !1;
     return ED = {
       host,
       voice: async (again) => {
+        if (voicing) return;
         let fa = host.querySelector(`.fv[data-o="${ai}"]`), fs = host.querySelector(`.fv[data-o="${si}"]`);
         if (!fa || !fs) return;
         let have = /\[sound:([^\]]+)\]/.exec(fa.textContent ?? "");
@@ -964,14 +1030,14 @@ a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn)
 `)).replace(/[ \t]+/g, " ").trim();
         if (!text) return toast("The sentence is empty.");
         if (!navigator.onLine) return toast("The voice needs signal.");
-        fa.classList.add("busy");
+        fa.classList.add("busy"), voicing = !0;
         try {
           let { url } = await api("voice", { text });
           fa.textContent = `[sound:${url}]`, save(), sfx("save"), SOUND.play(url);
         } catch (e) {
           toast(esc2(e.message || "The voice didn\u2019t come through."));
         } finally {
-          fa.classList.remove("busy");
+          voicing = !1, fa.classList.remove("busy");
         }
       }
     }, async () => {
@@ -1281,7 +1347,7 @@ a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn)
         return eat(), document.querySelector("dialog[open]") ? void 0 : KEYS.is(e, "redo") ? redo() : undo();
       if (e.key === "Escape")
         return RV.flags ? (e.stopImmediatePropagation(), RV.flags = !1, showReview()) : view === "browse" && BR.sel.size && !document.querySelector("dialog[open]") ? (e.stopImmediatePropagation(), BR.sel = /* @__PURE__ */ new Set(), closeSide(), paintSel()) : void 0;
-      if (!typing && ED?.host.isConnected && (KEYS.is(e, "rv.voice") || KEYS.is(e, "rv.revoice"))) return eat(), ED.voice(KEYS.is(e, "rv.revoice"));
+      if (!typing && ED?.host.isConnected && (KEYS.is(e, "rv.voice") || KEYS.is(e, "rv.revoice"))) return eat(), e.repeat ? void 0 : ED.voice(KEYS.is(e, "rv.revoice"));
       if (typing || document.querySelector("dialog[open]") || view !== "review") return;
       if (RV.flags) {
         let f = KEYS.is(e, "rv.red") ? 1 : KEYS.is(e, "rv.green") ? 3 : KEYS.is(e, "rv.noflag") ? 0 : -1;
@@ -1295,7 +1361,7 @@ a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn)
       let g = ["rv.again", "rv.hard", "rv.good", "rv.easy"].findIndex((id) => KEYS.is(e, id));
       if (g >= 0 && RV.shown) return e.preventDefault(), grade(g + 1);
       let a = [["rv.suspend", "suspend"], ["rv.flag", "flag"], ["rv.pinyin", "py"], ["rv.play", "play"], ["rv.edit", "edit"]].find(([id]) => KEYS.is(e, id));
-      a && (eat(), act(a[1]));
+      a && (eat(), (!e.repeat || a[1] !== "play") && act(a[1]));
     },
     !0
   );
@@ -1305,7 +1371,7 @@ a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn)
     dot && (dot.hidden = VIEW === "reviews" || !left());
   }
   onChange((what) => {
-    if (what !== "pulled" || VIEW !== "reviews") return paintDot();
+    if (what === "pulled" && settlePairs(), what !== "pulled" || VIEW !== "reviews") return paintDot();
     view === "review" && !RV.shown && !document.querySelector("dialog[open]") && !VIEW_EL.contains(document.activeElement) && showReview(), view === "browse" && !$(".br-side", app)?.contains(document.activeElement) && paintBrowse();
   });
   var ready = !1, started = null;
@@ -1328,12 +1394,15 @@ a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn)
         v = sessionStorage.getItem("cbp-rx") || "review";
       } catch {
       }
-      VIEW === "reviews" && go(["review", "browse", "designs"].includes(v) ? v : "review"), SETTINGS.redraw(), paintDot(), setTimeout(prefetch, 4e3), setTimeout(() => tune().catch(() => {
+      VIEW === "reviews" && go(["review", "browse", "designs"].includes(v) ? v : "review"), SETTINGS.redraw(), paintDot(), settlePairs(), setTimeout(prefetch, 4e3), setTimeout(() => tune().catch(() => {
       }), 2e4);
     })();
   }
   BUS.on("view", (v, prev) => {
-    document.getElementById("tab-" + v)?.scrollIntoView({ block: "nearest", inline: "nearest" }), v === "reviews" ? ready ? go(view) : start().then(() => VIEW === "reviews" && ready && go(view)) : prev === "reviews" && (SOUND.stop(), sitting = !1, dropToast(), closeSide(), document.querySelector("dialog.rx-dlg[open]")?.close()), paintDot();
+    document.getElementById("tab-" + v)?.scrollIntoView({ block: "nearest", inline: "nearest" }), v === "reviews" ? (ready ? (go(view), sync()) : start().then(() => VIEW === "reviews" && ready && go(view)), settlePairs()) : prev === "reviews" && (SOUND.stop(), sitting = !1, dropToast(), closeSide(), document.querySelector("dialog.rx-dlg[open]")?.close()), paintDot();
+  });
+  BUS.on("lab", (id) => {
+    id !== "pinyin" || view !== "review" || !RV.cur || (RV.py = RUBY.shown(), RUBY.set($(".host", app)?.shadowRoot?.querySelector(".card"), RV.py));
   });
   start();
   setInterval(paintDot, 5 * 6e4);

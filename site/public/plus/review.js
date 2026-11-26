@@ -122,7 +122,13 @@
     if (!cardOK(d)) return null;
     // the first card takes the study card's first sentence; another card the first one no card of the word has yet
     const c = parseCard(d.text), used = new Set(notesOf(w).map((x) => plain(RV.notes[noteId(w, x)].chinese || '')));
-    const s = [...c.mine, ...c.ex].map((x) => fromSentence(x, c.word || w)).find((x) => !used.has(plain(x.chinese))) || { chinese: '', py: '' };
+    let s = [...c.mine, ...c.ex].map((x) => fromSentence(x, c.word || w)).find((x) => !used.has(plain(x.chinese))) || { chinese: '', py: '' };
+    // Reviews: a pair card (Combine on the Reviews tab, "A、B"): both sentences, each with its own word marked
+    const pair = String(c.word || w).split('、');
+    if (pair.length > 1 && c.ex.length > 1 && !used.size) {
+      const ss = c.ex.map((x) => fromSentence(x, pair.find((p) => String(x.zh).includes(p)) || ''));
+      s = { chinese: ss.map((x) => x.chinese).join('<br>'), py: ss.map((x) => x.py).join('\n') };
+    }
     const st = { n: k, chinese: s.chinese, word: esc(c.word || w), mnemonic: '', type: 'Chinese', picture: '', notes: '', audio: '', audioFor: '', py: s.py, pyFor: s.py ? plain(s.chinese) : '', saved: false };
     const dr = draft.get(w, k);
     if (dr) Object.assign(st, Object.fromEntries(FIELDS.map(([f]) => [f, dr[f] ?? st[f]])), { audio: dr.audio || '', audioFor: dr.audioFor || '', type: dr.type || st.type, dirty: true });
