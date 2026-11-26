@@ -47,7 +47,7 @@
   `E.dailyPlan`; Sonnet writes it; listening drills `listen` with multi-voice `hear`, TOCFL items `tocfl` with four `choices`
   graded on the board; an untouched test is refreshed in place, 3+ missed days → a short comeback), a snapshot in R2. 5 am
   (`site/src/cbp/jobs.ts`): yesterday's essay marked with its bookkeeping (Opus), Mondays the weekly pass, the 1st the monthly
-  (checks → board/data `alerts` on Progress) then the monthly test. A word turns K after three situations of correct use
+  (checks → board/data `alerts`, not shown in the app since Nov 26) then the monthly test. A word turns K after three situations of correct use
   (`E.situations`; Progress shows `uses`). Every Claude call's tokens go into the D1 `spend` table (ai.ts): check it before
   adding AI work; his budget is $6–10 a month. Each job's last run is in meta `job.*`. `POST /api/plus/push/nightly`, `/essay`,
   `/weekly`, `/monthly`, `/monthly-test` (`?force=1`), `/try-test`, `/brain-back` (`?dry=1`) (Bearer CBP_PUSH_KEY; staging's is
