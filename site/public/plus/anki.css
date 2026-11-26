@@ -72,10 +72,18 @@
 .rw-later{font-size:var(--fs-m);color:var(--ink-3);margin:0}
 .rw-again{display:flex;justify-content:center;gap:var(--s2);margin-top:var(--s6)}
 /* both easy: one card about the difference */
-.rw-merge{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--s3);margin:0 0 var(--s5);padding:var(--s3) var(--s3) var(--s3) var(--s4);border-radius:var(--r);background:var(--green-wash);color:var(--green-deep);font-size:var(--fs-m)}
-.rw-merge b{font-weight:500;color:var(--ink)}
-.mact{display:flex;gap:4px}
-.mact .btn{padding:8px 18px;font-size:var(--fs-s)}
+/* the end screen's Too hard / Too easy: a word, then one tap to act on it (triage.ts) */
+.tgs{width:100%;max-width:560px;margin:var(--s7) auto 0;text-align:left;display:flex;flex-direction:column;gap:var(--s6)}
+.tg-h{display:flex;align-items:baseline;gap:var(--s2);margin-bottom:var(--s1)}
+.tg-n{color:var(--ink-4);font-variant-numeric:tabular-nums}
+.tg-r{display:flex;flex-wrap:wrap;align-items:center;gap:4px var(--s3);min-height:48px}
+.tg-w{border:0;background:none;padding:4px 0;font-size:var(--fs-l);line-height:var(--lh-tight);color:var(--ink);cursor:pointer;text-align:left;margin-right:auto}
+.tg-a{display:flex;flex-wrap:wrap;align-items:center;gap:2px}
+.tg-a .btn-q{padding:8px 12px}
+.tg-a .tg-go{color:var(--ink);font-weight:550;background:var(--wash)}
+.tg-a .zh{font-size:var(--fs-m);font-weight:400}
+.tg-more{margin:var(--s1) 0 0 calc(-1 * var(--s3))}
+.sd-help .tg-a{margin-left:calc(-1 * var(--s2))}
 
 /* missed three times: five minutes on it */
 .deeper{max-width:640px;margin:8vh auto 0;text-align:center}
@@ -190,6 +198,8 @@
 .sd-seg{display:flex;width:fit-content;margin:0 0 var(--s1) auto;gap:2px;background:var(--wash);border-radius:999px;padding:3px}
 .sd-seg button{border:0;background:none;border-radius:999px;padding:5px 14px;font-size:var(--fs-s);font-weight:500;line-height:var(--lh-snug);color:var(--ink-3);cursor:pointer;transition:background .15s,color .15s}
 .sd-seg button[aria-checked=true]{background:var(--surface);color:var(--ink);box-shadow:var(--sh-1)}
+.sd-cards{margin:0 0 var(--s3);max-width:100%;overflow-x:auto;scrollbar-width:none}
+.sd-cards button{white-space:nowrap}
 .sd-host{zoom:.92;min-height:120px} /* the card drawn small, but nothing on it under --fs-xs */
 .sd-host.loud{cursor:pointer}
 .sd-facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:var(--s3) var(--s4);margin:0 0 var(--s4)}
@@ -200,8 +210,6 @@
 .sd-act .btn-q.on{background:var(--wash);color:var(--ink)}
 .sd-help{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 var(--s4);padding:var(--s3);border-radius:var(--r);background:var(--bg)}
 .sd-hl{font-size:var(--fs-s);font-weight:500;color:var(--ink-3);margin-right:4px}
-.chipb{border:0;background:var(--green-wash);color:var(--green-deep);border-radius:999px;padding:5px 14px;font-size:var(--fs-m);cursor:pointer;transition:background .15s}
-@media (hover:hover){.chipb:hover{background:#D9EDE1}}
 .sd-note{display:flex;align-items:center;justify-content:space-between;width:100%;border:0;border-top:1px solid var(--hair);background:none;padding:var(--s3) 0;font-size:var(--fs-m);font-weight:500;color:var(--ink);cursor:pointer}
 .sd-note i{width:9px;height:9px;border-right:2px solid var(--ink-3);border-bottom:2px solid var(--ink-3);transform:rotate(45deg) translateY(-3px);transition:transform .2s var(--ease)}
 .sd-note[aria-expanded=true] i{transform:rotate(-135deg) translate(-2px,-1px)}
@@ -244,7 +252,10 @@
   .rw-g{gap:6px}
   .rw-a,.rw-show{min-height:46px;padding:10px 4px}
   .rw-show{width:100%}
-  .rw-merge{padding:var(--s3)}
+  .tgs{margin-top:var(--s6)}
+  .tg-r{padding:var(--s1) 0}
+  .tg-w{flex-basis:100%}
+  .tg-a{margin-left:calc(-1 * var(--s3))}
 }
 /* five pages on a phone: the tabs scroll sideways, the countdown and buttons stay where they are */
 @media (max-width:520px){

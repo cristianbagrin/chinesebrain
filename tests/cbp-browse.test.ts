@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { clock, type Card, type Rev } from '../site/src/cbp/sched.ts';
-import { index, apply, sortBy, blank, active, toneless, stateOf, type Filters, type Item } from '../site/src/cbp/review/filter.ts';
+import { index, apply, sortBy, byWord, blank, active, toneless, stateOf, type Filters, type Item } from '../site/src/cbp/review/filter.ts';
+import { verdict } from '../site/src/cbp/review/triage.ts';
 import type { Note, NoteType } from '../site/src/cbp/review/store.ts';
 
 // 2026-11-22 18:00 in Taipei: day 945 of a collection that starts 2024-04-21 and turns over at 4 am
@@ -174,4 +175,40 @@ test('a thousand cards: indexing and filtering stay instant', () => {
   const typed = (performance.now() - t) / 7;
   assert.ok(built < 300, `index ${built}ms`);
   assert.ok(typed < 16, `a keystroke ${typed}ms`);
+});
+
+test('one row per word: its matching cards together, the weakest card\'s numbers', () => {
+  const rows = byWord(apply(ITEMS, blank(), ck));
+  assert.equal(rows.length, 5); // five notes, ten cards
+  const r3 = rows.find((x) => x.note.id === n3)!;
+  assert.equal(r3.n, 2);
+  assert.equal(r3.tmpl, '2 cards');
+  assert.equal(r3.due, -3); // the overdue card leads
+  assert.equal(r3.card.id, C.overdue.id);
+  assert.equal(r3.ivl, 12);
+  assert.equal(r3.flag, 1); // red over green
+  // the Card filter: only the matching card stands for the word
+  const one = byWord(apply(ITEMS, { ...blank(), card: ['Pic → word'] }, ck)).find((x) => x.note.id === n3)!;
+  assert.equal(one.n, 1);
+  assert.equal(one.tmpl, 'Pic → word');
+  // a word whose cards are all suspended or buried: led by the one not suspended
+  const r5 = rows.find((x) => x.note.id === n5)!;
+  assert.equal(r5.state, 'buried');
+  assert.equal(r5.due, null);
+});
+
+test('Browse opens newest added first, one row per word', () => {
+  const rows = sortBy(byWord(apply(ITEMS, blank(), ck)), 'added', true);
+  assert.deepEqual(rows.map((x) => x.word), ['綠色', '心意', '收下', '表達', '浪費'].sort((a, b) => [...notes.values()].find((n) => n.flds[1] === b)!.id - [...notes.values()].find((n) => n.flds[1] === a)!.id));
+  assert.equal(rows[0].note.id, Math.max(...notes.keys()));
+  assert.deepEqual(blank().ease, []);
+});
+
+test('ease: too easy and too hard filter cards; hard wins in a word\'s row', () => {
+  const judged = index(Object.values(C), (id) => notes.get(id), () => TYPE, ck, W, {}, (c, n) => verdict(c, n.tags, 8));
+  const pick = (e: 'easy' | 'hard') => apply(judged, { ...blank(), ease: [e] }, ck).map((x) => name(x.card.id)).sort();
+  assert.deepEqual(pick('hard'), names('overdue', 'relearning', 'relearnTomorrow')); // red flag; 9 lapses; a leech's card that lapsed twice
+  assert.deepEqual(pick('easy'), names('today')); // green flag
+  assert.equal(byWord(judged).find((x) => x.note.id === n3)!.ease, 'hard');
+  assert.equal(active({ ...blank(), ease: ['easy'] }), 1);
 });
