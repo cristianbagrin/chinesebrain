@@ -26,9 +26,9 @@
     mod
   ));
 
-  // ../chinese-brain/node_modules/webextension-polyfill/dist/browser-polyfill.min.js
+  // node_modules/webextension-polyfill/dist/browser-polyfill.min.js
   var require_browser_polyfill_min = __commonJS({
-    "../chinese-brain/node_modules/webextension-polyfill/dist/browser-polyfill.min.js"(exports, module) {
+    "node_modules/webextension-polyfill/dist/browser-polyfill.min.js"(exports, module) {
       init_browser_shim();
       (function(a, b) {
         if (typeof define == "function" && define.amd) define("webextension-polyfill", ["module"], b);
