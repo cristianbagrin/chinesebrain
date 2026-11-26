@@ -61,6 +61,8 @@
 .tu-pane.blank .tu-in{align-self:stretch}
 .tu-pane.blank .tu-log{align-items:center}
 .tu-pane.blank .tu-m{align-self:center}
+.tu-pane.blank .tu-top{justify-content:flex-end}
+.tu-pane.blank .tu-new{display:none}
 .tu-mode{display:flex;gap:2px;background:var(--wash);border-radius:999px;padding:3px}
 .tu-mode button{border:0;background:none;color:var(--ink-3);font:inherit;font-size:var(--fs-s);font-weight:500;line-height:var(--lh-snug);padding:5px 14px;border-radius:999px;cursor:pointer;transition:background .15s,color .15s}
 .tu-mode button[aria-checked="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--sh-1)}
