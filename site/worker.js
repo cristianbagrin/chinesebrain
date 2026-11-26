@@ -19,6 +19,8 @@ import * as anki from './src/cbp/anki.ts';
 import * as nightly from './src/cbp/nightly.ts';
 import * as tutor from './src/cbp/tutor.ts';
 import * as jobs from './src/cbp/jobs.ts';
+// Essays
+import * as look from './src/cbp/look.ts';
 
 const MAX_BODY = 1_500_000;
 const MAX_ITEMS = 60_000;
@@ -876,6 +878,8 @@ async function api(request, env, path) {
     if (path === 'plus/taste') return taste.board(env);
     if (path === 'plus/taste/results') return taste.results(env);
     if (path === 'plus/taste/img') return taste.img(env, q.get('item') ?? '', Number(q.get('n')));
+    // Essays: a tapped word's pinyin and meaning, by code (src/cbp/look.ts)
+    if (path === 'plus/look') return look.look(env, q.get('t') ?? '', q.has('at') ? Number(q.get('at')) : null);
     const out = await plus.read(env, path.slice(5), q);
     if (out === undefined) throw new Fail(404, 'not_found', 'Not found.');
     return out;
