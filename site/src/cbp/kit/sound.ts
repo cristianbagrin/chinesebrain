@@ -93,3 +93,15 @@ export const SOUND = {
   },
   autoplay: () => LAB.get('autoplay') !== 'off',
 };
+
+// Cards: a tap whose sound comes only after a wait (a voice still being made) wakes the player first, inside the tap:
+// iOS lets an <audio> play later only once a tap has played it. SOUND.unlock() does that with a moment of silence.
+const SILENT = 'data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQIAAAAAAA==';
+Object.assign(SOUND, {
+  unlock() {
+    if (!el || SOUND.playing) return;
+    el.src = SILENT;
+    el.play().catch(() => {});
+  },
+});
+// (end Cards)

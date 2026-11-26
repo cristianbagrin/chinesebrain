@@ -15,7 +15,18 @@
 html:has(#view-cards:not([hidden])) .appbar.lift{box-shadow:none}
 @media (prefers-reduced-transparency:reduce){.cd-bar{border-image:linear-gradient(var(--bg) calc(100% - 1px),var(--hair) 0) fill 0 / 0 / 0 100vmax;-webkit-backdrop-filter:none;backdrop-filter:none}}
 .cd-sp{flex:1}
-.cd-tabs{display:flex;gap:4px;min-width:0;overflow-x:auto;scrollbar-width:none}
+/* the tabs scroll sideways; padding at both ends (and the same scroll padding) keeps a tab's edge and its ring whole
+   when it scrolls into view, at any width */
+.cd-tabs{display:flex;gap:4px;min-width:0;overflow-x:auto;scrollbar-width:none;padding:3px 8px;margin:-3px -8px;scroll-padding-inline:32px;overscroll-behavior-x:contain}
+.cd-tab{flex:none;scroll-snap-align:center}
+.cd-tabs{scroll-snap-type:x proximity}
+.cd-tabs.fr{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 32px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 32px),transparent)}
+.cd-tabs.fl{-webkit-mask-image:linear-gradient(to left,#000 calc(100% - 32px),transparent);mask-image:linear-gradient(to left,#000 calc(100% - 32px),transparent)}
+.cd-tabs.fl.fr{-webkit-mask-image:linear-gradient(to right,transparent,#000 32px,#000 calc(100% - 32px),transparent);mask-image:linear-gradient(to right,transparent,#000 32px,#000 calc(100% - 32px),transparent)}
+/* a word he went back to with ←: greyed, until he moves on */
+.cd-tab.past .zh{color:var(--ink-4)}
+.cd-tab.past[aria-selected="true"]{background:var(--wash);box-shadow:none}
+.cd-tab.past[aria-selected="true"] .zh{color:var(--ink-3)}
 .cd-tabs::-webkit-scrollbar{display:none}
 .cd-tab{font:inherit;border:0;background:none;cursor:pointer;padding:6px 14px;border-radius:12px;color:var(--ink-3);display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
   transition:background-color .15s,color .15s,transform .12s var(--ease)}
@@ -186,3 +197,10 @@ html:has(#view-cards:not([hidden])) .appbar.lift{box-shadow:none}
 .nt-in:empty::before{content:attr(data-ph);color:var(--ink-4);font-family:var(--ui);font-size:var(--fs-m)}
 .nt-row{display:flex;align-items:center;gap:var(--s3)}
 .nt-hint{font-size:var(--fs-s);color:var(--ink-4)}
+
+/* a finger: every control on the bar is at least 44px to hit */
+@media (pointer:coarse){
+  .cd-tab{min-height:44px}
+  .cd-tx{width:32px;height:32px;margin-right:-10px}
+  .cd-ib{width:44px;height:44px}
+}

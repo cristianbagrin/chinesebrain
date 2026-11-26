@@ -721,6 +721,9 @@ async function plusMachine(request, env, url) {
     if (url.pathname === '/api/plus/push/pull') return json(await plus.pull(env, await request.json()));
     if (url.pathname === '/api/plus/push/switch') return json(await plus.switchOver(env));
     if (url.pathname === '/api/plus/push/clean') return json(await cards.clean(env));
+    // Cards: the word's mark moves from <u> to <mark>, once (src/cbp/cards.ts markWord; ?dry=1 counts only)
+    if (url.pathname === '/api/plus/push/mark-word') return json(await cards.markWord(env, url.searchParams.get('dry') === '1'));
+    // (end Cards)
     // the 10 pm job and the essay corrections, run now (src/cbp/nightly.ts): ?day=YYYY-MM-DD, ?notest=1
     if (url.pathname === '/api/plus/push/nightly') return long(async () => nightly.nightly(env, await ownerBrain(env), { day: url.searchParams.get('day') ?? undefined, noTest: url.searchParams.get('notest') === '1' }));
     // his Todoist "Chinese" project as the nightly would read it, closing nothing
@@ -828,7 +831,13 @@ async function api(request, env, path) {
         // the board's own documents, once the website is the source and this account may change them
         if (path === 'plus/db') {
           if (!flags.includes('plus.write')) throw new Fail(403, 'read_only', 'Read-only for now.');
+          // Cards: a note's audio is made here on every save, whatever device saved it (src/cbp/cards.ts voiced)
+          if (body.col === 'notes' && body.op === 'set' && body.data) body.data = await cards.voiced(env, String(body.id), body.data);
+          // (end Cards)
           const out = await plus.write(env, body);
+          // Cards: the page learns the audio's address with the answer
+          if (body.col === 'notes' && body.op === 'set' && body.data) out.audio = body.data.audio ?? '';
+          // (end Cards)
           // a note made on the Cards page joins his collection once reviews live here (src/cbp/anki.ts)
           if (body.col === 'notes' && body.op === 'set') out.anki = await anki.fromBoard(env, String(body.id), body.data).catch((e) => (console.error(e), null));
           return out;

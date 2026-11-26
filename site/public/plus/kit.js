@@ -55,7 +55,13 @@
       return speaking || !!el && !el.paused && !el.ended;
     },
     autoplay: () => LAB.get("autoplay") !== "off"
-  };
+  }, SILENT = "data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQIAAAAAAA==";
+  Object.assign(SOUND, {
+    unlock() {
+      !el || SOUND.playing || (el.src = SILENT, el.play().catch(() => {
+      }));
+    }
+  });
 
   // site/src/cbp/kit/hold.ts
   var R = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -203,7 +209,27 @@
       }
     }), out;
   }
-  var mark = (s) => s ? syllableToMarked(s) : "";
+  var mark = (s) => s ? syllableToMarked(s) : "", word = (py) => {
+    let w = py.map(mark).reduce((a, s, i) => i && /^[aeoāáǎàēéěèōóǒò]/.test(s) ? `${a}'${s}` : a + s, "");
+    return /^[A-Z]/.test(py[0] ?? "") ? w.charAt(0).toUpperCase() + w.slice(1) : w;
+  }, PUNCT = { "\uFF0C": ",", "\u3002": ".", "\uFF01": "!", "\uFF1F": "?", "\uFF1A": ":", "\uFF1B": ";", "\u3001": ",", "\u300C": '"', "\u300D": '"', "\u300E": '"', "\u300F": '"', "\uFF08": "(", "\uFF09": ")", "\u2026": "...", "\u2014": "-", "\uFF5E": "~" };
+  function sentence(lex2, text) {
+    return text.split(`
+`).map((line) => {
+      let out = "", cap = !0;
+      for (let t of tokens(lex2, line)) {
+        if (!t.py) {
+          let s = [...t.text].map((c) => PUNCT[c] ?? c).join("");
+          out += s.replace(/([,.!?:;])(?=\S)/g, "$1 "), /[.!?]\s*$/.test(s) && (cap = !0);
+          continue;
+        }
+        let w = word(t.py);
+        cap && (w = w.charAt(0).toUpperCase() + w.slice(1), cap = !1), out += (out && !/[\s"(\-]$/.test(out) ? " " : "") + w;
+      }
+      return out.replace(/\s+([,.!?:;)])/g, "$1").replace(/ {2,}/g, " ").trim();
+    }).join(`
+`);
+  }
 
   // site/src/cbp/kit/ruby.ts
   var HAN2 = /[㐀-䶿一-鿿豈-﫿]/, lex = null, LEX_URL = "/plus/pinyin.txt?v=1";
@@ -245,6 +271,7 @@
     ready: load,
     CSS: ".rb-on.rb-on{line-height:2.3}.rbw{white-space:nowrap}ruby{ruby-position:over;ruby-align:center;margin:0 .08em}rt{font-family:Inter,system-ui,sans-serif;font-size:max(.55em,14px);font-weight:450;letter-spacing:0;color:#757B87;-webkit-text-stroke:0;line-height:1.1}"
   };
+  Object.assign(RUBY, { text: async (t) => sentence(await load(), t) });
 
   // site/src/cbp/kit/keys.ts
   var MAC = /Mac|iPhone|iPad/.test(navigator.platform), D = (group, ctx, rows) => rows.map(([id, label, keys]) => ({ id, label, group, keys: keys.split(" "), ctx })), DEFS = [
@@ -277,7 +304,7 @@
       ["rv.revoice", "Make its audio again", "shift+v"]
     ]),
     ...D("Cards", void 0, [
-      ["cd.prev", "Previous word", "arrowleft"],
+      ["cd.prev", "Back", "arrowleft"],
       ["cd.next", "Next word", "arrowright"],
       ["cd.write", "Write it, then card it", "enter"],
       ["cd.voice", "Play the sentence", "v"],
@@ -285,8 +312,17 @@
     ]),
     ...D("Cards", "field", [
       ["cd.add", "Add", "mod+enter"],
-      ["cd.mark", "Mark the word", "mod+u"]
+      ["cd.mark", "Highlight", "mod+shift+h"]
     ]),
+    // Cards: add and stay, Gemini, rich text in the card's fields
+    ...D("Cards", void 0, [["cd.gemini", "Gemini", "g"]]),
+    ...D("Cards", "field", [
+      ["cd.addstay", "Add and stay", "mod+shift+enter"],
+      ["cd.bold", "Bold", "mod+b"],
+      ["cd.italic", "Italic", "mod+i"],
+      ["cd.underline", "Underline", "mod+u"]
+    ]),
+    // (end Cards)
     ...D("Cards", "sentence", [
       ["cd.copy", "Copy the sentence", "space"],
       ["cd.pinyin", "Pinyin over the sentence", "shift+enter"]

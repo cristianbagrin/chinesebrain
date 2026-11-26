@@ -11,12 +11,11 @@ import { hex } from './plus.ts';
 import * as PY from './pinyin.ts';
 
 type R2Object = { body: ReadableStream; httpMetadata?: { contentType?: string } };
+type Stmt = { bind(...v: unknown[]): Stmt; first<T>(): Promise<T | null>; run(): Promise<unknown>; all<T>(): Promise<{ results: T[] }> };
 type Env = {
   CBP: {
-    prepare(sql: string): {
-      bind(...v: unknown[]): { first<T>(): Promise<T | null>; run(): Promise<unknown>; all<T>(): Promise<{ results: T[] }> };
-      all<T>(): Promise<{ results: T[] }>;
-    };
+    prepare(sql: string): Stmt;
+    batch?(s: Stmt[]): Promise<unknown[]>;
   };
   FILES: {
     put(k: string, v: ArrayBuffer | ReadableStream, o?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
@@ -264,4 +263,89 @@ export async function voice(env: Env, b: { text?: unknown }) {
   });
   if (!r.ok) throw new Error(`voice: ${r.status} ${(await r.text()).slice(0, 200)}`);
   return { url: await keepMedia(env, await r.arrayBuffer(), 'audio/mpeg'), voice: VOICES[first].replace(/^zh-TW-|Neural$/g, '') };
+}
+
+// ---------- the card's audio, made on the server when a note is saved ----------
+/** The sentence of a note as lines to read aloud: no markup, no "- " at the start of a line. */
+export const voiceLines = (html: string) =>
+  String(html ?? '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(div|p|li)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .split('\n')
+    .map((l) => l.replace(/^\s*[-–]\s*/, '').trim())
+    .filter(Boolean)
+    .join('\n');
+/** What decides whether a recording still fits the sentence: its characters, nothing else. */
+const sameSay = (a: string, b: string) => voiceLines(a).replace(/[\s，。！？、,.!?:;：；「」"]/g, '') === voiceLines(b).replace(/[\s，。！？、,.!?:;：；「」"]/g, '');
+/** A note about to be saved (db notes/<id>) gets its audio here, whatever device saved it: kept when the sentence
+ *  is the one the audio was made for (the note's own, or the version saved before), made anew when it changed.
+ *  A voice that fails leaves the note as it came: the save never fails over its audio. */
+export async function voiced(env: Env, id: string, note: Record<string, unknown> | null) {
+  if (!note || typeof note !== 'object') return note;
+  const text = voiceLines(String(note.chinese ?? ''));
+  if (!text) return { ...note, audio: '', audioFor: '' };
+  if (note.audio && typeof note.audioFor === 'string' && sameSay(note.audioFor, text)) return note;
+  const row = await env.CBP.prepare("SELECT data FROM docs WHERE col = 'notes' AND id = ?").bind(id).first<{ data: string }>();
+  const prev = row ? (JSON.parse(row.data) as Record<string, unknown>) : null;
+  if (prev?.audio && sameSay(typeof prev.audioFor === 'string' ? prev.audioFor : String(prev.chinese ?? ''), text)) return { ...note, audio: prev.audio, audioFor: text };
+  try {
+    const v = await voice(env, { text });
+    return { ...note, audio: v.url, audioFor: text };
+  } catch (e) {
+    console.error(e);
+    return note;
+  }
+}
+
+// ---------- the word's mark: <mark>, not <u> (2026-11-26) ----------
+/** His cards marked the word with <u> (Anki's underline, which his note types restyled: green, and the blank on the
+ *  sentence card). From now on the mark is <mark> and <u> is a plain underline. This moves everything over once:
+ *  every note in his collection (bumped, so every device syncs it), the note types' styling, and the Cards page's
+ *  notes. Safe to run again: what's moved already is left alone. ?dry=1 counts without writing. */
+export const toMark = (h: string) => String(h ?? '').replace(/<u>/g, '<mark>').replace(/<\/u>/g, '</mark>');
+/** A note type's styling: every rule for u becomes the same rule for mark; mark gets no highlighter of its own. */
+export function markCss(css: string) {
+  if (/\bmark\b/.test(css)) return css;
+  const moved = css.replace(/(^|[\s,>+~}])u(?=\s*[{,:.[\s])/g, '$1mark');
+  return moved === css ? css : moved + '\n\nmark { background: none; }\n';
+}
+export async function markWord(env: Env, dry = false) {
+  const now = Date.now();
+  let usn = now;
+  const stmts: Stmt[] = [];
+  const out = { notes: 0, types: 0, cardsPage: 0 };
+  const { results: notes } = await env.CBP.prepare("SELECT id, data FROM anki WHERE kind = 'note' AND data LIKE '%<u>%'").all<{ id: string; data: string }>();
+  for (const r of notes) {
+    const n = JSON.parse(r.data);
+    n.flds = (n.flds ?? []).map((f: string) => toMark(f));
+    n.mod = Math.floor(now / 1000);
+    out.notes++;
+    stmts.push(env.CBP.prepare('UPDATE anki SET data = ?, mod = ?, usn = ? WHERE kind = ? AND id = ?').bind(JSON.stringify(n), now, usn++, 'note', r.id));
+  }
+  const { results: types } = await env.CBP.prepare("SELECT id, data FROM anki WHERE kind = 'notetype' AND data IS NOT NULL").all<{ id: string; data: string }>();
+  for (const r of types) {
+    const t = JSON.parse(r.data), css = markCss(String(t.css ?? ''));
+    if (css === t.css) continue;
+    t.css = css;
+    t.mod = Math.floor(now / 1000);
+    out.types++;
+    stmts.push(env.CBP.prepare('UPDATE anki SET data = ?, mod = ?, usn = ? WHERE kind = ? AND id = ?').bind(JSON.stringify(t), now, usn++, 'notetype', r.id));
+  }
+  const { results: docs } = await env.CBP.prepare("SELECT id, data FROM docs WHERE col = 'notes' AND data LIKE '%<u>%'").all<{ id: string; data: string }>();
+  for (const r of docs) {
+    const d = JSON.parse(r.data);
+    for (const k of ['chinese', 'word', 'notes', 'mnemonic', 'picture']) if (typeof d[k] === 'string') d[k] = toMark(d[k]);
+    const data = JSON.stringify(d);
+    out.cardsPage++;
+    stmts.push(env.CBP.prepare("UPDATE docs SET data = ?, sha = ?, updated = ? WHERE col = 'notes' AND id = ?").bind(data, await hex(data), now, r.id));
+  }
+  if (!dry && env.CBP.batch) for (let i = 0; i < stmts.length; i += 100) await env.CBP.batch(stmts.slice(i, i + 100));
+  return { dry, ...out };
 }
