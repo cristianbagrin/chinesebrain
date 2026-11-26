@@ -1462,7 +1462,7 @@ ${p.word} is too easy for him now. Write a harder card for it. word: ${p.word} (
     let rows = apply(items(), BR.f, ck());
     return sortBy(perCard() ? rows : byWord(rows), BR.sort, BR.desc);
   }
-  var words = (l) => new Set(l.map((x) => x.note.id)).size;
+  var words = (l) => new Set(l.map((x) => x.word ? "w:" + x.word : "n:" + x.note.id)).size;
   async function resetBrowse() {
     Object.assign(BR, { f: blank(), sort: "added", desc: !0, tray: "", sel: /* @__PURE__ */ new Set(), last: 0, limit: 300, pick: 0, face: "a" }), saveBR(), await closeSide(), view === "browse" && (showBrowse(), scrollTo({ top: 0 }), takeKeys());
   }

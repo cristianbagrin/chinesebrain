@@ -1134,7 +1134,7 @@ function results() {
   const rows = filterBy(items(), BR.f, ck());
   return sortBy(perCard() ? rows : byWord(rows), BR.sort, BR.desc);
 }
-const words = (l: Item[]) => new Set(l.map((x) => x.note.id)).size;
+const words = (l: Item[]) => new Set(l.map((x) => (x.word ? 'w:' + x.word : 'n:' + x.note.id))).size; // as byWord groups them
 /** Back to how Browse opens the first time: no search, no filters, newest added first, nothing open. */
 async function resetBrowse() {
   Object.assign(BR, { f: blank(), sort: 'added', desc: true, tray: '', sel: new Set(), last: 0, limit: 300, pick: 0, face: 'a' });
