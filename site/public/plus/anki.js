@@ -1469,7 +1469,7 @@ ${p.word} is too easy for him now. Write a harder card for it. word: ${p.word} (
   addEventListener(
     "keydown",
     (e) => {
-      e.repeat || e.isComposing || !ready || VIEW !== "reviews" || view !== "browse" || !KEYS.is(e, "go.browse") || e.target?.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])') || document.querySelector("dialog[open]") || (sfx("tap"), resetBrowse());
+      e.repeat || e.isComposing || !ready || VIEW !== "reviews" || view !== "browse" || !KEYS.is(e, "page.browse") || e.target?.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])') || document.querySelector("dialog[open]") || (sfx("tap"), resetBrowse());
     },
     !0
   );

@@ -1145,11 +1145,11 @@ async function resetBrowse() {
   scrollTo({ top: 0 });
   takeKeys();
 }
-// its key (B) while in Browse: the same as a second click. Before kit/go.ts sees it (it leaves an open page alone).
+// its key (⇧B, page.browse) while in Browse: the same as a second click. Before kit/go.ts sees it (it leaves an open page alone).
 addEventListener(
   'keydown',
   (e) => {
-    if (e.repeat || e.isComposing || !ready || VIEW !== 'reviews' || view !== 'browse' || !KEYS.is(e, 'go.browse')) return;
+    if (e.repeat || e.isComposing || !ready || VIEW !== 'reviews' || view !== 'browse' || !KEYS.is(e, 'page.browse')) return;
     const t = e.target as HTMLElement | null;
     if (t?.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])') || document.querySelector('dialog[open]')) return;
     sfx('tap');
