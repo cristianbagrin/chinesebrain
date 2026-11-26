@@ -536,12 +536,12 @@
   });
   var LOW_SENTENCES = 3, HAN3 = /[㐀-鿿豈-﫿]/g, han = (t) => (String(t ?? "").match(HAN3) ?? []).length, sentences = (t) => String(t ?? "").split(/[。！？!?；;\n]+/).filter((s) => han(s) > 0).length, blank = () => ({ rv: 0, cleared: !0, chars: 0, sent: 0, cards: 0, test: !1 }), active = (d) => d.rv > 0 || d.chars > 0 || d.cards > 0 || d.test, met = (d, low) => d.cleared && (low ? d.sent >= 3 : d.chars > 0), P = (s) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)), K = (ms) => new Date(ms).toISOString().slice(0, 10), addDays = (s, n) => K(P(s) + n * 864e5), monday = (s) => addDays(s, -((new Date(P(s)).getUTCDay() + 6) % 7)), dayOf = (ms, tzMin = 480, rollover = 4) => K(ms + tzMin * 6e4 - rollover * 36e5);
   function walk(days, today) {
-    let out = {}, start = Object.keys(days).filter((k) => k <= today && days[k] && active(days[k])).sort()[0];
+    let out = {}, start = Object.keys(days).filter((k) => k <= today && days[k] && days[k].chars > 0).sort()[0];
     if (!start) return { days: out, streak: 0, start: null, low: !1 };
     let prev = "pre", restWeek = "";
     for (let k = start; k <= today; k = addDays(k, 1)) {
       let d = days[k] ?? blank(), low = prev === "miss", st;
-      met(d, low) ? st = "done" : k === today ? st = "open" : restWeek !== monday(k) ? (st = "rest", restWeek = monday(k)) : st = active(d) ? "partial" : "miss", out[k] = { st, low, deep: st === "done" && d.test }, prev = st === "partial" ? "miss" : st;
+      met(d, low) ? st = "done" : k === today ? st = "open" : restWeek !== monday(k) && (prev === "done" || prev === "rest") ? (st = "rest", restWeek = monday(k)) : st = active(d) ? "partial" : "miss", out[k] = { st, low, deep: st === "done" && d.test }, prev = st === "partial" ? "miss" : st;
     }
     let streak = 0;
     for (let k = today; out[k]; k = addDays(k, -1)) {
@@ -557,13 +557,15 @@
   function reviewDays(cards, day, today) {
     let count = /* @__PURE__ */ new Map(), diff = /* @__PURE__ */ new Map(), mark2 = (a, b) => {
       b <= a || (diff.set(a, (diff.get(a) ?? 0) + 1), diff.set(b, (diff.get(b) ?? 0) - 1));
-    };
-    for (let c of cards) {
-      let revs = [...c.revs ?? []].sort((a, b) => a[0] - b[0]);
+    }, list = [...cards], byNote = /* @__PURE__ */ new Map();
+    for (let c of list) if (c.nid != null) for (let r of c.revs ?? []) r[1] >= 1 && r[1] <= 4 && (byNote.get(c.nid) ?? byNote.set(c.nid, /* @__PURE__ */ new Set()).get(c.nid)).add(day(r[0]));
+    for (let c of list) {
+      let sib = c.nid != null ? byNote.get(c.nid) : void 0, revs = [...c.revs ?? []].sort((a, b) => a[0] - b[0]);
       for (let i = 0; i < revs.length; i++) {
         let r = revs[i], d = day(r[0]);
         if (r[1] >= 1 && r[1] <= 4 && r[6] <= 3 && count.set(d, (count.get(d) ?? 0) + 1), !(r[2] > 0)) continue;
         let due = d + r[2], next = revs[i + 1], until = next ? day(next[0]) : c.queue >= 0 ? today : due;
+        for (; sib && due < until && sib.has(due); ) due++;
         mark2(due, Math.min(until, today));
       }
     }

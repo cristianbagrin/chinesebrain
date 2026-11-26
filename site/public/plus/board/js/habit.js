@@ -91,7 +91,7 @@ function HB_heat(full,m,W0){
       const dt=add(mon,i), k=K(dt);
       if(dt.getDate()===1&&dt.getFullYear()===y&&(dt<=T||full)) heads.push(`<span style="grid-column:${w+1}"${dt.getMonth()===T.getMonth()?' class="now"':dt>T?' class="later"':''}>${MO[dt.getMonth()]}</span>`);
       if(dt<j1||dt>T){cells.push('<i class="hm-c off" aria-hidden="true"></i>');continue;}
-      const d=m[k]||HABIT.blank(), s=S[k], st=s?s.st:'pre';
+      const d=m[k]||HABIT.blank(), s=S[k], st=s?s.st:(d.rv||d.cards||d.test)?'partial':'pre';
       const cls=st==='done'?(s.deep?'deep':'done'):st==='open'?'open':st;
       const tip=HB_tip(d,k,s), pop=k===tk&&st==='done'&&HB.pop;
       cells.push(`<i class="hm-c ${cls}${k===tk?' today':''}${pop?' pop':''}"${tip?` data-tip="${esc(tip)}"`:''}></i>`);

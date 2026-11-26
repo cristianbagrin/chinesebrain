@@ -33,6 +33,8 @@ test('the first miss of a week is a rest; the second breaks the streak', () => {
   assert.equal(w2.days['2026-11-23'].st, 'rest', 'Monday starts a new week');
   assert.equal(w2.streak, 2, 'rest days hold the streak without adding to it');
   assert.equal(monday('2026-11-22'), '2026-11-16');
+  const w3 = st({ '2026-11-16': done, '2026-11-17': none, '2026-11-18': none, '2026-11-23': none }, '2026-11-24');
+  assert.equal(w3.days['2026-11-23'].st, 'miss', 'no streak left to hold: no rest');
 });
 
 test('never miss twice: after a miss, reviews and three sentences are enough', () => {
@@ -80,6 +82,15 @@ test('reviews a day, and the days that ended with reviews left due', () => {
   assert.equal(count.get(4), 1);
   assert.deepEqual([...open].sort((a, b) => a - b), [2, 3, 8, 9], 'the suspended card never counts as left');
   assert.equal(open.has(10), false, 'today is not judged');
+});
+
+test('a card buried behind its reviewed sibling was not left', () => {
+  const D = 864e5, t0 = Date.UTC(2026, 10, 1, 12);
+  const d = (ms: number) => Math.floor((ms - Date.UTC(2026, 10, 1)) / D);
+  const r = (n: number, ivl: number) => [t0 + n * D, 3, ivl, 1, 0, 1000, 1];
+  // both cards of note 7 due day 3; one reviewed on day 3, the other buried and reviewed on day 4
+  const { open } = reviewDays([{ queue: 2, nid: 7, revs: [r(0, 3), r(3, 5)] }, { queue: 2, nid: 7, revs: [r(1, 2), r(4, 5)] }], d, 6);
+  assert.equal(open.has(3), false);
 });
 
 test('the server keeps the best of each report', () => {
