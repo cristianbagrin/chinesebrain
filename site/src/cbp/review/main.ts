@@ -5,7 +5,8 @@
 // Settings panel (LAB.row, kit/settings.ts), and Card designs opens here from there.
 // Adding cards happens on the Cards page only (plus/review.js, its note goes into the collection: src/cbp/anki.ts).
 import { S, load, put, putMany, sync, api, onChange, type Note, type NoteType, type ColMeta } from './store.ts';
-import { render, strip, wordOf, sortText, search, fieldIndex, showable, type Row } from './render.ts';
+import { render, strip, wordOf, sortText, fieldIndex, showable, type Row } from './render.ts';
+import { index, apply as filterBy, sortBy, blank, active, STATES, type Item, type Filters, type Range, type Sort, type State, type Due } from './filter.ts';
 import { answer, clock, queue, label, missed3, right3, historyOf, type Card, type Conf, type Rev } from '../sched.ts';
 import { Fsrs, optimize, loss } from '../fsrs.ts';
 import { exportAnki } from './export.ts';
@@ -215,7 +216,35 @@ const cardCss = (t: NoteType) => t.css.replace(/@import[^;]+;/g, '');
 // his styling, then the board's ground under it: no white box, no "Show Pinyin" link or play buttons (P and V do those)
 const OVER = `:host{display:block}.card{background:transparent!important;min-height:100%;box-sizing:border-box}hr{border:0;border-top:1px solid #E4E6EC;margin:22px 0}
 a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn))){display:none}
-img{max-width:100%!important;max-height:min(46vh,460px)!important;width:auto!important;height:auto!important;object-fit:contain!important}`;
+img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!important;height:auto!important;object-fit:contain!important}
+.cbp-pics{display:flex!important;justify-content:center;align-items:center;gap:10px;margin-inline:auto;max-width:100%}
+.cbp-pics>img{flex:0 1 auto;min-width:0;margin:0!important;max-width:calc((100% - (var(--n) - 1) * 10px) / var(--n))!important;max-height:min(30vh,320px)!important}`;
+/** Pictures side by side: two or three in a row (only spaces between them) share one line, each shown whole, instead of
+ *  stacking and pushing the card past the screen. The note stays as it is; only what's drawn changes. */
+function sideBySide(root: ParentNode) {
+  const blank = (n: Node) => n.nodeType === 3 && !(n.textContent ?? '').trim();
+  const done = new Set<Element>();
+  for (const img of root.querySelectorAll('img')) {
+    if (done.has(img) || img.parentElement?.classList.contains('cbp-pics')) continue;
+    const run: Element[] = [img];
+    for (let n = img.nextSibling; n; n = n.nextSibling) {
+      if (blank(n)) continue;
+      if (n instanceof Element && n.tagName === 'IMG') run.push(n);
+      else break;
+    }
+    run.forEach((x) => done.add(x));
+    if (run.length < 2) continue;
+    const box = document.createElement('span');
+    box.className = 'cbp-pics';
+    box.style.setProperty('--n', String(run.length));
+    img.before(box);
+    for (const x of run) {
+      // the spaces between them go (an &nbsp; would take room in the row)
+      while (x.previousSibling && x.previousSibling !== box && blank(x.previousSibling)) x.previousSibling.remove();
+      box.append(x);
+    }
+  }
+}
 /** Draws one side of a card into `host` with his CSS, kept apart from the page's (a shadow root). */
 function draw(host: HTMLElement, r: Row, side: 'q' | 'a') {
   const t = r.type!, tmpl = t.templates.find((x) => x.ord === r.card.ord) ?? t.templates[0];
@@ -224,6 +253,7 @@ function draw(host: HTMLElement, r: Row, side: 'q' | 'a') {
   const html = side === 'q' ? q : render(tmpl.afmt, ctx, q);
   const root = host.shadowRoot ?? host.attachShadow({ mode: 'open' });
   root.innerHTML = `<style>${cardCss(t)}${OVER}${RUBY.CSS}</style><div class="card card${r.card.ord + 1}">${html}</div>`;
+  sideBySide(root);
   return root;
 }
 
@@ -252,7 +282,6 @@ VIEW_EL.querySelectorAll<HTMLElement>('[data-v]').forEach(
     (b.onclick = () => {
       const v = b.dataset.v as View;
       sfx('tap');
-      if (v === 'browse') resetBrowse();
       go(v);
     }),
 );
@@ -279,6 +308,10 @@ const left = () => {
 
 function showReview(): void {
   if (RV.panel === 'deeper') return showDeeper();
+  // a sync brings back the rows this device just sent (a flag, an edit) as new objects: the same card, unanswered since,
+  // stays on screen as it was (side and all). Taking it for a new card flipped it to its front and played that (the F bug).
+  const back = RV.cur && S.cards.get(RV.cur.id);
+  if (RV.cur && back && back !== RV.cur && back.queue >= 0 && back.reps === RV.cur.reps && back.due === RV.cur.due) RV.cur = back;
   if (!RV.cur || !S.cards.has(RV.cur.id) || RV.cur !== S.cards.get(RV.cur.id) || RV.cur.queue < 0) {
     RV.cur = pick();
     RV.shown = false;
@@ -313,13 +346,14 @@ function showReview(): void {
   app.innerHTML = `${prog}<section class="rw${flag ? ' fl' + flag : ''}">
     ${RV.merge ? mergeBanner() : ''}
     <div class="rw-card"><div class="host${RV.py ? ' py' : ''}"></div></div>
-    <div class="rw-bar">${RV.shown ? `<div class="rw-g">${['Again', 'Hard', 'Good', 'Easy'].map((x, i) => `<button type="button" class="rw-a rw-a${i + 1}" data-g="${i + 1}">${x}</button>`).join('')}</div>` : `<button type="button" class="rw-show" data-a="show">Show answer</button>`}</div>
+    <div class="rw-foot"><div class="rw-bar">${RV.shown ? `<div class="rw-g">${['Again', 'Hard', 'Good', 'Easy'].map((x, i) => `<button type="button" class="rw-a rw-a${i + 1}" data-g="${i + 1}">${x}</button>`).join('')}</div>` : `<button type="button" class="rw-show" data-a="show">Show answer</button>`}</div>
     <div class="rw-more rx-opt">
       ${TOUCH ? `<button type="button" class="btn-q" data-a="py">Pinyin</button>` : ''}<button type="button" class="btn-q rw-snd" data-a="play" aria-label="Play" hidden>${SPEAKER}</button>
       <button type="button" class="btn-q" data-a="edit">Edit</button><button type="button" class="btn-q rw-flagb" data-a="flag" aria-haspopup="dialog" aria-expanded="${RV.flags}">Flag</button><button type="button" class="btn-q" data-a="suspend">Suspend</button>
     </div>
-    ${RV.flags ? flagPicker(c) : ''}
+    ${RV.flags ? flagPicker(c) : ''}</div>
   </section>`;
+  watchFoot();
   const host = $('.host', app);
   const root = draw(host, r, RV.shown ? 'a' : 'q');
   // a side with sound: a tap on the card plays it (a phone doesn't play by itself), and the speaker does the same
@@ -339,6 +373,14 @@ function showReview(): void {
     BUS.emit('reviews:start');
   }
   bindReview();
+}
+/** The strip at the bottom (answer buttons, options) is fixed to the screen; the card keeps exactly its height clear
+ *  under it (--rw-foot), so the page scrolls only when the card itself is taller than the room above the strip. */
+const footRO = typeof ResizeObserver === 'function' ? new ResizeObserver((es) => es.forEach((e) => e.target.isConnected && VIEW_EL.style.setProperty('--rw-foot', `${Math.ceil((e.target as HTMLElement).offsetHeight)}px`))) : null;
+function watchFoot() {
+  footRO?.disconnect();
+  const f = $('.rw-foot', app);
+  if (f) footRO?.observe(f);
 }
 function bindReview() {
   app.querySelectorAll<HTMLElement>('[data-a]').forEach((b) => (b.onclick = () => act(b.dataset.a!)));
@@ -412,7 +454,7 @@ async function act(a: string) {
   if (a === 'edit') return editDialog(S.notes.get(c.nid)!);
   if (a === 'flag') {
     RV.flags = !RV.flags;
-    return showReview();
+    return paintFlags();
   }
   if (a === 'suspend') {
     await change('Suspend', [['card', c.id, { ...c, queue: -1 }]], c.id);
@@ -433,6 +475,16 @@ function flagPicker(c: Card) {
     <button type="button" class="fl-b fl-g${f === 3 ? ' on' : ''}" data-f="3"><i></i>Green<kbd>G</kbd></button>
     ${f ? `<button type="button" class="fl-b fl-0" data-f="0"><i></i>None<kbd>N</kbd></button>` : ''}
   </div>`;
+}
+/** The flag picker opens and closes on its own; the card under it is left alone (not drawn again). */
+function paintFlags() {
+  const foot = $('.rw-foot', app), c = RV.cur;
+  if (!foot || !c) return showReview();
+  foot.querySelector('.rw-flags')?.remove();
+  $('.rw-flagb', app)?.setAttribute('aria-expanded', String(RV.flags));
+  if (!RV.flags) return;
+  foot.insertAdjacentHTML('beforeend', flagPicker(c));
+  foot.querySelectorAll<HTMLElement>('[data-f]').forEach((b) => (b.onclick = () => flagIt(Number(b.dataset.f))));
 }
 async function flagIt(f: number, cards?: Card[]) {
   const list = cards ?? (RV.cur ? [RV.cur] : []);
@@ -627,7 +679,12 @@ function editor(host: HTMLElement, note0: Note, onClose?: () => void) {
   host.innerHTML = `<div class="ed">${t.fields
     .slice()
     .sort((a, b) => a.ord - b.ord)
-    .map((f) => `<label class="ef"><span>${esc(f.name)}</span><div class="fv${/chinese|word|sentence|mnemonic/i.test(f.name) ? ' zh' : ''}" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" data-o="${f.ord}">${note.flds[f.ord] ?? ''}</div></label>`)
+    .map((f) =>
+      // the audio field is a sound, not text: Play, or Make when there is none (V and Shift+V do the same)
+      /^audio$/i.test(f.name)
+        ? `<div class="ef"><span>${esc(f.name)}</span><div class="ef-snd"></div><div class="fv" hidden data-o="${f.ord}">${note.flds[f.ord] ?? ''}</div></div>`
+        : `<label class="ef"><span>${esc(f.name)}</span><div class="fv${/chinese|word|sentence|mnemonic/i.test(f.name) ? ' zh' : ''}" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" data-o="${f.ord}">${note.flds[f.ord] ?? ''}</div></label>`,
+    )
     .join('')}
     <div class="ed-end"><button type="button" class="ed-del" data-e="del">Delete note</button></div></div>`;
   let saveT: ReturnType<typeof setTimeout> | undefined;
@@ -658,7 +715,16 @@ function editor(host: HTMLElement, note0: Note, onClose?: () => void) {
   const ai = t.fields.find((f) => /^audio$/i.test(f.name))?.ord ?? -1;
   const si = t.fields.find((f) => /^chinese$/i.test(f.name))?.ord ?? 0;
   let voicing = false;
-  ED = {
+  const sndRow = host.querySelector<HTMLElement>('.ef-snd');
+  const paintSnd = () => {
+    if (!sndRow) return;
+    const fa = host.querySelector<HTMLElement>(`.fv[data-o="${ai}"]`);
+    const has = /\[sound:[^\]]+\]/.test(fa?.textContent ?? '');
+    sndRow.innerHTML = has ? `<button type="button" class="btn-q ed-snd" data-v="play">${SPEAKER}Play</button><button type="button" class="btn-q" data-v="again">Make again</button>` : `<button type="button" class="btn-q" data-v="make">Make</button>`;
+    sndRow.querySelectorAll<HTMLElement>('[data-v]').forEach((b) => (b.onclick = () => void me.voice(b.dataset.v === 'again')));
+  };
+  paintSnd();
+  const me = {
     host,
     voice: async (again: boolean) => {
       if (voicing) return;
@@ -674,6 +740,7 @@ function editor(host: HTMLElement, note0: Note, onClose?: () => void) {
       try {
         const { url } = await api('voice', { text });
         fa.textContent = `[sound:${url}]`;
+        paintSnd();
         save();
         sfx('save');
         void SOUND.play(url);
@@ -685,6 +752,7 @@ function editor(host: HTMLElement, note0: Note, onClose?: () => void) {
       }
     },
   };
+  ED = me;
   /** Called when the editor goes away: the edit joins the undo history as one step. */
   return async () => {
     if (ED?.host === host) ED = null;
@@ -754,77 +822,150 @@ async function deleteNote(nid: number, quiet = false) {
   if (!quiet) toast(`Deleted <span class="zh">${esc(w)}</span>`, true);
 }
 
-// ================= Browse =================
-const BR = { q: '', flag: 0, sort: 'added', desc: true, sel: new Set<number>(), last: 0, focus: 0, limit: 300, close: null as null | (() => Promise<void>) };
-/** Browse as it opens: every card, newest first. */
-function resetBrowse() {
-  Object.assign(BR, { q: '', flag: 0, sort: 'added', desc: true, sel: new Set<number>(), last: 0, limit: 300 });
+// ================= Browse: one row per card; filters as chips, each opening its own tray (filter.ts) =================
+const BR_V = 1;
+const BR = { f: blank(), sort: 'added' as Sort, desc: true, tray: '', sel: new Set<number>(), last: 0, limit: 300, close: null as null | (() => Promise<void>), face: 'a' as 'q' | 'a', note: false };
+// his filters and sort stay between visits (not the search text); a newer shape of them starts clean (BR_V)
+try {
+  const j = JSON.parse(localStorage.getItem('cbp-browse') || 'null');
+  if (j?.v === BR_V) Object.assign(BR, { f: { ...blank(), ...j.f, q: '' }, sort: j.sort ?? 'added', desc: j.desc ?? true });
+} catch {}
+function saveBR() {
+  try {
+    localStorage.setItem('cbp-browse', JSON.stringify({ v: BR_V, f: { ...BR.f, q: '' }, sort: BR.sort, desc: BR.desc }));
+  } catch {}
 }
-const ADDED = (r: Row) => r.note.id * 10 + r.card.ord;
-const COLS: [string, string, (r: Row, k: ReturnType<typeof ck>) => string | number][] = [
-  ['sort', 'Word', (r) => wordOfNote(r.note)],
-  ['card', 'Card', (r) => r.type?.templates.find((t) => t.ord === r.card.ord)?.name ?? ''],
-  ['due', 'Due', (r, k) => (r.card.queue === -1 ? 1e9 : r.card.type === 0 ? 1e8 + r.card.due : r.card.queue === 1 ? k.dayOf(r.card.due * 1000) : r.card.due)],
-  ['ivl', 'Interval', (r) => (r.card.type === 0 ? -1 : r.card.ivl)],
+// the index: worked out once per change of the collection (or of the day, or of his words' uses), then every keystroke
+// and chip only filters it
+declare const STATE: { uses?: Record<string, number> } | null | undefined;
+let IX: Item[] | null = null, IXday = -1;
+const usesMap = () => {
+  try {
+    return (typeof STATE !== 'undefined' && STATE?.uses) || {};
+  } catch {
+    return {};
+  }
+};
+function items() {
+  const k = ck();
+  if (!IX || IXday !== k.today) {
+    IX = index(S.cards.values(), (id) => S.notes.get(id), typeOf, k, conf().w, usesMap());
+    IXday = k.today;
+  }
+  return IX;
+}
+onChange((what) => what !== 'sync' && (IX = null));
+BUS.on('data', () => {
+  IX = null;
+  if (VIEW === 'reviews' && view === 'browse') paintBrowse();
+});
+
+const STATE_NAME: Record<State, string> = { new: 'New', learning: 'Learning', young: 'Young', mature: 'Mature', suspended: 'Suspended', buried: 'Buried' };
+const DUE_NAME: Record<string, string> = { overdue: 'Overdue', today: 'Today', week: '7 days' };
+const DOTS = (n: number) => `<span class="dots" aria-label="${n} of 3">${'●'.repeat(n)}${'○'.repeat(3 - n)}</span>`;
+const fmtN = (n: number) => n.toLocaleString('en-US');
+const fmtRange = (r: Range, unit = '') => (r[0] != null && r[1] != null ? (r[0] === r[1] ? `${r[0]}${unit}` : `${r[0]}–${r[1]}${unit}`) : r[0] != null ? `${r[0]}${unit}+` : `≤ ${r[1]}${unit}`);
+const isOpen = (r: Range) => r[0] == null && r[1] == null;
+const MEM: [keyof Filters & ('ivl' | 's' | 'd' | 'r' | 'lapses'), string, string][] = [
+  ['ivl', 'Interval', 'd'],
+  ['s', 'Stability', 'd'],
+  ['d', 'Difficulty', ''],
+  ['r', 'Recall', '%'],
+  ['lapses', 'Lapses', ''],
 ];
+const DAYS: [number, string][] = [
+  [1, 'Today'],
+  [7, '7 days'],
+  [30, '30 days'],
+];
+const tmplNames = () => [...new Set(items().map((x) => x.tmpl).filter(Boolean))];
+
+/** The chips: each one's name when off, what it's set to when on. */
+const FACETS: { id: string; name: string; on: () => boolean; text: () => string; clear: () => void; show?: () => boolean }[] = [
+  { id: 'state', name: 'State', on: () => !!BR.f.state.length, text: () => BR.f.state.map((s) => STATE_NAME[s]).join(', '), clear: () => (BR.f.state = []) },
+  { id: 'due', name: 'Due', on: () => !!BR.f.due && (BR.f.due !== 'range' || !isOpen(BR.f.dueR)), text: () => (BR.f.due === 'range' ? `Due in ${fmtRange(BR.f.dueR, 'd')}` : DUE_NAME[BR.f.due]), clear: () => ((BR.f.due = ''), (BR.f.dueR = [null, null])) },
+  { id: 'card', name: 'Card', on: () => !!BR.f.card.length, text: () => BR.f.card.join(', '), clear: () => (BR.f.card = []) },
+  { id: 'flag', name: 'Flag', on: () => !!BR.f.flag.length || BR.f.leech, text: () => [...BR.f.flag.map((f) => (f === 1 ? 'Red' : f === 3 ? 'Green' : 'No flag')), ...(BR.f.leech ? ['Leech'] : [])].join(', '), clear: () => ((BR.f.flag = []), (BR.f.leech = false)) },
+  { id: 'media', name: 'Media', on: () => !!(BR.f.pic || BR.f.audio), text: () => [BR.f.pic && (BR.f.pic === 'yes' ? 'Picture' : 'No picture'), BR.f.audio && (BR.f.audio === 'yes' ? 'Audio' : 'No audio')].filter(Boolean).join(', '), clear: () => ((BR.f.pic = ''), (BR.f.audio = '')) },
+  { id: 'uses', name: 'Uses', on: () => !!BR.f.uses.length, text: () => BR.f.uses.map((n) => `${n}/3`).join(', '), clear: () => (BR.f.uses = []), show: () => !!Object.keys(usesMap()).length },
+  {
+    id: 'mem',
+    name: 'Memory',
+    on: () => MEM.some(([k]) => !isOpen(BR.f[k] as Range)),
+    text: () => {
+      const on = MEM.filter(([k]) => !isOpen(BR.f[k] as Range));
+      return on.map(([k, n, u]) => `${n} ${fmtRange(BR.f[k] as Range, u)}`).join(', ');
+    },
+    clear: () => MEM.forEach(([k]) => ((BR.f[k] as Range) = [null, null])),
+  },
+  {
+    id: 'dates',
+    name: 'Dates',
+    on: () => BR.f.added != null || BR.f.rev != null,
+    text: () => [BR.f.added != null && (BR.f.added === 1 ? 'Added today' : `Added ${BR.f.added} days`), BR.f.rev != null && (BR.f.rev === 'never' ? 'Never reviewed' : BR.f.rev === 1 ? 'Reviewed today' : `Reviewed ${BR.f.rev} days`)].filter(Boolean).join(', '),
+    clear: () => ((BR.f.added = null), (BR.f.rev = null)),
+  },
+];
+
+const SEARCH = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
 function showBrowse() {
   app.innerHTML = `<section class="br">
-    <div class="br-top"><input class="br-q" type="search" placeholder="Search" aria-label="Search" value="${esc(BR.q)}" spellcheck="false" enterkeyhint="search" lang="zh-Hant">
-      <div class="br-f" role="radiogroup" aria-label="Flag">${[[0, 'All'], [1, 'Red'], [3, 'Green']].map(([f, l]) => `<button type="button" role="radio" data-fl="${f}" aria-checked="${BR.flag === f}">${f ? `<i class="fd fd${f}"></i>` : ''}${l}</button>`).join('')}</div></div>
+    <div class="br-top"><label class="br-s">${SEARCH}<input class="br-q" type="search" placeholder="Word, sentence or pinyin" aria-label="Search" value="${esc(BR.f.q)}" spellcheck="false" autocomplete="off" enterkeyhint="search" lang="zh-Hant"></label><p class="br-n" aria-live="polite" data-js-text></p></div>
+    <div class="br-chips" role="toolbar" aria-label="Filters"></div>
+    <div class="br-tray" hidden></div>
     <div class="br-bulk" hidden></div>
     <div class="br-main"><div class="br-tbl" role="grid" aria-label="Cards"></div><aside class="br-side" hidden></aside></div></section>`;
   const q = $<HTMLInputElement>('.br-q', app);
-  let t: ReturnType<typeof setTimeout> | undefined;
+  // every keystroke filters the index at once (no wait); painting waits for the next frame, so fast typing paints once
+  let raf = 0;
   q.oninput = () => {
-    clearTimeout(t);
-    t = setTimeout(() => ((BR.q = q.value), (BR.limit = 300), paintBrowse()), 180);
+    BR.f.q = q.value;
+    BR.limit = 300;
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => paintBrowse());
   };
-  app.querySelectorAll<HTMLElement>('[data-fl]').forEach(
-    (b) =>
-      (b.onclick = () => {
-        BR.flag = Number(b.dataset.fl);
-        app.querySelectorAll('[data-fl]').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
-        BR.limit = 300;
-        sfx('tap');
-        paintBrowse();
-      }),
-  );
   paintBrowse();
 }
 function results() {
-  const k = ck();
-  const test = search(BR.q, k.today, k.dayOf);
-  const rows = live()
-    .map(rowOf)
-    .filter((r): r is Row => !!r && (!BR.flag || (r.card.flags & 7) === BR.flag) && test(r));
-  const by = BR.sort === 'added' ? ADDED : COLS.find((c) => c[0] === BR.sort)![2];
-  rows.sort((a, b) => {
-    const x = by(a, k), y = by(b, k);
-    const o = typeof x === 'number' ? x - (y as number) : String(x).localeCompare(String(y), 'zh-Hant');
-    return BR.desc ? -o : o;
-  });
-  return rows;
+  return sortBy(filterBy(items(), BR.f, ck()), BR.sort, BR.desc);
 }
+const COLS: [Sort, string][] = [
+  ['word', 'Word'],
+  ['card', 'Card'],
+  ['state', 'State'],
+  ['due', 'Due'],
+  ['ivl', 'Interval'],
+  ['r', 'Recall'],
+  ['lapses', 'Lapses'],
+];
+const pct = (r: number | null) => (r == null ? '' : `${Math.round(r * 100)}%`);
 function paintBrowse() {
   if (view !== 'browse' || !$('.br', app)) return;
-  const k = ck(), rows = results(), shown = rows.slice(0, BR.limit);
+  const k = ck(), all = items(), rows = results(), shown = rows.slice(0, BR.limit);
+  $('.br-n', app).innerHTML = rows.length === all.length ? `${fmtN(all.length)} cards` : `<b>${fmtN(rows.length)}</b> of ${fmtN(all.length)}`;
+  paintChips();
+  paintTrayCounts();
   const tbl = $('.br-tbl', app);
   tbl.innerHTML = `<div class="tr th" role="row">${COLS.map(([key, name]) => `<button type="button" role="columnheader" class="td c-${key}${BR.sort === key ? (BR.desc ? ' desc' : ' asc') : ''}" data-sort="${key}" aria-sort="${BR.sort === key ? (BR.desc ? 'descending' : 'ascending') : 'none'}">${name}</button>`).join('')}</div>
     ${shown
       .map(
-        (r) =>
-          `<div class="tr${BR.sel.has(r.card.id) ? ' sel' : ''}${r.card.queue === -1 ? ' susp' : ''}" data-c="${r.card.id}" role="row" aria-selected="${BR.sel.has(r.card.id)}"><span class="td c-sort zh">${r.card.flags & 7 ? `<i class="fd fd${r.card.flags & 7}"></i>` : ''}${esc(wordOfNote(r.note))}</span><span class="td c-card">${esc(r.type?.templates.find((t) => t.ord === r.card.ord)?.name ?? '')}</span><span class="td c-due">${dueText(r.card, k)}</span><span class="td c-ivl">${r.card.ivl && r.card.type ? label(r.card.ivl) : ''}</span></div>`,
+        (x) =>
+          `<div class="tr${BR.sel.has(x.card.id) ? ' sel' : ''} st-${x.state}" data-c="${x.card.id}" role="row" aria-selected="${BR.sel.has(x.card.id)}"><span class="td c-word zh">${x.flag ? `<i class="fd fd${x.flag}"></i>` : ''}${esc(x.word)}</span><span class="td c-card">${esc(x.tmpl)}</span><span class="td c-state"><i class="sdot"></i>${STATE_NAME[x.state]}</span><span class="td c-due">${x.due == null ? '' : dueText(x.card, k)}</span><span class="td c-ivl">${x.ivl ? label(x.ivl) : ''}</span><span class="td c-r">${pct(x.r)}</span><span class="td c-lapses">${x.lapses || ''}</span></div>`,
       )
       .join('')}
-    ${rows.length > shown.length ? `<button type="button" class="btn-q br-more">Show all</button>` : ''}${rows.length ? '' : '<p class="br-none">Nothing matches.</p>'}`;
+    ${rows.length > shown.length ? `<button type="button" class="btn-q br-more">Show all ${fmtN(rows.length)}</button>` : ''}${rows.length ? '' : `<div class="br-none"><p>Nothing matches.</p>${active(BR.f) || BR.f.q ? '<button type="button" class="btn-q" data-clear="1">Clear filters</button>' : ''}</div>`}`;
   tbl.querySelectorAll<HTMLElement>('[data-sort]').forEach(
     (b) =>
       (b.onclick = () => {
-        BR.desc = BR.sort === b.dataset.sort ? !BR.desc : false;
-        BR.sort = b.dataset.sort!;
+        const s = b.dataset.sort as Sort;
+        // a new column starts the way that reads best: words A→Z, numbers biggest first, due soonest first
+        BR.desc = BR.sort === s ? !BR.desc : !['word', 'card', 'due', 'state'].includes(s);
+        BR.sort = s;
+        saveBR();
         paintBrowse();
       }),
   );
+  $('[data-clear]', tbl)?.addEventListener('click', clearFilters);
   $('.br-more', tbl)?.addEventListener('click', () => ((BR.limit = 1e9), paintBrowse()));
   tbl.querySelectorAll<HTMLElement>('.tr[data-c]').forEach(
     (tr) =>
@@ -842,7 +983,145 @@ function paintBrowse() {
   );
   paintSel();
 }
-/** The selection: one card opens its note beside the list, several get the actions for all of them. */
+function clearFilters() {
+  const q = BR.f.q;
+  BR.f = blank();
+  BR.f.q = q && !active(BR.f) ? q : '';
+  BR.tray = '';
+  BR.limit = 300;
+  const inp = $<HTMLInputElement>('.br-q', app);
+  if (inp) inp.value = BR.f.q;
+  saveBR();
+  sfx('unstamp');
+  paintTray();
+  paintBrowse();
+}
+function paintChips() {
+  const el = $('.br-chips', app);
+  if (!el) return;
+  const on = active(BR.f);
+  el.innerHTML =
+    FACETS.filter((f) => !f.show || f.show() || f.on())
+      .map((f) => {
+        const a = f.on();
+        return `<span class="fc${a ? ' on' : ''}${BR.tray === f.id ? ' open' : ''}"><button type="button" class="fc-b" data-fc="${f.id}" aria-expanded="${BR.tray === f.id}">${a ? esc(f.text()) : f.name}</button>${a ? `<button type="button" class="fc-x" data-fx="${f.id}" aria-label="Clear ${f.name}">×</button>` : ''}</span>`;
+      })
+      .join('') + (on ? `<button type="button" class="fc-clear" data-clear="1">Clear</button>` : '');
+  el.querySelectorAll<HTMLElement>('[data-fc]').forEach(
+    (b) =>
+      (b.onclick = () => {
+        BR.tray = BR.tray === b.dataset.fc ? '' : b.dataset.fc!;
+        sfx('tap');
+        paintChips();
+        paintTray();
+      }),
+  );
+  el.querySelectorAll<HTMLElement>('[data-fx]').forEach(
+    (b) =>
+      (b.onclick = () => {
+        FACETS.find((f) => f.id === b.dataset.fx)!.clear();
+        if (BR.tray === b.dataset.fx) BR.tray = '';
+        changed(true);
+      }),
+  );
+  $('[data-clear]', el)?.addEventListener('click', clearFilters);
+}
+/** A filter changed: remembered, the list follows; the tray is drawn again only when asked (a field being typed in keeps its place). */
+function changed(tray = false) {
+  BR.limit = 300;
+  saveBR();
+  sfx('tap');
+  if (tray) paintTray();
+  paintBrowse();
+}
+// ---------- the tray: the open chip's choices, each with how many cards it would leave ----------
+const opt = (k: string, v: string | number, text: string, on: boolean) => `<button type="button" class="tc${on ? ' on' : ''}" data-k="${k}" data-v="${v}" aria-pressed="${on}">${text}<span class="tn" data-js-text></span></button>`;
+const rangeRow = (k: string, name: string, r: Range, unit: string) =>
+  `<div class="trr"><span class="trl">${name}</span><input class="tri" data-r="${k}" data-i="0" inputmode="decimal" placeholder="from" aria-label="${name} from" value="${r[0] ?? ''}"><span class="trd">–</span><input class="tri" data-r="${k}" data-i="1" inputmode="decimal" placeholder="to" aria-label="${name} to" value="${r[1] ?? ''}"><span class="tru">${unit === 'd' ? 'days' : unit}</span></div>`;
+function paintTray() {
+  const el = $('.br-tray', app);
+  if (!el) return;
+  el.hidden = !BR.tray;
+  if (!BR.tray) return void (el.innerHTML = '');
+  const f = BR.f;
+  let h = '';
+  if (BR.tray === 'state') h = `<div class="trw">${STATES.map((s) => opt('state', s, `<i class="sdot sd-${s}"></i>${STATE_NAME[s]}`, f.state.includes(s))).join('')}</div>`;
+  else if (BR.tray === 'due')
+    h = `<div class="trw">${(['overdue', 'today', 'week'] as const).map((d) => opt('due', d, DUE_NAME[d], f.due === d)).join('')}</div>${rangeRow('dueR', 'In', f.due === 'range' ? f.dueR : [null, null], 'd')}`;
+  else if (BR.tray === 'card') h = `<div class="trw">${tmplNames().map((t) => opt('card', esc(t), esc(t), f.card.includes(t))).join('')}</div>`;
+  else if (BR.tray === 'flag') h = `<div class="trw">${opt('flag', 1, '<i class="fd fd1"></i>Red', f.flag.includes(1))}${opt('flag', 3, '<i class="fd fd3"></i>Green', f.flag.includes(3))}${opt('flag', 0, 'No flag', f.flag.includes(0))}${opt('leech', 1, 'Leech', f.leech)}</div>`;
+  else if (BR.tray === 'media')
+    h = `<div class="trw"><span class="trl">Picture</span>${opt('pic', 'yes', 'With', f.pic === 'yes')}${opt('pic', 'no', 'Without', f.pic === 'no')}</div><div class="trw"><span class="trl">Audio</span>${opt('audio', 'yes', 'With', f.audio === 'yes')}${opt('audio', 'no', 'Without', f.audio === 'no')}</div>`;
+  else if (BR.tray === 'uses') h = `<div class="trw">${[0, 1, 2].map((n) => opt('uses', n, DOTS(n), f.uses.includes(n))).join('')}</div>`;
+  else if (BR.tray === 'mem') h = MEM.map(([k, n, u]) => rangeRow(k, n, f[k] as Range, u)).join('');
+  else if (BR.tray === 'dates')
+    h = `<div class="trw"><span class="trl">Added</span>${DAYS.map(([d, t]) => opt('added', d, t, f.added === d)).join('')}</div><div class="trw"><span class="trl">Reviewed</span>${DAYS.map(([d, t]) => opt('rev', d, t, f.rev === d)).join('')}${opt('rev', 'never', 'Never', f.rev === 'never')}</div>`;
+  el.innerHTML = h;
+  el.querySelectorAll<HTMLElement>('[data-k]').forEach(
+    (b) =>
+      (b.onclick = () => {
+        pick1(b.dataset.k!, b.dataset.v!);
+        changed(true);
+      }),
+  );
+  el.querySelectorAll<HTMLInputElement>('[data-r]').forEach((inp) => {
+    inp.oninput = () => {
+      const k = inp.dataset.r as 'dueR' | 'ivl' | 's' | 'd' | 'r' | 'lapses', i = Number(inp.dataset.i);
+      const v = inp.value.trim() === '' || isNaN(Number(inp.value)) ? null : Number(inp.value);
+      const r = [...(BR.f[k] as Range)] as Range;
+      r[i] = v;
+      (BR.f[k] as Range) = r;
+      if (k === 'dueR') BR.f.due = isOpen(r) ? '' : 'range';
+      BR.limit = 300;
+      saveBR();
+      paintBrowse();
+      // the due presets light up or go out with the range
+      if (k === 'dueR') el.querySelectorAll<HTMLElement>('[data-k="due"]').forEach((b) => (b.classList.toggle('on', false), b.setAttribute('aria-pressed', 'false')));
+    };
+  });
+  paintTrayCounts();
+}
+/** One choice in the tray: several of a kind combine (any of them); a one-of kind (due, picture, dates) swaps. */
+function pick1(k: string, v: string) {
+  const f = BR.f;
+  const flip = <T>(list: T[], x: T) => (list.includes(x) ? list.filter((y) => y !== x) : [...list, x]);
+  if (k === 'state') f.state = flip(f.state, v as State);
+  else if (k === 'card') f.card = flip(f.card, tmplNames().find((t) => esc(t) === v) ?? v);
+  else if (k === 'flag') f.flag = flip(f.flag, Number(v));
+  else if (k === 'leech') f.leech = !f.leech;
+  else if (k === 'uses') f.uses = flip(f.uses, Number(v));
+  else if (k === 'due') ((f.due = f.due === v ? '' : (v as Due)), (f.dueR = [null, null]));
+  else if (k === 'pic' || k === 'audio') f[k] = f[k] === v ? '' : (v as 'yes' | 'no');
+  else if (k === 'added') f.added = f.added === Number(v) ? null : Number(v);
+  else if (k === 'rev') {
+    const x = v === 'never' ? 'never' : Number(v);
+    f.rev = f.rev === x ? null : x;
+  }
+}
+/** How many cards each choice leaves, with everything else as it is (that kind's own choice set to just this one). */
+function paintTrayCounts() {
+  const el = $('.br-tray', app);
+  if (!el || el.hidden) return;
+  const k = ck(), all = items();
+  el.querySelectorAll<HTMLElement>('[data-k]').forEach((b) => {
+    const kind = b.dataset.k!, v = b.dataset.v!;
+    const f: Filters = { ...BR.f };
+    if (kind === 'state') f.state = [v as State];
+    else if (kind === 'card') f.card = [tmplNames().find((t) => esc(t) === v) ?? v];
+    else if (kind === 'flag') ((f.flag = [Number(v)]), (f.leech = false));
+    else if (kind === 'leech') ((f.flag = []), (f.leech = true));
+    else if (kind === 'uses') f.uses = [Number(v)];
+    else if (kind === 'due') ((f.due = v as Due), (f.dueR = [null, null]));
+    else if (kind === 'pic' || kind === 'audio') f[kind] = v as 'yes' | 'no';
+    else if (kind === 'added') f.added = Number(v);
+    else if (kind === 'rev') f.rev = v === 'never' ? 'never' : Number(v);
+    const n = filterBy(all, f, k).length;
+    b.querySelector('.tn')!.textContent = fmtN(n);
+    b.classList.toggle('none', !n);
+  });
+}
+
+// ---------- the selection: one card opens beside the list (its note one click further), several get bulk actions ----------
 async function paintSel() {
   const sel = [...BR.sel].map((id) => S.cards.get(id)).filter((c): c is Card => !!c && S.notes.has(c.nid));
   app.querySelectorAll<HTMLElement>('.tr[data-c]').forEach((tr) => {
@@ -869,14 +1148,67 @@ async function paintSel() {
   side.dataset.c = String(focus.id);
   side.hidden = false;
   app.querySelector('.br-main')!.classList.add('open');
-  const note = S.notes.get(focus.nid)!, word = wordOfNote(note), f = focus.flags & 7;
-  const tm = typeOf(note)?.templates.find((t) => t.ord === focus.ord)?.name ?? '';
-  side.innerHTML = `<div class="sd-top"><span class="sd-w zh">${esc(word)}</span><button type="button" class="dlg-x" aria-label="Close">×</button></div>
-    <div class="sd-card"><span class="sd-tm">${esc(tm)}</span><span class="sd-due">${dueText(focus)}</span>
-      <span class="sd-act"><button type="button" class="btn-q" data-s="susp">${focus.queue === -1 ? 'Unsuspend' : 'Suspend'}</button><button type="button" class="btn-q${f === 1 ? ' on' : ''}" data-s="red"><i class="fd fd1"></i>Red</button><button type="button" class="btn-q${f === 3 ? ' on' : ''}" data-s="green"><i class="fd fd3"></i>Green</button></span></div>
+  const x = items().find((i) => i.card.id === focus.id) ?? index([focus], (id) => S.notes.get(id), typeOf, ck(), conf().w, usesMap())[0];
+  const note = x.note, f = x.flag;
+  const day = (n: number | null) => (n == null ? '' : n === 0 ? 'Today' : n === 1 ? 'Yesterday' : fmtDay(Date.now() - n * 864e5));
+  const facts: [string, string][] = (
+    [
+      ['Due', x.due == null ? '' : dueText(x.card)],
+      ['Interval', x.ivl ? label(x.ivl) : ''],
+      ['Recall', pct(x.r)],
+      ['Stability', x.s == null ? '' : label(Math.max(1, Math.round(x.s)))],
+      ['Difficulty', x.d == null ? '' : `${Math.round(x.d * 10) / 10} / 10`],
+      ['Lapses', x.reps ? String(x.lapses) : ''],
+      ['Reviews', x.reps ? String(x.reps) : ''],
+      ['Last', day(x.last)],
+      ['Added', day(x.added)],
+      ['Uses', x.uses == null ? '' : DOTS(x.uses)],
+    ] as [string, string][]
+  ).filter(([, v]) => v);
+  side.innerHTML = `<div class="sd-top"><span class="sd-w zh">${esc(x.word)}</span><button type="button" class="dlg-x" aria-label="Close">×</button></div>
+    <p class="sd-sub"><span class="sd-st st-${x.state}"><i class="sdot"></i>${STATE_NAME[x.state]}</span><span>${esc(x.tmpl)}</span></p>
+    <div class="sd-face"><div class="sd-seg" role="radiogroup" aria-label="Side"><button type="button" role="radio" data-face="q" aria-checked="${BR.face === 'q'}">Front</button><button type="button" role="radio" data-face="a" aria-checked="${BR.face === 'a'}">Back</button></div><div class="host sd-host"></div></div>
+    <dl class="sd-facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
+    <div class="sd-act"><button type="button" class="btn-q" data-s="susp">${focus.queue === -1 ? 'Unsuspend' : 'Suspend'}</button><button type="button" class="btn-q${f === 1 ? ' on' : ''}" data-s="red"><i class="fd fd1"></i>Red</button><button type="button" class="btn-q${f === 3 ? ' on' : ''}" data-s="green"><i class="fd fd3"></i>Green</button></div>
     ${f === 3 ? greenHelp(note) : ''}${f === 1 ? `<div class="sd-help"><button type="button" class="btn-q" data-s="deeper">Five minutes on it</button></div>` : ''}
-    <div class="sd-ed"></div>`;
-  BR.close = editor($('.sd-ed', side), note, () => closeSide());
+    <button type="button" class="sd-note" aria-expanded="${BR.note}"><span>Note</span><i aria-hidden="true"></i></button>
+    <div class="sd-ed"${BR.note ? '' : ' hidden'}></div>`;
+  const face = () => {
+    const host = $('.sd-host', side);
+    const root = draw(host, { card: x.card, note: S.notes.get(note.id) ?? note, type: typeOf(note) }, BR.face);
+    const loud = !!root.querySelector('[data-sound]');
+    host.classList.toggle('loud', loud);
+    host.onclick = loud ? () => playAll(root) : null;
+  };
+  face();
+  side.querySelectorAll<HTMLElement>('[data-face]').forEach(
+    (b) =>
+      (b.onclick = () => {
+        BR.face = b.dataset.face as 'q' | 'a';
+        side.querySelectorAll('[data-face]').forEach((y) => y.setAttribute('aria-checked', String(y === b)));
+        face();
+      }),
+  );
+  const ed = $('.sd-ed', side);
+  const openNote = () => {
+    if (!BR.close) BR.close = editor(ed, S.notes.get(note.id) ?? note, () => closeSide());
+  };
+  if (BR.note) openNote();
+  $('.sd-note', side).onclick = async (e) => {
+    BR.note = !BR.note;
+    (e.currentTarget as HTMLElement).setAttribute('aria-expanded', String(BR.note));
+    ed.hidden = !BR.note;
+    sfx('tap');
+    if (BR.note) openNote();
+    else {
+      // closing the note keeps the edit (one undo step) and redraws the card with it
+      const close = BR.close;
+      BR.close = null;
+      await close?.();
+      ed.innerHTML = '';
+      face();
+    }
+  };
   $('.dlg-x', side).onclick = () => closeSide();
   side.querySelectorAll<HTMLElement>('[data-s]').forEach(
     (b) =>
@@ -1171,7 +1503,8 @@ addEventListener(
       return KEYS.is(e, 'redo') ? redo() : undo();
     }
     if (e.key === 'Escape') {
-      if (RV.flags) return e.stopImmediatePropagation(), (RV.flags = false), showReview();
+      if (RV.flags) return e.stopImmediatePropagation(), (RV.flags = false), paintFlags();
+      if (view === 'browse' && BR.tray && !document.querySelector('dialog[open]')) return e.stopImmediatePropagation(), (BR.tray = ''), paintChips(), paintTray();
       if (view === 'browse' && BR.sel.size && !document.querySelector('dialog[open]')) return e.stopImmediatePropagation(), (BR.sel = new Set()), closeSide(), paintSel();
       return;
     }
