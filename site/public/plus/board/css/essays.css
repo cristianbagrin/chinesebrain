@@ -41,7 +41,7 @@
 .es-days{position:relative;min-width:0}
 .es-wk+.es-wk{margin-top:var(--s9)}
 .es-wh{display:flex;align-items:center;gap:var(--s4);max-width:var(--es-w);margin:0 0 var(--s5)}
-.es-wh h2{font-size:var(--fs-l);font-weight:500;color:var(--ink-2);letter-spacing:.005em;font-variant-numeric:tabular-nums}
+.es-wh h2{white-space:nowrap;font-size:var(--fs-l);font-weight:500;color:var(--ink-2);letter-spacing:.005em;font-variant-numeric:tabular-nums}
 .es-dots{display:inline-flex;gap:5px}
 .es-dots i{width:9px;height:9px;border-radius:50%;background:var(--wash-2)}
 .es-dots i.on{background:var(--green)}
