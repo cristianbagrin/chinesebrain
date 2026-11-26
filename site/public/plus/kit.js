@@ -620,9 +620,9 @@
       let dt = m.timeStamp - last.t;
       dt > 0 && (v = (m.clientY - last.y) / dt), last = { y: m.clientY, t: m.timeStamp };
     }, up = () => {
-      dlg.removeEventListener("pointermove", move), dlg.classList.remove("drag"), dy > h / 3 || v > 0.5 ? (dlg.style.transform = "", hide()) : dlg.style.transform = "";
+      dlg.removeEventListener("pointermove", move), dlg.removeEventListener("pointerup", up), dlg.removeEventListener("pointercancel", up), dlg.classList.remove("drag"), dy > h / 3 || v > 0.5 ? (dlg.style.transform = "", hide()) : dlg.style.transform = "";
     };
-    dlg.addEventListener("pointermove", move), dlg.addEventListener("pointerup", up, { once: !0 }), dlg.addEventListener("pointercancel", up, { once: !0 });
+    dlg.addEventListener("pointermove", move), dlg.addEventListener("pointerup", up), dlg.addEventListener("pointercancel", up);
   });
   var SETTINGS = { open: (to) => show(to), close: () => hide(), redraw: () => dlg.open && draw() };
 

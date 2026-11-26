@@ -411,7 +411,10 @@ dlg.addEventListener('pointerdown', (e) => {
     last = { y: m.clientY, t: m.timeStamp };
   };
   const up = () => {
+    // both ends go: a leftover pointercancel would run this drag's end again on a later scroll (and close the sheet)
     dlg.removeEventListener('pointermove', move);
+    dlg.removeEventListener('pointerup', up);
+    dlg.removeEventListener('pointercancel', up);
     dlg.classList.remove('drag');
     // away on distance (a third of the sheet) or on a flick down
     if (dy > h / 3 || v > 0.5) {
@@ -420,8 +423,8 @@ dlg.addEventListener('pointerdown', (e) => {
     } else dlg.style.transform = '';
   };
   dlg.addEventListener('pointermove', move);
-  dlg.addEventListener('pointerup', up, { once: true });
-  dlg.addEventListener('pointercancel', up, { once: true });
+  dlg.addEventListener('pointerup', up);
+  dlg.addEventListener('pointercancel', up);
 });
 
 export const SETTINGS = { open: (to?: string) => show(to), close: () => hide(), redraw: () => dlg.open && draw() };
