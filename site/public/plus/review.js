@@ -102,7 +102,14 @@
     }
     const d = cardOf(w);
     if (!cardOK(d)) return null;
-    const c = parseCard(d.text), first = c.mine[0] || c.ex[0], s = first ? fromSentence(first, c.word || w) : { chinese: '', py: '' };
+    const c = parseCard(d.text), first = c.mine[0] || c.ex[0];
+    let s = first ? fromSentence(first, c.word || w) : { chinese: '', py: '' };
+    // Reviews: a pair card (Combine on the Reviews tab, "A、B"): both sentences, each with its own word marked
+    const pair = String(c.word || w).split('、');
+    if (pair.length > 1 && c.ex.length > 1) {
+      const ss = c.ex.map((x) => fromSentence(x, pair.find((p) => String(x.zh).includes(p)) || ''));
+      s = { chinese: ss.map((x) => x.chinese).join('<br>'), py: ss.map((x) => x.py).join('\n') };
+    }
     const st = { chinese: s.chinese, word: esc(c.word || w), mnemonic: '', type: 'Chinese', picture: '', notes: '', audio: '', py: s.py, pyFor: plain(s.chinese), saved: false };
     const dr = draft.get(w);
     if (dr) Object.assign(st, Object.fromEntries(FIELDS.map(([k]) => [k, dr[k] ?? st[k]])), { audio: dr.audio || '', type: dr.type || st.type, dirty: true });

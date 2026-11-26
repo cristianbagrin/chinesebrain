@@ -125,3 +125,34 @@ test('optimize never predicts worse than where it starts', async () => {
   assert.ok(r.after <= r.before, `${r.after} > ${r.before}`);
   assert.equal(r.w.length, 21);
 });
+
+test('a card whose front would be empty is left out of the day, the way Anki never makes it', async () => {
+  const { showable } = await import('../site/src/cbp/review/render.ts');
+  const type = {
+    id: 1, name: 'Chinese', css: '', sortf: 1, kind: 0, mod: 0,
+    fields: ['Chinese', 'Word', 'Picture'].map((name, ord) => ({ name, ord })),
+    templates: [
+      { name: 'Sentence → word', ord: 0, qfmt: '{{#Picture}}<div class="pic">{{Picture}}</div>{{/Picture}}<div>{{Chinese}}</div>', afmt: '{{Word}}' },
+      { name: 'Pic → word', ord: 1, qfmt: '<p>What is this?</p><div class="pic">{{Picture}}</div>{{^Picture}}{{Tags}}{{/Picture}}', afmt: '{{Word}}' },
+      { name: 'Word → pinyin', ord: 2, qfmt: '{{hint:Picture}}', afmt: '{{Word}}' },
+    ],
+  };
+  const bare = { id: 1, guid: 'a', mid: 1, mod: 1, tags: ['x'], flds: ['我<u>終於</u>到了', '終於', '<br>'] };
+  const pic = { id: 2, guid: 'b', mid: 1, mod: 1, tags: [], flds: ['他來了', '來', '<img src="/api/plus/media/a.webp">'] };
+  // static text and {{Tags}} don't count; a picture does; a hint link alone doesn't
+  assert.equal(frontShows(type, bare, 0), true);
+  assert.equal(frontShows(type, bare, 1), false);
+  assert.equal(frontShows(type, pic, 1), true);
+  assert.equal(frontShows(type, pic, 2), false);
+  const notes = new Map([[1, bare], [2, pic]]);
+  const card = (id: number, nid: number, ord: number): Card => ({ ...fresh(id), nid, ord, type: 2, queue: 2, due: ck.today, ivl: 5 });
+  const cards = [card(10, 1, 0), card(11, 1, 1), card(20, 2, 0), card(21, 2, 1)];
+  const ok = showable(cards, (id) => notes.get(id), () => type);
+  assert.deepEqual(ok.map((c) => c.id), [10, 20, 21]);
+  // the day's queue: the blank card never comes up, its sentence card does (one card per note a day)
+  const q = queue(ok, { ...conf, buryRev: false }, ck, new Set(), 0, 0);
+  assert.deepEqual(q.review.map((c) => c.id).sort(), [10, 20, 21]);
+  // a picture added later: the card comes back (the note's mod changed)
+  notes.set(1, { ...bare, mod: 2, flds: [bare.flds[0], bare.flds[1], '<img src="/api/plus/media/b.webp">'] });
+  assert.deepEqual(showable(cards, (id) => notes.get(id), () => type).map((c) => c.id), [10, 11, 20, 21]);
+});
