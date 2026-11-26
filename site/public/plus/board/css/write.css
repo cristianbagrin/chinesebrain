@@ -29,7 +29,7 @@ u.d{text-decoration:underline 2px var(--red);text-underline-offset:5px;text-deco
 .w-fx svg{flex:none;color:var(--gold-edge)}
 .w-fn{font-family:var(--zh);font-size:var(--fs-zh);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .w-fn u.d{text-decoration-color:var(--red)}
-.w-fo{position:absolute;z-index:5;top:calc(100% + 6px);left:0;width:max-content;max-width:min(320px,calc(100vw - 40px));margin:0;padding:var(--s3) var(--s4);background:var(--surface);border-radius:var(--r);box-shadow:0 0 0 1px var(--hair),0 12px 30px -10px rgba(21,23,28,.2);display:grid;gap:4px;animation:tipin .18s var(--ease)}
+.w-fo{position:absolute;z-index:5;top:calc(100% + 6px);left:calc(30px - var(--s4));width:max-content;max-width:min(320px,calc(100vw - 40px));margin:0;padding:var(--s3) var(--s4);background:var(--surface);border-radius:var(--r);box-shadow:0 0 0 1px var(--hair),0 12px 30px -10px rgba(21,23,28,.2);display:grid;gap:4px;animation:tipin .18s var(--ease)}
 .w-fo s{font-family:var(--zh);font-size:var(--fs-zh);color:var(--ink-3)}
 .w-fw{font-size:var(--fs-m);line-height:1.5;color:var(--ink-2)}
 

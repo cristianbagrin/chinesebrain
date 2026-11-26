@@ -61,8 +61,10 @@ function WR_focus(){
   WR_FOCUS.hidden=false;
 }
 WR_FOCUS.addEventListener('click',e=>{if(!e.target.closest('.w-fx'))return;WR_FX.open=!WR_FX.open;sfx('tap');WR_focus();});
-document.addEventListener('click',e=>{if(WR_FX.open&&!e.target.closest('#w-focus')){WR_FX.open=false;WR_focus();}});
-BUS.on('leave',()=>{if(WR_FX.open){WR_FX.open=false;WR_focus();}});
+const WR_fclose=()=>{if(WR_FX.open){WR_FX.open=false;WR_focus();}};
+document.addEventListener('pointerdown',e=>{if(!e.target.closest('#w-focus'))WR_fclose();},true);
+document.addEventListener('keydown',e=>{if(e.key==='Escape')WR_fclose();},true);
+BUS.on('leave',WR_fclose);
 BUS.on('items',()=>{WR_FX.items=true;WR_focus();});
 
 /* ---------- focus: Today dims while he types ---------- */
