@@ -11,7 +11,7 @@
 <style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}html.locked body{visibility:hidden}</style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..650&family=Noto+Sans+TC:wght@400..600&family=LXGW+WenKai+TC:wght@400;700&family=Noto+Serif+TC:wght@500;700;900&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..650&family=Noto+Sans+TC:wght@400..600&family=LXGW+WenKai+TC:wght@400;700&family=Noto+Serif+TC:wght@500;700;900&family=Grandstander:wght@500..800&display=swap">
 <link rel="stylesheet" href="/plus/board/css/base.css">
 <link rel="stylesheet" href="/plus/board/css/today.css">
 <link rel="stylesheet" href="/plus/board/css/test.css">
@@ -23,9 +23,6 @@
 <link rel="stylesheet" href="/plus/board/css/fun.css">
 <link rel="stylesheet" href="/plus/board/css/kit.css?v=2">
 <link rel="stylesheet" href="/plus/board/css/cards.css">
-<!-- Noodle: the companion (board/css/noodle.css) -->
-<link rel="stylesheet" href="/plus/board/css/noodle.css?v=1">
-<!-- /Noodle -->
 </head>
 <body>
 <header class="appbar" id="bar">
@@ -47,18 +44,16 @@
   <!-- Today: each block is a direct child of .today so today.css places them (grid areas) -->
   <section class="view" id="view-today" role="tabpanel" aria-labelledby="tab-today">
     <div class="today">
-      <!-- Habit: today's steps and the streak (habit.js) -->
+      <!-- Habit: the streak ring and today's steps (habit.js) -->
       <section class="habit-steps" aria-label="Today" id="habit-steps"></section>
       <!-- (end Habit) -->
       <section class="quiz" aria-label="Test" id="quiz" hidden></section>
       <section class="write" aria-label="Today's essay" id="write"></section>
       <section class="next" aria-label="Next up" id="next"></section>
-      <section class="improve-today" aria-label="To improve" id="improve-today"></section>
+      <!-- Today: To improve lives in the essay's focus item now; improve.js still fills this, so it stays, hidden -->
+      <section class="improve-today" aria-label="To improve" id="improve-today" hidden></section>
       <section class="habit-today" aria-label="Habit" id="habit-today"></section>
       <div class="companion" id="companion" aria-hidden="true"></div>
-      <!-- Habit: an empty slot by the tree for the character (noodle.js) -->
-      <div class="today-buddy" id="today-buddy"></div>
-      <!-- (end Habit) -->
     </div>
   </section>
   <section class="view" id="view-cards" role="tabpanel" aria-labelledby="tab-cards" hidden></section>
@@ -69,8 +64,5 @@
 <div class="settings" id="settings" hidden></div>
 <script src="/plus/runtime.js?v=2"></script>
 <script src="/plus.js?v=8" data-board="js/core.js js/store.js js/test.js js/nextup.js js/cards.js js/write.js js/essays.js js/improve.js js/habit.js js/progress.js js/fun.js js/boot.js"></script>
-<!-- Noodle: the companion (board/js/noodle.js); it starts itself once boot.js has run -->
-<script src="/plus/board/js/noodle.js?v=1" defer></script>
-<!-- /Noodle -->
 </body>
 </html>

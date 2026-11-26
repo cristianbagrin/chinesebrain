@@ -1,4 +1,5 @@
-/* the test card. Owner: B, writing + tests (split out of today.css on 2026-11-01). Gold band on top, baked in (2026-11-01). */
+/* the test card. Owner: B, writing + tests (split out of today.css on 2026-11-01). Gold band on top, baked in (2026-11-01).
+   Type (2026-11-26): the board's reading sizes and text rhythm, Latin at --fs-m/--lh, Chinese at --fs-zh/--lh-zh. */
 /* ---------- the test: the one boxed thing on the page, framed in gold, the gold band on top ---------- */
 .quiz{background:var(--surface);border:1.5px solid var(--gold-edge);border-radius:calc(14px * var(--k));overflow:hidden}
 /* a finished test is no longer "now": the gold goes neutral */
@@ -11,13 +12,13 @@
 .q-lab{font-size:var(--fs-xs);color:var(--gold-ink);opacity:.8}
 .q-body{display:grid;gap:var(--s4);padding:calc(20px * var(--k)) calc(24px * var(--k)) calc(22px * var(--k))}
 .q-body>*{max-width:calc(720px * var(--k))}
-.q-ask{font-size:var(--fs-l);line-height:var(--lh);color:var(--ink);text-wrap:pretty;overflow-wrap:anywhere}
-.q-ask .zh{font-size:1.04em}
+.q-ask{font-size:var(--fs-m);line-height:var(--lh);color:var(--ink);text-wrap:pretty;overflow-wrap:anywhere}
+.q-ask .zh{font-size:1.14em;line-height:var(--lh-zh)}
 /* a reading item: the characters only, big */
-.q-read{font-family:var(--zh);font-size:calc(27px * var(--k));line-height:var(--lh-zh);letter-spacing:.02em;color:var(--ink);overflow-wrap:anywhere}
+.q-read{font-family:var(--zh);font-size:var(--fs-zh);line-height:var(--lh-zh);letter-spacing:.02em;color:var(--ink);overflow-wrap:anywhere}
 .q-ans{display:grid;gap:var(--s2)}
 /* his answer is his writing: the pen */
-.q-in{display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;cursor:text;outline:0;font-family:var(--pen);font-size:calc(19px * var(--k) * var(--pen-k));-webkit-text-stroke:var(--pen-stroke) currentColor;line-height:1.5;
+.q-in{display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;cursor:text;outline:0;font-family:var(--pen);font-size:calc(19px * var(--k) * var(--pen-k));-webkit-text-stroke:var(--pen-stroke) currentColor;line-height:var(--lh-zh);
   padding:calc(9px * var(--k)) calc(14px * var(--k));border:1.5px solid var(--wash-2);border-radius:calc(10px * var(--k));background:var(--bg);color:var(--ink);resize:none;
   min-height:calc(66px * var(--k));transition:border-color .15s,box-shadow .15s,background .15s}
 .q-in:empty::before{content:attr(data-ph);color:var(--ink-4);-webkit-text-stroke:0;font-family:var(--ui);font-size:var(--fs-m);pointer-events:none}
@@ -33,7 +34,7 @@
 .quiz .btn{padding:calc(8px * var(--k)) calc(20px * var(--k));font-size:var(--fs-s)}
 .q-listen{background:var(--wash);font-size:var(--fs-s);padding:calc(7px * var(--k)) calc(14px * var(--k))}
 .q-listen:hover{background:var(--wash-2)}
-.q-heard{font-family:var(--zh);font-size:var(--fs-l);color:var(--ink-2)}
+.q-heard{font-family:var(--zh);font-size:var(--fs-zh);line-height:var(--lh-zh);color:var(--ink-2)}
 
 /* pips: now is gold; the rest by color and shape (green right, half green partly, red diamond missed, grey no evidence) */
 .qp{display:inline-block;flex:none;width:calc(10px * var(--k));height:calc(10px * var(--k));border-radius:50%}
@@ -50,15 +51,15 @@
 .q-verdict{display:grid;gap:var(--s2)}
 .q-res{display:flex;align-items:center;gap:var(--s2);font-size:var(--fs-xs);color:var(--ink-3)}
 .q-res .qp{width:calc(13px * var(--k));height:calc(13px * var(--k))}
-.q-nat{font-size:calc(23px * var(--k));line-height:var(--lh-zh);color:var(--ink);overflow-wrap:anywhere}
+.q-nat{font-size:var(--fs-zh);line-height:var(--lh-zh);color:var(--ink);overflow-wrap:anywhere}
 .q-nat u,.q-sn u{text-decoration:underline 2px var(--ink-4);text-underline-offset:calc(6px * var(--k));text-decoration-skip-ink:none}
-.q-you{display:flex;gap:var(--s3);align-items:baseline;font-size:var(--fs-s);color:var(--ink-3);overflow-wrap:anywhere}
-.q-you .zh{font-size:calc(20px * var(--k))}
+.q-you{display:flex;gap:var(--s3);align-items:baseline;font-size:var(--fs-s);line-height:var(--lh-snug);color:var(--ink-3);overflow-wrap:anywhere}
+.q-you .zh{font-size:var(--fs-l);line-height:var(--lh-zh)}
 .q-k{flex:none;min-width:calc(44px * var(--k));font-size:var(--fs-xs);color:var(--ink-4)}
 /* what he typed, in his pen */
 .q-mine .zh{font-family:var(--pen);font-size:calc(19px * var(--k) * var(--pen-k));-webkit-text-stroke:var(--pen-stroke) currentColor}
 .q-why{font-size:var(--fs-s);line-height:var(--lh);color:var(--ink-2);overflow-wrap:anywhere}
-.q-why .zh{font-size:calc(20px * var(--k))}
+.q-why .zh{font-size:var(--fs-l)}
 .q-verdict+.q-row{margin-top:var(--s1)}
 
 /* the finished test: the results light up one by one with the score, then the card folds away (test.js QZ_fold) */
@@ -66,7 +67,7 @@
 .q-big{display:inline-flex;align-items:center;gap:calc(10px * var(--k))}
 .q-big .qp{width:calc(16px * var(--k));height:calc(16px * var(--k))}
 .q-big .qp.f{border-radius:3px}
-.q-score{font-size:calc(22px * var(--k));color:var(--ink-3);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.q-score{font-size:var(--fs-l);color:var(--ink-3);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .q-score b{font-weight:600;color:var(--ink)}
 .q-fin .q-big .qp,.q-fin .q-score{animation:qlit .5s var(--spring) both;animation-delay:calc(var(--i) * 90ms + 120ms)}
 @keyframes qlit{from{opacity:0;transform:scale(.3)}60%{opacity:1;transform:scale(1.25)}to{opacity:1}}
@@ -76,8 +77,6 @@
 @media (max-width:600px){
   .q-top{padding-inline:calc(16px * var(--k))}
   .q-body,.q-rows{padding:calc(16px * var(--k)) calc(16px * var(--k)) calc(18px * var(--k))}
-  .q-read{font-size:calc(25px * var(--k))}
-  .q-nat{font-size:calc(21px * var(--k))}
 }
 
 /* a monthly-test scene: a photo, with real text laid over it */
@@ -95,16 +94,16 @@
 
 /* a TOCFL item: four choices, as in the exam; after answering, the right one green and his wrong one red */
 .q-choices{list-style:none;margin:var(--s3) 0 0;padding:0;display:grid;gap:var(--s2)}
-.q-ch{width:100%;display:flex;gap:var(--s3);align-items:baseline;text-align:left;font:inherit;font-size:var(--fs-m);color:var(--ink);background:var(--surface);border:1px solid var(--hair);border-radius:var(--r);padding:var(--s2) var(--s3);cursor:pointer}
+.q-ch{width:100%;display:flex;gap:var(--s3);align-items:baseline;text-align:left;font:inherit;font-size:var(--fs-m);line-height:var(--lh-snug);color:var(--ink);background:var(--surface);border:1px solid var(--hair);border-radius:var(--r);padding:var(--s2) var(--s3);cursor:pointer}
 .q-ch b{font-weight:600;color:var(--ink-3);font-size:var(--fs-s)}
 .q-ch:active{transform:translateY(1px)}
 @media (hover:hover){.q-ch:hover{border-color:var(--ink-3)}}
-.q-choices.done li{font-size:var(--fs-s);color:var(--ink-3);padding-left:var(--s2);border-left:2px solid transparent}
+.q-choices.done li{font-size:var(--fs-s);line-height:var(--lh-snug);color:var(--ink-3);padding-left:var(--s2);border-left:2px solid transparent}
 .q-choices.done li.right{color:var(--ink);border-left-color:var(--green-deep, #2e7d4f)}
 .q-choices.done li.wrong{text-decoration:line-through;border-left-color:var(--red, #c0392b)}
 /* answers to his Todoist questions, above the test */
 .answers{display:grid;gap:var(--s2);margin-bottom:var(--s4)}
 .ans{position:relative;padding:var(--s3) var(--s5) var(--s3) var(--s4);border-radius:var(--r);background:var(--wash)}
 .ans-q{margin:0;font-size:var(--fs-s);color:var(--ink-3)}
-.ans-a{margin:var(--s1) 0 0;font-size:var(--fs-m);color:var(--ink)}
+.ans-a{margin:var(--s1) 0 0;font-size:var(--fs-m);line-height:var(--lh);color:var(--ink)}
 .ans-x{position:absolute;top:var(--s2);right:var(--s2);border:0;background:none;color:var(--ink-3);font-size:var(--fs-l);line-height:1;cursor:pointer}

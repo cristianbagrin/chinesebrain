@@ -2,11 +2,11 @@
    The rules are HABIT's (plus/kit.js, from site/src/cbp/habit.ts, shared with the server): a day is done when its
    reviews are cleared and the essay is written; a test that day deepens its green; the first missed day of a Mon–Sun
    week is a rest (the streak holds); after a miss, the next day's bar is lower (reviews and three sentences).
-   Today (#habit-steps, first on Today): Reviews · Essay · Test, each ticking itself off from what happened (BUS
-   reviews:done / reviews:changed, essay:written, test), and the streak, once, big. The moment the day turns done:
-   a celebration and BUS 'day:done' {date, streak}, once a day (once('day:<date>')), never for a day already done when
-   the page opened. The heatmap: HB_render(el, full) into #habit-today (the weeks so far) and #pr-habit (the year);
-   done, done with a test (deeper), rest (a ring), partial (pale), missed (blank). A tap on a day shows its numbers.
+   Today (#habit-steps): the streak ring and Reviews · Essay · Test, each crossed out from what happened (BUS
+   reviews:done / reviews:changed, essay:written / essay:left, test). The moment the day turns done: the list folds into
+   the ring, a burst, and BUS 'day:done' {date, streak}, once a day (once('day:<date>')), never for a day already done
+   when the page opened. The heatmap: HB_render(el, full) into #habit-today (the weeks so far) and #pr-habit (the year);
+   done, done with a test (deeper), rest (looks done: a rest is part of the habit), partial (pale), missed (blank). A tap on a day shows its numbers.
    Reviews come from the collection on this device (RVH, review/main.ts: Anki's imported log plus every review since);
    the server keeps a log of each day's report (GET/POST /api/plus/habit) for the evening nudge (Settings › Habit).
    Also here: the one tap tip anything on the board can use ([data-tip]): a click or tap shows it, never a hover. ---------- */
@@ -62,6 +62,7 @@ function HB_map(){
   for(const [k,v] of Object.entries(HB.log)) if(v&&v.cleared) get(k);
   for(const k of Object.keys(m)) m[k].cleared=k===tk?HB_clearedToday(tk):!(rv&&rv.open.has(k))||!!(HB.log[k]&&HB.log[k].cleared);
   if(!m[tk]) get(tk).cleared=HB_clearedToday(tk);
+  m[tk]=Object.assign(HB_hold(m[tk],HB_W.writing,HB_W.counted===tk),{tt:m[tk].tt});
   return m;
 }
 
@@ -118,19 +119,106 @@ function HB_render(el,full,st){
   el.innerHTML=`<div class="hm ${full?'hm-full':'hm-today'}">${html}</div>`;
 }
 
-/* ---------- Today: the three steps and the streak ---------- */
-const HB_CHECK='<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.4l3 3 6-6.6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-function HB_steps(st){
-  const el=document.getElementById('habit-steps'); if(!el) return;
+/* ---------- Today: the streak ring and the day's steps (#habit-steps) ----------
+   The ring fills toward the streak's next milestone (HABIT.goal: 7, 14, 21, 30, 50…), one segment a day while it has 30
+   or fewer; today's segment waits in gold until the day is done. Beside it the day's steps, in his own little list:
+   each one crossed out as it happens. When the last one goes, the list folds into the ring, today's segment turns
+   green, the number ticks up and the week takes the list's place, so a glance tells him the day is done.
+   The essay counts only once he leaves the writing box (HABIT.hold; write.js says 'essay:writing' / 'essay:left'). */
+// (a browser still holding an older kit.js has no hold/goal yet: the same rules, here)
+const HB_hold=(d,w,c)=>HABIT.hold?HABIT.hold(d,w,c):w&&!c?{...d,chars:0,sent:0}:d;
+const HB_goal=(n,done)=>HABIT.goal?HABIT.goal(n,done):[7,14,21,30,50,75,100,150,200,250,300,365].find(m=>m>=Math.max(1,n+(done?0:1)))||Math.ceil((n+1)/100)*100;
+const HB_W={writing:false,counted:lsGet('habit-essay')||'',on:null,anim:false,st:null};
+BUS.on('essay:writing',()=>{if(!HB_W.writing){HB_W.writing=true;HB_soon();}});
+BUS.on('essay:left',()=>{if(HB_W.writing){HB_W.writing=false;HB_soon();}});
+const HB_CHECK='<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.4 8.6l3.1 3 6.2-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+// the ring: n of G days, today's segment gold while it's open (done: already counted in n)
+function HB_ring(n,G,open){
+  const r=44, pt=a=>{const t=(a-90)*Math.PI/180;return `${(50+r*Math.cos(t)).toFixed(2)} ${(50+r*Math.sin(t)).toFixed(2)}`;};
+  const arc=(a0,a1,c)=>`<path class="hr-s ${c}" d="M${pt(a0)}A${r} ${r} 0 ${a1-a0>180?1:0} 1 ${pt(a1)}"/>`;
+  let s='';
+  if(G<=30){
+    const step=360/G, gap=G<=14?5:3.2;
+    for(let i=0;i<G;i++) s+=arc(i*step+gap/2,(i+1)*step-gap/2,i<n?'d':i===n&&open?'t':'');
+  }else{
+    const a=n/G*360, b=Math.min(359.9,(n+(open?1:0))/G*360);
+    s=`<circle class="hr-s" cx="50" cy="50" r="${r}"/>`+(a>0?arc(0,Math.min(359.9,a),'d'):'')+(open?arc(a,b,'t'):'');
+  }
+  return `<svg viewBox="0 0 100 100" aria-hidden="true"><circle class="hr-in" cx="50" cy="50" r="37"/>${s}</svg>`;
+}
+// this week, Monday to Sunday: done and rest days filled, today ringed, days to come faint
+function HB_week(st){
+  const tk=essayToday(), mon=HABIT.monday(tk), L='MTWTFSS';
+  let h='';
+  for(let i=0;i<7;i++){
+    const k=HABIT.addDays(mon,i), s=st.w.days[k], c=k>tk?'later':s&&(s.st==='done'||s.st==='rest')?'d':'';
+    h+=`<span class="hw ${c}${k===tk?' now':''}"><i></i>${L[i]}</span>`;
+  }
+  return `<div class="hc-week" aria-hidden="true">${h}</div>`;
+}
+function HB_card(st,o){
+  o=o||{};
   const tk=essayToday(), d=st.m[tk]||HABIT.blank(), low=st.w.low, s=st.w.days[tk];
-  const done=!!(s&&s.st==='done');
+  const done=o.done!=null?o.done:!!(s&&s.st==='done'), n=o.n!=null?o.n:st.w.streak;
+  const G=HB_goal(n,done);
   let test=false; try{test=!!testOpen()||!!d.tt;}catch(e){}
-  const step=(id,label,on)=>`<button type="button" class="hs-s${on?' on':''}" data-go="${id}" aria-pressed="${on}"><i class="hs-c">${on?HB_CHECK:''}</i><span>${label}</span></button>`;
-  const essayOn=low?d.sent>=HABIT.LOW_SENTENCES:d.chars>0;
-  const n=st.w.streak;
-  el.classList.toggle('done',done);
-  el.innerHTML=`<div class="hs-steps">${HB_has()?step('reviews','Reviews',d.cleared):''}${step('essay',low?'3 sentences':'Essay',essayOn)}${test?step('test','Test',d.test):''}</div>
-    <div class="hs-streak"${n?'':' hidden'}><b>${n}</b><span>day${n===1?'':'s'}</span></div>`;
+  const on={reviews:!!d.cleared,essay:low?d.sent>=HABIT.LOW_SENTENCES:d.chars>0,test:!!d.test};
+  const fresh=o.fresh||{};
+  const step=(id,label)=>`<li><button type="button" class="hc-s${on[id]?' on':''}${fresh[id]?' fresh':''}" data-go="${id}" aria-pressed="${on[id]}"><i class="hc-b">${on[id]?HB_CHECK:''}</i><span class="hc-t">${label}</span></button></li>`;
+  const steps=`<ul class="hc-steps">${HB_has()?step('reviews','Reviews'):''}${step('essay',low?'3 sentences':'Essay')}${test?step('test','Test'):''}</ul>`;
+  return {on,done,html:`<div class="hc${done?' done':''}">
+    <div class="hc-ring" role="img" aria-label="${n}-day streak${done?', today done':''}">${HB_ring(n,G,!done)}<b class="hc-n">${n}</b><span class="hc-u">day${n===1?'':'s'}</span></div>
+    ${done?HB_week(st):steps}</div>`};
+}
+function HB_steps(st,turned){
+  const el=document.getElementById('habit-steps'); if(!el) return;
+  HB_W.st=st;
+  if(HB_W.anim) return;
+  const prev=HB_W.on, quiet=!HB.settled||!prev;
+  if(turned&&!REDUCED()&&VIEW==='today'){HB_fold(el,st,prev);return;}
+  const c=HB_card(st);
+  const fresh={};
+  if(!quiet) for(const k in c.on) if(c.on[k]&&!prev[k]) fresh[k]=true;
+  const out=Object.keys(fresh).length?HB_card(st,{fresh}):c;
+  el.innerHTML=out.html; HB_W.on=c.on;
+  // reduced motion: no fold, the light alone
+  if(turned&&VIEW==='today'){const r=el.querySelector('.hc-ring').getBoundingClientRect();celebrate('streak',{x:r.left+r.width/2,y:r.top+r.height/2,r:r.width/2});}
+}
+// the day turns done: the last step is crossed out, the list folds into the ring, today's segment turns green, the
+// number ticks up, the week appears; a burst out of the ring. Renders that arrive meanwhile wait for the end.
+function HB_fold(el,st,prev){
+  HB_W.anim=true;
+  const n=st.w.streak, c=HB_card(st,{done:false,n:Math.max(0,n-1)});
+  const fresh={}; for(const k in c.on) if(c.on[k]&&!(prev&&prev[k])) fresh[k]=true;
+  el.innerHTML=HB_card(st,{done:false,n:Math.max(0,n-1),fresh}).html;
+  const T=(f,ms)=>setTimeout(()=>{try{f();}catch(e){console.error(e);HB_end(el);}},ms);
+  T(()=>{
+    const ring=el.querySelector('.hc-ring'), rr=ring&&ring.getBoundingClientRect();
+    if(!rr) return HB_end(el);
+    el.querySelectorAll('.hc-s').forEach((b,i)=>{
+      const r=b.getBoundingClientRect();
+      b.style.setProperty('--dx',Math.round(rr.left+rr.width/2-(r.left+r.width/2))+'px');
+      b.style.setProperty('--dy',Math.round(rr.top+rr.height/2-(r.top+r.height/2))+'px');
+      b.style.setProperty('--i',i);
+    });
+    el.querySelector('.hc').classList.add('fold');
+  },720);
+  T(()=>{
+    const G=HB_goal(n,true);
+    el.innerHTML=HB_card(st).html.replace('class="hc done"','class="hc done land"');
+    // today's segment: gold, then green on the next frame, so it fills before his eyes
+    const segs=el.querySelectorAll('.hr-s.d'), last=G<=30?segs[n-1]:segs[segs.length-1];
+    if(last){last.classList.replace('d','t');requestAnimationFrame(()=>requestAnimationFrame(()=>last.classList.replace('t','d')));}
+    const r=el.querySelector('.hc-ring').getBoundingClientRect();
+    celebrate('streak',{x:r.left+r.width/2,y:r.top+r.height/2,r:r.width/2,big:n===G});
+    HB_W.on=HB_card(st).on;
+    T(()=>HB_end(el),900);
+  },720+560);
+}
+function HB_end(el){
+  HB_W.anim=false;
+  const c=HB_card(HB_W.st);
+  el.innerHTML=c.html; HB_W.on=c.on;
 }
 document.getElementById('habit-steps')?.addEventListener('click',e=>{
   const b=e.target.closest('[data-go]'); if(!b) return;
@@ -162,22 +250,17 @@ function HB_today(){
   let st;
   try{st=HB_state();}catch(e){console.error(e);return;}
   const tk=essayToday(), s=st.w.days[tk], done=!!(s&&s.st==='done');
-  if(HB.k!==tk){HB.k=tk;HB.done=null;}
-  // the moment the day turns done: a celebration and BUS day:done, once
-  const turned=HB.settled&&HB.done===false&&done;
+  if(HB.k!==tk){HB.k=tk;HB.done=null;HB_W.on=null;}
+  // the essay has counted (he left the box with Chinese in it): writing more doesn't take it back today
+  const d=st.m[tk]; if(d&&d.chars>0&&!HB_W.writing&&HB_W.counted!==tk){HB_W.counted=tk;lsSet('habit-essay',tk);}
+  // the moment the day turns done: the fold, the burst and BUS day:done, once
+  const turned=HB.settled&&HB.done===false&&done&&HB_ready()&&once('day:'+tk);
   HB.pop=turned;
-  HB_steps(st);
+  HB_steps(st,turned);
   HB_render(document.getElementById('habit-today'),false,st);
   HB.pop=false;
-  if(HB_ready()){
-    if(turned&&once('day:'+tk)){
-      const b=document.querySelector('#habit-steps .hs-streak b')||document.getElementById('habit-steps');
-      const r=b&&b.getBoundingClientRect();
-      if(VIEW==='today'&&r&&r.width) celebrate('test',{x:r.left+r.width/2,y:r.top+r.height/2});
-      BUS.emit('day:done',{date:tk,streak:st.w.streak});
-    }
-    HB.settled=true;HB.done=done;
-  }
+  if(turned) BUS.emit('day:done',{date:tk,streak:st.w.streak});
+  if(HB_ready()){HB.settled=true;HB.done=done;}
   HB_post(st);
   BUS.emit('habit');
 }

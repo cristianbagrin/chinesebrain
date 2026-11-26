@@ -1,16 +1,15 @@
 /* ---------- Today's essay: the writing page. Owner: B (writing + tests)
    A sheet of paper on the ground (css/paper.css, shared with the Essays view): Day and the save status in its header,
-   his text in blue ink on the ruling, two other pages askew underneath. Writes through store.js (scheduleSave /
+   his text in ink on a plain sheet (unlined since 2026-11-26, like the Essays page), two other pages askew underneath. Writes through store.js (scheduleSave /
    flushNow / saveState). The day turns over at 4 am (essayToday()). The sheet stays contenteditable plain text: Chinese
    Brain's hover reads its text nodes. Today dims while he types; a real mouse move, a scroll, Esc or leaving brings it back.
-   No finishing step (2026-11-01): a day he wrote in is a day written. Lined paper, his pick. ---------- */
-// the feel of every sheet on the board (css/paper.css .paper-tex): a touch of yellow, clean edges, ruling at 60% (his
-// picks 2026-11-01); grain .5 and crumple .3 are the fallbacks in paper.css
+   No finishing step (2026-11-01): a day he wrote in is a day written, once he leaves the box (BUS 'essay:writing' while
+   he types, 'essay:left' when he steps away: habit.js ticks the step then, never mid-sentence). ---------- */
 
 const WR_EL=document.getElementById('write');
 WR_EL.innerHTML=`
-  <div class="paper stacked w-paper" id="w-paper" data-paper="lined"><i class="paper-tex" aria-hidden="true"></i>
-    <div class="w-top"><h2 class="w-day" id="w-day">Day</h2><div class="w-focus" id="w-focus" hidden></div><span class="saved" id="w-saved" aria-live="polite"></span></div>
+  <div class="paper stacked w-paper" id="w-paper" data-paper="plain"><i class="paper-tex" aria-hidden="true"></i>
+    <div class="w-top"><h2 class="w-day" id="w-day">Day</h2><span class="saved" id="w-saved" aria-live="polite"></span><div class="w-focus" id="w-focus" hidden></div></div>
     <div class="sheet" id="sheet" role="textbox" aria-multiline="true" data-ph="今天發生了什麼事？" aria-label="Today's essay" lang="zh-Hant" spellcheck="false"></div>
   </div>`;
 const SHEET=document.getElementById('sheet'), SAVED=document.getElementById('w-saved');
@@ -85,11 +84,13 @@ SHEET.addEventListener('input',()=>{
   const v=getText(SHEET);
   if(!v&&SHEET.innerHTML) SHEET.innerHTML='';
   WR_dim();
+  BUS.emit('essay:writing');
   if(!W.day){W.waiting=true;draftPut(W.date,null,v);if(ES.nodb)saveState(W.date,'local');return;}
   scheduleSave(W.day,W.date,v);
 });
 SHEET.addEventListener('blur',()=>{
   if(W.date)flushNow(W.date);
+  BUS.emit('essay:left');
   WR_undim();
   setTimeout(()=>{if(essayToday()!==W.date)renderWrite();},0);
 });
@@ -100,7 +101,8 @@ WR_EL.addEventListener('mousedown',e=>{
 });
 // a page left open overnight moves to the new day
 setInterval(()=>{if(essayToday()!==W.date)renderWrite();},60000);
-document.addEventListener('visibilitychange',()=>{if(document.hidden)Object.keys(SV).forEach(flushNow);else renderWrite();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){Object.keys(SV).forEach(flushNow);BUS.emit('essay:left');}else renderWrite();});
+addEventListener('pagehide',()=>BUS.emit('essay:left'));
 BUS.on('essays',()=>renderWrite());
 BUS.on('draft',(date,text)=>{if(date===W.date&&document.activeElement!==SHEET)setText(SHEET,text);});
 BUS.on('nodb',()=>{if(getText(SHEET))saveState(W.date,'local');});

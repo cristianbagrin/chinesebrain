@@ -142,6 +142,17 @@ function celebrate(kind,o){
       ring(x,y,22,C.green,.38,2);
       burst(x,y,18,{dir:-Math.PI/2,spread:TAU,v0:110,v1:260,life:.55,lifeR:.3,g:.55,drag:1.8,colors:[C.green,C.green,C.greenS,C.gold,C.plum],kinds:[['dot',.5],['petal',.3],['star',.2]]});
     }
+  }else if(kind==='streak'){
+    // the day turned done (habit.js): a ring out of the streak ring, leaves and petals; a milestone (o.big) gets a gold
+    // ring after it and twice the burst
+    const [x,y]=origin(o,'#habit-steps',.5),r=o.r||50;
+    if(still)glow(x,y,o.big?190:130,C.green,1.2,.3);
+    else{
+      ring(x,y,r*1.15,C.green,.5,3);
+      if(o.big)ring(x,y,r*1.7,C.goldE,.7,2.5,.12);
+      burst(x,y,o.big?140:70,{spread:TAU,v0:160,v1:o.big?520:380,colors:[C.green,C.green,C.greenS,C.gold,C.goldL,C.plum],kinds:[['petal',.34],['dot',.26],['star',.22],['rect',.18]]});
+    }
+    sfx('tada');
   }else if(kind==='card'){
     // Card it: a burst from the button, over the card window (the sound is the stamp, cards.js)
     const [x,y]=origin(o,null,.5);
