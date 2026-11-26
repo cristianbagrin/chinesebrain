@@ -8,7 +8,7 @@
    clash when they share a page and a ctx. Typing in a text box is never a shortcut, apart from the `field` ones.
    New key in a module: add it to DEFS here (the list shows what's here), then KEYS.is(e, id) in the handler. */
 export type Def = { id: string; label: string; group: string; keys: string[]; ctx?: string; fixed?: boolean };
-const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
+const MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 
 const D = (group: string, ctx: string | undefined, rows: [string, string, string][]): Def[] => rows.map(([id, label, keys]) => ({ id, label, group, keys: keys.split(' '), ctx }));
 export const DEFS: Def[] = [
@@ -18,16 +18,20 @@ export const DEFS: Def[] = [
     ['shortcuts', 'Shortcuts', 'f12'],
     ['undo', 'Undo', 'mod+z'],
     ['redo', 'Redo', 'mod+shift+z mod+y'],
-    // from any page (a field being typed in, or a page's own key, wins: go.ts)
-    ['go.today', 'Today', 't'],
-    ['go.cards', 'Cards', 'c'],
-    ['go.reviews', 'Reviews', 'r'],
-    ['go.browse', 'Browse', 'b'],
     // the pages he was on, like a browser's back and forward (go.ts)
     ['back', 'Back', 'mod+['],
     ['forward', 'Forward', 'mod+]'],
-    // Tutor: the pane from the right, open or away (tutor/main.ts)
-    ['tutor', 'Tutor', 'a'],
+  ]),
+  // to a page from anywhere: Shift and the page's first letter (go.ts); the Tutor pane is Shift+A (Ask), as T is Today's.
+  // Not while he types in a field, nor over a dialog other than Settings (KEYS.free)
+  ...D('Pages', undefined, [
+    ['page.today', 'Today', 'shift+t'],
+    ['page.reviews', 'Reviews', 'shift+r'],
+    ['page.browse', 'Browse', 'shift+b'],
+    ['page.cards', 'Cards', 'shift+c'],
+    ['page.essays', 'Essays', 'shift+e'],
+    ['page.progress', 'Progress', 'shift+p'],
+    ['page.tutor', 'Tutor', 'shift+a'],
   ]),
   ...D('Reviews', undefined, [
     ['rv.show', 'Show answer', 'space enter'],
@@ -73,7 +77,7 @@ export const DEFS: Def[] = [
     ['cd.copy', 'Copy the sentence', 'space'],
     ['cd.pinyin', 'Pinyin over the sentence', 'shift+enter'],
   ]),
-  // a test's choices take their letters while it's on screen, so they may share them with the Go-to keys (go.ts)
+  // a test's choices take their letters while it's on screen
   ...D('Today', 'test', [
     ['test.a', 'Choice A', 'a'],
     ['test.b', 'Choice B', 'b'],
@@ -86,6 +90,19 @@ export const DEFS: Def[] = [
   ]),
 ];
 const BY = new Map(DEFS.map((d) => [d.id, d]));
+/** Ids from before the Shift+letter page keys (Nov 27): bare T, C, R, B and A. A binding saved for one of them is dropped
+    on load, so the page keys start from their new defaults and the next save leaves the old ids out. */
+export const RETIRED = ['go.today', 'go.cards', 'go.reviews', 'go.browse', 'tutor'];
+const TYPING = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
+/** Is this in a place that takes typing (a field, an editor)? */
+export const typing = (t: EventTarget | null | undefined) => !!(t && (t as Element).closest?.(TYPING));
+const openDialogs = () => (typeof document === 'undefined' ? [] : [...document.querySelectorAll('dialog[open]')].map((d) => d.id));
+/** May an app-wide shortcut (a page, the Tutor) take this key? Not while he types in a field, not for a key a page used
+    first, and not over a dialog, Settings apart (it closes for them). */
+export function free(e: KeyboardEvent, dialogs: string[] = openDialogs()) {
+  if (e.defaultPrevented || e.isComposing || e.repeat || typing(e.target)) return false;
+  return dialogs.every((id) => id === 'settings');
+}
 let mine: Record<string, string> = {};
 let saveHook: ((keys: Record<string, string>) => void) | null = null;
 
@@ -111,6 +128,8 @@ const MODS = ['control', 'shift', 'alt', 'meta', 'os', 'capslock', 'fn'];
 export const KEYS = {
   defs: DEFS,
   is: (e: KeyboardEvent, id: string) => !e.isComposing && keysOf(id).includes(combo(e)),
+  free,
+  typing,
   keys: keysOf,
   label(id: string) {
     const k = keysOf(id)[0];
@@ -143,11 +162,13 @@ export const KEYS = {
   changed: (id: string) => mine[id] != null,
   /** settings.ts: what's saved on his account, and where changes go. */
   load(saved: Record<string, string>, onSave: (keys: Record<string, string>) => void) {
-    mine = { ...saved };
+    mine = Object.fromEntries(Object.entries(saved).filter(([id]) => !RETIRED.includes(id)));
     saveHook = onSave;
   },
 };
-const clash = (a: Def, b: Def) => (a.group === b.group || a.group === 'Everywhere' || b.group === 'Everywhere') && (a.ctx ?? '') === (b.ctx ?? '');
+// the Everywhere and Pages keys listen on every page, so they clash with every key that has no ctx
+const ALL = (d: Def) => d.group === 'Everywhere' || d.group === 'Pages';
+export const clash = (a: Def, b: Def) => (a.group === b.group || ALL(a) || ALL(b)) && (a.ctx ?? '') === (b.ctx ?? '');
 
 const NAMES: Record<string, string> = MAC
   ? { mod: '⌘', shift: '⇧', alt: '⌥', ctrl: '⌃', enter: '↵', space: 'Space', escape: 'Esc', arrowleft: '←', arrowright: '→', arrowup: '↑', arrowdown: '↓', backspace: '⌫', tab: '⇥' }

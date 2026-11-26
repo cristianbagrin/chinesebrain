@@ -26,6 +26,21 @@ dialog.st:focus-visible{outline:none}
 .st-ti:active{transform:scale(.98)}
 .st-ti[aria-current="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--sh-1)}
 .st-gl{width:18px;height:18px;flex:none;color:var(--ink-3)}
+/* search (settings.ts filter): a field over the sections; what's found is marked, the rest hides */
+.st-find{position:relative;display:flex;align-items:center;margin:0 2px}
+.st-find>svg{position:absolute;left:11px;width:17px;height:17px;color:var(--ink-3);pointer-events:none}
+.st-find input{width:100%;min-width:0;height:38px;border:0;border-radius:var(--r);background:var(--surface);box-shadow:var(--sh-1);padding:0 34px 0 34px;font:inherit;font-size:var(--fs-s);color:var(--ink);outline:0}
+.st-find input::placeholder{color:var(--ink-3)}
+.st-find input:focus-visible{outline:2px solid var(--ink);outline-offset:0}
+.st-qx{position:absolute;right:5px;display:none;place-items:center;width:28px;height:28px;border:0;border-radius:50%;background:none;color:var(--ink-3);cursor:pointer;padding:0}
+.st-qx svg{width:15px;height:15px}
+.st-find.on .st-qx{display:grid}
+.st mark{background:var(--gold-wash);color:inherit}
+.st-toc [hidden],.st-body [hidden]{display:none}
+.st-q-on .st-body{display:flex;flex-direction:column;gap:var(--s7)}
+.st-q-on .st-sec+.st-sec{margin-top:0}
+.st-q-on .st-grp>.f0::before{display:none}
+.st-none{padding:var(--s7) var(--s4)}
 .st-ti[aria-current="true"] .st-gl{color:var(--ink)}
 
 /* the page: every section, one under the other; the × floats top right */
@@ -41,12 +56,28 @@ dialog.st:focus-visible{outline:none}
 .st-reset{border:0;background:none;border-radius:8px;padding:4px 8px;margin:-4px 0;font-size:var(--fs-s);color:var(--ink-3);cursor:pointer}
 .st-sec+.st-sec .st-sh{padding-right:0}
 
+/* a page of its own inside the window (SETTINGS.page: Card designs): back to Settings top left, its title, the × */
+@media (min-width:641px){
+  dialog.st.st-wide{width:min(1080px,calc(100vw - 48px));height:min(780px,calc(100dvh - 48px))}
+}
+dialog.st.st-wide[open]{display:flex;flex-direction:column}
+.st-page{display:flex;flex-direction:column;flex:1;min-height:0}
+.st-ph{display:flex;align-items:center;gap:var(--s2);padding:12px 12px 4px 10px}
+.st-ph h2{flex:1;min-width:0;margin:0;font-size:var(--fs-l);font-weight:600;line-height:var(--lh-tight);letter-spacing:-.015em}
+.st-back{display:inline-flex;align-items:center;gap:2px;height:36px;padding:0 12px 0 6px;border:0;border-radius:999px;background:none;color:var(--ink-2);font-size:var(--fs-s);font-weight:500;cursor:pointer;transition:background .12s,color .12s}
+.st-back svg{width:20px;height:20px}
+.st-pbody{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:var(--s3) 28px 28px}
+.st-pbody .code,.st-pbody .tm-pv{min-height:min(52vh,460px)}
+
 /* groups: white, rounded, a hairline between rows (from the label's edge) */
 .st-grp{background:var(--surface);border-radius:var(--r);box-shadow:var(--sh-1)}
 .st-grp>*{position:relative}
 .st-grp>*+*::before{content:"";position:absolute;top:0;left:16px;right:0;border-top:1px solid var(--hair)}
 .st-grp>:first-child,.st-grp>:first-child>button.st-row:first-child{border-radius:var(--r) var(--r) 0 0}
 .st-grp>:last-child,.st-grp>:last-child>button.st-row:last-child{border-radius:0 0 var(--r) var(--r)}
+.st-q-on .st-grp>.f0,.st-q-on .st-grp>.f0>button.st-row:first-child{border-radius:var(--r) var(--r) 0 0}
+.st-q-on .st-grp>.f1,.st-q-on .st-grp>.f1>button.st-row:last-child{border-radius:0 0 var(--r) var(--r)}
+.st-q-on .st-grp>.f0.f1,.st-q-on .st-grp>.f0.f1>button.st-row{border-radius:var(--r)}
 .st-cap{margin:22px 4px 8px;font-size:var(--fs-s);font-weight:500;line-height:var(--lh-snug);color:var(--ink-3)}
 .st-sec>.st-cap:nth-child(2){margin-top:4px}
 /* one line per choice: the label left, its control right */
@@ -59,7 +90,7 @@ button.st-row:focus-visible{outline-offset:-2px}
 .st-k::after{content:"›";color:var(--ink-4);font-size:var(--fs-l);line-height:1}
 /* a switch: ink when on */
 .st-tg{position:relative;display:block;flex:none;width:46px;height:28px;border:0;box-sizing:border-box;overflow:hidden;border-radius:999px;background:var(--wash-2);padding:0;cursor:pointer;transition:background .2s}
-.st-tg i{position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--surface);box-shadow:0 1px 3px rgba(21,23,28,.25);transition:transform .28s var(--spring),width .15s}
+.st-tg i{position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--surface);box-shadow:var(--sh-1);transition:transform .28s var(--spring),width .15s}
 .st-tg[aria-checked="true"]{background:var(--ink)}
 .st-tg[aria-checked="true"] i{transform:translateX(18px)}
 .st-tg:active i{width:26px}
@@ -98,7 +129,7 @@ button.st-row:focus-visible{outline-offset:-2px}
 .st-key.on{padding:6px 12px;background:var(--ink);color:var(--on-ink);animation:keywait 1.2s ease-in-out infinite}
 @keyframes keywait{50%{opacity:.7}}
 @media (hover:hover) and (pointer:fine){
-  .st-ti:hover:not([aria-current="true"]),.st-reset:hover,.st-x:hover,button.st-row:hover,.st-step button:hover{background:var(--wash);color:var(--ink)}
+  .st-ti:hover:not([aria-current="true"]),.st-reset:hover,.st-x:hover,.st-back:hover,.st-qx:hover,button.st-row:hover,.st-step button:hover{background:var(--wash);color:var(--ink)}
   .st-o button:hover:not([aria-checked="true"]){color:var(--ink-2)}
   .st-sel:hover,.st-btn:hover,.st-key:hover kbd{background:var(--wash-2)}
 }
@@ -123,6 +154,11 @@ button.st-row:focus-visible{outline-offset:-2px}
   .st-ti{min-height:36px;padding:0 14px;border-radius:999px}
   .st-ti .st-gl{display:none}
   .st-body{order:3;padding:4px 16px calc(24px + env(safe-area-inset-bottom,0px))}
+  .st-find{margin:0 16px 10px}
+  .st-find input{font-size:var(--fs-m)}
+  .st-q-on .st-body{gap:var(--s6)}
+  .st-ph{padding:0 8px 4px 6px;touch-action:none}
+  .st-pbody{padding:var(--s2) 16px calc(24px + env(safe-area-inset-bottom,0px))}
   .st-sec+.st-sec{margin-top:var(--s6)}
   .st-o button{padding:5px 10px}
   .st-row{gap:var(--s2)}

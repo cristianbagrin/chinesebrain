@@ -55,6 +55,12 @@
 .tu-send{width:36px;height:36px;flex:none;border:0;border-radius:50%;background:var(--ink);color:var(--on-ink);cursor:pointer;display:grid;place-items:center;transition:opacity .15s}
 .tu-in.empty .tu-send{opacity:.35}
 .tu-send::before{content:"";width:16px;height:16px;background:currentColor;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19V5M5 12l7-7 7 7'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19V5M5 12l7-7 7 7'/%3E%3C/svg%3E") center/contain no-repeat}
+/* nothing said yet: the switch and the composer together in the middle of the pane (tutor/main.ts blank) */
+.tu-pane.blank .tu-scroll{flex:none;margin-top:auto;padding-bottom:var(--s3)}
+.tu-pane.blank .tu-dock{display:flex;flex-direction:column;align-items:center;gap:var(--s4);margin-bottom:auto;padding-bottom:calc(var(--s7) + env(safe-area-inset-bottom,0px))}
+.tu-pane.blank .tu-in{align-self:stretch}
+.tu-pane.blank .tu-log{align-items:center}
+.tu-pane.blank .tu-m{align-self:center}
 .tu-mode{display:flex;gap:2px;background:var(--wash);border-radius:999px;padding:3px}
 .tu-mode button{border:0;background:none;color:var(--ink-3);font:inherit;font-size:var(--fs-s);font-weight:500;line-height:var(--lh-snug);padding:5px 14px;border-radius:999px;cursor:pointer;transition:background .15s,color .15s}
 .tu-mode button[aria-checked="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--sh-1)}

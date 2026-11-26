@@ -129,8 +129,8 @@
         }
     }
     if (idx < 0) return base;
-    let marked = MARKS[base[idx]][tone2];
-    return base.slice(0, idx) + marked + base.slice(idx + 1);
+    let marked2 = MARKS[base[idx]][tone2];
+    return base.slice(0, idx) + marked2 + base.slice(idx + 1);
   }
 
   // site/src/cbp/pinyin.ts
@@ -151,7 +151,7 @@
     return x ? x[1] > 0 ? x[1] / 10 - 9 : w.length === 1 ? -9 : -8.6 : w.length === 1 ? -14 : -1 / 0;
   };
   function segment(lex2, run) {
-    let c = [...run], n = c.length, best = new Array(n + 1).fill(-1 / 0), back = new Array(n + 1).fill(0);
+    let c = [...run], n = c.length, best = new Array(n + 1).fill(-1 / 0), back2 = new Array(n + 1).fill(0);
     best[0] = 0;
     for (let i = 0; i < n; i++)
       if (best[i] !== -1 / 0)
@@ -159,10 +159,10 @@
           let w = c.slice(i, i + len).join("");
           if (len > 1 && !lex2.has(w)) continue;
           let v = best[i] + score(lex2, w);
-          v > best[i + len] && (best[i + len] = v, back[i + len] = i);
+          v > best[i + len] && (best[i + len] = v, back2[i + len] = i);
         }
     let out = [];
-    for (let j = n; j > 0; j = back[j]) out.push(c.slice(back[j], j).join(""));
+    for (let j = n; j > 0; j = back2[j]) out.push(c.slice(back2[j], j).join(""));
     return out.reverse();
   }
   var NUM = /[〇零一二三四五六七八九十百千萬兩幾第]/, tone = (s) => Number(s?.slice(-1)) || 5;
@@ -280,23 +280,27 @@
   Object.assign(RUBY, { text: async (t) => sentence(await load(), t) });
 
   // site/src/cbp/kit/keys.ts
-  var MAC = /Mac|iPhone|iPad/.test(navigator.platform), D = (group, ctx, rows) => rows.map(([id, label, keys]) => ({ id, label, group, keys: keys.split(" "), ctx })), DEFS = [
+  var MAC = typeof navigator < "u" && /Mac|iPhone|iPad/.test(navigator.platform), D = (group, ctx, rows) => rows.map(([id, label, keys]) => ({ id, label, group, keys: keys.split(" "), ctx })), DEFS = [
     ...D("Everywhere", void 0, [
       ["extras", "Extras", "f1"],
       ["settings", "Settings", "mod+,"],
       ["shortcuts", "Shortcuts", "f12"],
       ["undo", "Undo", "mod+z"],
       ["redo", "Redo", "mod+shift+z mod+y"],
-      // from any page (a field being typed in, or a page's own key, wins: go.ts)
-      ["go.today", "Today", "t"],
-      ["go.cards", "Cards", "c"],
-      ["go.reviews", "Reviews", "r"],
-      ["go.browse", "Browse", "b"],
       // the pages he was on, like a browser's back and forward (go.ts)
       ["back", "Back", "mod+["],
-      ["forward", "Forward", "mod+]"],
-      // Tutor: the pane from the right, open or away (tutor/main.ts)
-      ["tutor", "Tutor", "a"]
+      ["forward", "Forward", "mod+]"]
+    ]),
+    // to a page from anywhere: Shift and the page's first letter (go.ts); the Tutor pane is Shift+A (Ask), as T is Today's.
+    // Not while he types in a field, nor over a dialog other than Settings (KEYS.free)
+    ...D("Pages", void 0, [
+      ["page.today", "Today", "shift+t"],
+      ["page.reviews", "Reviews", "shift+r"],
+      ["page.browse", "Browse", "shift+b"],
+      ["page.cards", "Cards", "shift+c"],
+      ["page.essays", "Essays", "shift+e"],
+      ["page.progress", "Progress", "shift+p"],
+      ["page.tutor", "Tutor", "shift+a"]
     ]),
     ...D("Reviews", void 0, [
       ["rv.show", "Show answer", "space enter"],
@@ -342,7 +346,7 @@
       ["cd.copy", "Copy the sentence", "space"],
       ["cd.pinyin", "Pinyin over the sentence", "shift+enter"]
     ]),
-    // a test's choices take their letters while it's on screen, so they may share them with the Go-to keys (go.ts)
+    // a test's choices take their letters while it's on screen
     ...D("Today", "test", [
       ["test.a", "Choice A", "a"],
       ["test.b", "Choice B", "b"],
@@ -353,7 +357,11 @@
       ["im.up", "Move up", "mod+shift+arrowup"],
       ["im.down", "Move down", "mod+shift+arrowdown"]
     ])
-  ], BY = new Map(DEFS.map((d) => [d.id, d])), mine = {}, saveHook = null;
+  ], BY = new Map(DEFS.map((d) => [d.id, d])), RETIRED = ["go.today", "go.cards", "go.reviews", "go.browse", "tutor"], TYPING = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])', typing = (t) => !!(t && t.closest?.(TYPING)), openDialogs = () => typeof document > "u" ? [] : [...document.querySelectorAll("dialog[open]")].map((d) => d.id);
+  function free(e, dialogs = openDialogs()) {
+    return e.defaultPrevented || e.isComposing || e.repeat || typing(e.target) ? !1 : dialogs.every((id) => id === "settings");
+  }
+  var mine = {}, saveHook = null;
   function combo(e) {
     let k = e.key;
     e.altKey && /^Key[A-Z]$/.test(e.code) ? k = e.code.slice(3) : e.altKey && /^Digit\d$/.test(e.code) && (k = e.code.slice(5)), k = k === " " ? "space" : k.toLowerCase(), k === "esc" && (k = "escape");
@@ -363,6 +371,8 @@
   var keysOf = (id) => mine[id] != null ? mine[id].split(" ").filter(Boolean) : BY.get(id)?.keys ?? [], MODS = ["control", "shift", "alt", "meta", "os", "capslock", "fn"], KEYS2 = {
     defs: DEFS,
     is: (e, id) => !e.isComposing && keysOf(id).includes(combo(e)),
+    free,
+    typing,
     keys: keysOf,
     label(id) {
       let k = keysOf(id)[0];
@@ -392,11 +402,32 @@
     changed: (id) => mine[id] != null,
     /** settings.ts: what's saved on his account, and where changes go. */
     load(saved, onSave) {
-      mine = { ...saved }, saveHook = onSave;
+      mine = Object.fromEntries(Object.entries(saved).filter(([id]) => !RETIRED.includes(id))), saveHook = onSave;
     }
-  }, clash = (a, b) => (a.group === b.group || a.group === "Everywhere" || b.group === "Everywhere") && (a.ctx ?? "") === (b.ctx ?? ""), NAMES = MAC ? { mod: "\u2318", shift: "\u21E7", alt: "\u2325", ctrl: "\u2303", enter: "\u21B5", space: "Space", escape: "Esc", arrowleft: "\u2190", arrowright: "\u2192", arrowup: "\u2191", arrowdown: "\u2193", backspace: "\u232B", tab: "\u21E5" } : { mod: "Ctrl+", shift: "Shift+", alt: "Alt+", meta: "Win+", enter: "Enter", space: "Space", escape: "Esc", arrowleft: "\u2190", arrowright: "\u2192", arrowup: "\u2191", arrowdown: "\u2193", backspace: "Backspace", tab: "Tab" };
+  }, ALL = (d) => d.group === "Everywhere" || d.group === "Pages", clash = (a, b) => (a.group === b.group || ALL(a) || ALL(b)) && (a.ctx ?? "") === (b.ctx ?? ""), NAMES = MAC ? { mod: "\u2318", shift: "\u21E7", alt: "\u2325", ctrl: "\u2303", enter: "\u21B5", space: "Space", escape: "Esc", arrowleft: "\u2190", arrowright: "\u2192", arrowup: "\u2191", arrowdown: "\u2193", backspace: "\u232B", tab: "\u21E5" } : { mod: "Ctrl+", shift: "Shift+", alt: "Alt+", meta: "Win+", enter: "Enter", space: "Space", escape: "Esc", arrowleft: "\u2190", arrowright: "\u2192", arrowup: "\u2191", arrowdown: "\u2193", backspace: "Backspace", tab: "Tab" };
   function pretty(k) {
     return k.split("+").map((p, i, a) => i === a.length - 1 ? NAMES[p] ?? (p.length === 1, p.toUpperCase()) : NAMES[p] ?? p).join("");
+  }
+
+  // site/src/cbp/kit/find.ts
+  var esc3 = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]), words = (q2) => [...new Set(q2.toLowerCase().split(/\s+/).filter(Boolean))];
+  function hit(ws, ...texts) {
+    let hay = texts.join(`
+`).toLowerCase();
+    return ws.every((w) => hay.includes(w));
+  }
+  function marked(text, ws) {
+    let low = text.toLowerCase(), on2 = new Uint8Array(text.length);
+    for (let w of ws)
+      for (let i = low.indexOf(w); i >= 0; i = low.indexOf(w, i + 1)) on2.fill(1, i, i + w.length);
+    let out = "";
+    for (let i = 0; i < text.length; ) {
+      let j = i;
+      for (; j < text.length && on2[j] === on2[i]; ) j++;
+      let part = esc3(text.slice(i, j));
+      out += on2[i] ? `<mark>${part}</mark>` : part, i = j;
+    }
+    return out;
   }
 
   // site/src/cbp/kit/settings.ts
@@ -453,14 +484,14 @@
     { id: "Habit", label: "Habit", icon: '<path d="M4 12.5 9 17.5 20 6.5"/>' },
     { id: "AI", label: "AI", icon: '<path d="M12 3.5c.6 4.4 4.1 7.9 8.5 8.5-4.4.6-7.9 4.1-8.5 8.5-.6-4.4-4.1-7.9-8.5-8.5 4.4-.6 7.9-4.1 8.5-8.5z"/>' },
     { id: "Shortcuts", label: "Shortcuts", icon: '<rect x="3" y="6" width="18" height="12" rx="3"/><path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8"/>' }
-  ], glyph = (d) => `<svg class="st-gl" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`, X = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>', btn = document.getElementById("settingsbtn"), dlg = document.createElement("dialog");
+  ], glyph = (d) => `<svg class="st-gl" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`, X = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>', LENS = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>', BACK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>', btn = document.getElementById("settingsbtn"), dlg = document.createElement("dialog");
   dlg.id = "settings";
   dlg.className = "st";
   dlg.setAttribute("aria-labelledby", "st-title");
   (document.getElementById("settings") ?? document.body.lastElementChild).replaceWith(dlg);
   dlg.isConnected || document.body.append(dlg);
   btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>';
-  var sec = "Everyday", listening = "", REDUCED = matchMedia("(prefers-reduced-motion: reduce)"), isSwitch = (d) => d.options.length === 2 && d.options[0][0] === "on" && d.options[1][0] === "off", sw = (attr, on2, label) => `<div class="st-row"><span class="st-l">${esc(label)}</span><button type="button" role="switch" class="st-tg" aria-checked="${on2}" aria-label="${esc(label)}" ${attr}><i></i></button></div>`;
+  var sec = "Everyday", listening = "", q = "", sub = null, REDUCED = matchMedia("(prefers-reduced-motion: reduce)"), isSwitch = (d) => d.options.length === 2 && d.options[0][0] === "on" && d.options[1][0] === "off", sw = (attr, on2, label) => `<div class="st-row"><span class="st-l">${esc(label)}</span><button type="button" role="switch" class="st-tg" aria-checked="${on2}" aria-label="${esc(label)}" ${attr}><i></i></button></div>`;
   function row(d) {
     if (isSwitch(d)) return sw(`data-x="${d.id}" data-v="${d.v === "on" ? "off" : "on"}"`, d.v === "on", d.label);
     if (d.options.length > 3) return `<div class="st-row"><label class="st-l" for="st-${d.id}">${esc(d.label)}</label><span class="st-selw"><select class="st-sel" id="st-${d.id}" data-xs="${d.id}">${d.options.map(([v, l]) => `<option value="${esc(v)}"${d.v === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></span></div>`;
@@ -489,25 +520,87 @@
     ).join("");
   }
   function draw() {
+    if (sub) return drawSub();
+    dlg.classList.remove("st-wide");
     let a = document.activeElement, keep = a && dlg.contains(a) ? a.dataset.x ?? a.dataset.key ?? a.dataset.sec ?? a.dataset.xs ?? a.dataset.reset ?? (a.dataset.sound != null ? "sound" : a.id) : "", top = dlg.querySelector(".st-body")?.scrollTop ?? 0, by = rowsBy(), list = sections(by);
     list.some((s) => s.id === sec) || (sec = list[0].id), dlg.innerHTML = `<div class="st-grab" aria-hidden="true"></div>
-    <nav class="st-side" aria-label="Sections"><h2 id="st-title">Settings</h2><div class="st-toc">${list.map((s) => `<button type="button" class="st-ti" data-sec="${esc(s.id)}" aria-current="${s.id === sec}">${glyph(s.icon)}<span>${esc(s.label)}</span></button>`).join("")}</div></nav>
+    <nav class="st-side" aria-label="Sections"><h2 id="st-title">Settings</h2><div class="st-find${q ? " on" : ""}" role="search">${LENS}<input id="st-q" type="text" enterkeyhint="search" placeholder="Search" aria-label="Search settings" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(q)}"><button type="button" class="st-qx" aria-label="Clear">${X}</button></div><div class="st-toc">${list.map((s) => `<button type="button" class="st-ti" data-sec="${esc(s.id)}" aria-current="${s.id === sec}">${glyph(s.icon)}<span>${esc(s.label)}</span></button>`).join("")}</div></nav>
     <div class="st-main">
       <div class="st-head"><h2 class="st-now" aria-hidden="true">Settings</h2><button type="button" class="st-x" id="st-close" aria-label="Close">${X}</button></div>
       <div class="st-body">${list.map(
       (s) => `<section class="st-sec" data-s="${esc(s.id)}" aria-labelledby="st-s-${esc(s.id)}"><div class="st-sh"><h3 id="st-s-${esc(s.id)}">${esc(s.label)}</h3>${changed(s.id) ? `<button type="button" class="st-reset" data-reset="${esc(s.id)}">Reset</button>` : ""}</div>${s.id === "Shortcuts" ? keysHTML() : `<div class="st-grp">${by[s.id].join("")}</div>`}</section>`
-    ).join("")}</div>
+    ).join("")}<div class="empty st-none" hidden>No matches</div></div>
     </div>`;
     for (let r of Object.values(LAB.rows)) {
       let el2 = dlg.querySelector(`[data-row="${r.id}"]`);
       el2 && r.bind(el2);
     }
     let nb = dlg.querySelector(".st-body");
-    if (nb.scrollTop = top, nb.addEventListener("scroll", spy, { passive: !0 }), keep) {
-      let q = `[data-x="${keep}"][aria-checked="true"],[data-x="${keep}"],[data-key="${keep}"],[data-sec="${keep}"],[data-xs="${keep}"],[data-reset="${keep}"]`;
-      (dlg.querySelector(q) ?? (keep === "sound" ? dlg.querySelector("[data-sound]") : keep ? dlg.querySelector("#" + CSS.escape(keep)) : null) ?? dlg.querySelector(".st-x"))?.focus({ preventScroll: !0 });
+    if (nb.scrollTop = top, nb.addEventListener("scroll", spy, { passive: !0 }), q && filter(!1), keep) {
+      let sel = `[data-x="${keep}"][aria-checked="true"],[data-x="${keep}"],[data-key="${keep}"],[data-sec="${keep}"],[data-xs="${keep}"],[data-reset="${keep}"]`;
+      if ((dlg.querySelector(sel) ?? (keep === "sound" ? dlg.querySelector("[data-sound]") : keep ? dlg.querySelector("#" + CSS.escape(keep)) : null) ?? dlg.querySelector(".st-x"))?.focus({ preventScroll: !0 }), keep === "st-q") {
+        let i = dlg.querySelector("#st-q");
+        i.setSelectionRange(i.value.length, i.value.length);
+      }
     }
     mark2();
+  }
+  var MARKS2 = ".st-l, .st-sh h3, .st-cap, .st-ti span, .st-o button:not([aria-label])", txt = (el2) => el2 ? el2.dataset?.t ?? el2.textContent ?? "" : "", rowText = (r) => [r.textContent ?? "", ...[...r.querySelectorAll("[aria-label]")].map((b) => b.getAttribute("aria-label"))].join(" ");
+  function marks(root, ws) {
+    root.querySelectorAll(MARKS2).forEach((el2) => {
+      if (el2.dataset.t == null) {
+        if (el2.children.length) return;
+        el2.dataset.t = el2.textContent ?? "";
+      }
+      let h = ws.length ? marked(el2.dataset.t, ws) : esc(el2.dataset.t);
+      el2.innerHTML !== h && (el2.innerHTML = h);
+    });
+  }
+  function filter(top = !0) {
+    let ws = words(q), body = dlg.querySelector(".st-body");
+    if (!body) return;
+    dlg.classList.toggle("st-q-on", ws.length > 0), dlg.querySelector(".st-find")?.classList.toggle("on", !!q);
+    let shown = 0;
+    for (let se of body.querySelectorAll(".st-sec")) {
+      let name = txt(se.querySelector(".st-sh h3")), n = 0;
+      for (let g of se.querySelectorAll(".st-grp")) {
+        let cap = g.previousElementSibling?.matches(".st-cap") ? g.previousElementSibling : null, first = null, last = null;
+        for (let r of [...g.children]) {
+          let on2 = hit(ws, name, txt(cap), rowText(r));
+          r.hidden = !on2, r.classList.remove("f0", "f1"), on2 && (first ??= r, last = r);
+        }
+        first?.classList.add("f0"), last?.classList.add("f1"), g.hidden = !first, cap && (cap.hidden = !first), first && n++;
+      }
+      se.hidden = !n;
+      let ti = dlg.querySelector(`.st-ti[data-sec="${CSS.escape(se.dataset.s)}"]`);
+      ti && (ti.hidden = !n), n && shown++;
+    }
+    if (marks(dlg, ws), body.querySelector(".st-none").hidden = shown > 0, !top) return;
+    body.scrollTop = 0;
+    let f = body.querySelector(".st-sec:not([hidden])");
+    f && f.dataset.s !== sec && (sec = f.dataset.s, mark2());
+  }
+  function setQ(v) {
+    q = v;
+    let i = dlg.querySelector("#st-q");
+    i && i.value !== v && (i.value = v), filter();
+  }
+  dlg.addEventListener("input", (e) => {
+    e.target.id === "st-q" && setQ(e.target.value);
+  });
+  function drawSub() {
+    sub && (dlg.classList.add("st-wide"), dlg.innerHTML = `<div class="st-grab" aria-hidden="true"></div><div class="st-page"><div class="st-ph"><button type="button" class="st-back" id="st-back">${BACK}<span>Settings</span></button><h2 id="st-title">${esc(sub.title)}</h2><button type="button" class="st-x" id="st-close" aria-label="Close">${X}</button></div><div class="st-pbody"></div></div>`, sub.render(dlg.querySelector(".st-pbody")));
+  }
+  function page(title, render, leave) {
+    dlg.open || show(), endSub(), sub = { title, render, leave }, drawSub(), dlg.querySelector("#st-back").focus({ preventScroll: !0 });
+  }
+  function back() {
+    sub && (endSub(), draw(), jump(sec, !1), (dlg.querySelector('.st-ti[aria-current="true"]') ?? dlg.querySelector("button"))?.focus({ preventScroll: !0 }));
+  }
+  function endSub() {
+    if (!sub) return;
+    let from = sub;
+    sub = null, from.leave?.();
   }
   var jumping = 0;
   function mark2() {
@@ -519,7 +612,9 @@
     if (jumping) return;
     let b = dlg.querySelector(".st-body");
     if (!b) return;
-    let all = [...b.querySelectorAll(".st-sec")], line = b.getBoundingClientRect().top + b.clientHeight / 4, cur = all[0];
+    let all = [...b.querySelectorAll(".st-sec:not([hidden])")];
+    if (!all.length) return;
+    let line = b.getBoundingClientRect().top + b.clientHeight / 4, cur = all[0];
     for (let s of all) s.getBoundingClientRect().top <= line && (cur = s);
     b.scrollTop > 0 && b.scrollTop + b.clientHeight >= b.scrollHeight - 2 && (cur = all[all.length - 1]), cur && cur.dataset.s !== sec && (sec = cur.dataset.s, mark2());
   }
@@ -536,20 +631,26 @@
   }
   var closing = 0;
   function show(to) {
-    listening = "", to === "keys" ? sec = "Shortcuts" : to && to !== "main" && (sec = to), clearTimeout(closing), dlg.classList.remove("out"), dlg.style.transform = "";
+    listening = "", to && endSub(), to === "keys" ? sec = "Shortcuts" : to && to !== "main" && (sec = to), clearTimeout(closing), dlg.classList.remove("out"), dlg.style.transform = "";
     let was = dlg.open;
     draw(), was || (dlg.showModal(), requestAnimationFrame(() => dlg.classList.add("on"))), (to || !was) && jump(sec, !1), btn.setAttribute("aria-expanded", "true"), (dlg.querySelector('.st-ti[aria-current="true"]') ?? dlg.querySelector("button"))?.focus({ preventScroll: !0 });
   }
-  function hide() {
+  function hide(now = !1) {
+    if (now && dlg.open) {
+      clearTimeout(closing), listening = "", dlg.classList.remove("on", "out"), dlg.style.transform = "", btn.setAttribute("aria-expanded", "false"), dlg.close(), endSub();
+      return;
+    }
     !dlg.open || dlg.classList.contains("out") || (listening = "", dlg.classList.remove("on"), dlg.classList.add("out"), btn.setAttribute("aria-expanded", "false"), closing = window.setTimeout(() => {
-      dlg.classList.remove("out"), dlg.style.transform = "", dlg.close(), btn.focus({ preventScroll: !0 });
+      dlg.classList.remove("out"), dlg.style.transform = "", dlg.close(), endSub(), btn.focus({ preventScroll: !0 });
     }, REDUCED.matches ? 120 : 200));
   }
   btn.onclick = (e) => {
     e.stopPropagation(), sfx("tap"), dlg.open && !dlg.classList.contains("out") ? hide() : show();
   };
   dlg.addEventListener("cancel", (e) => {
-    e.preventDefault(), hide();
+    if (e.preventDefault(), sub) return back();
+    if (q) return setQ("");
+    hide();
   });
   dlg.addEventListener("click", (e) => {
     let t = e.target;
@@ -569,6 +670,9 @@
     if (k)
       return listening = listening === k.dataset.key ? "" : k.dataset.key, sfx("tap"), draw();
     if (t.closest("#st-close")) return sfx("tap"), hide();
+    if (t.closest("#st-back")) return sfx("tap"), back();
+    if (t.closest(".st-qx"))
+      return sfx("tap"), setQ(""), dlg.querySelector("#st-q")?.focus();
     let rs = t.closest("[data-reset]");
     if (rs) {
       let g = rs.dataset.reset;
@@ -597,6 +701,20 @@
       return e.preventDefault(), sfx("tap"), up && sec === "Shortcuts" ? hide() : show("keys");
     if (KEYS2.is(e, "settings"))
       return e.preventDefault(), sfx("tap"), up ? hide() : show();
+    if (up && !sub && !listening && !e.isComposing) {
+      if (e.key === "Escape" && q)
+        return e.preventDefault(), setQ("");
+      if (combo(e) === "mod+f" || e.key === "/" && !KEYS2.typing(e.target)) {
+        e.preventDefault();
+        let i = dlg.querySelector("#st-q");
+        return i.focus(), i.select();
+      }
+      if (e.target.id === "st-q" && e.key === "Enter") {
+        e.preventDefault();
+        let r = dlg.querySelector(".st-body .st-grp:not([hidden]) > :not([hidden])");
+        return (r?.matches("button") ? r : r?.querySelector("button, select, input"))?.focus();
+      }
+    }
     let ti = e.target.closest?.(".st-ti");
     if (up && ti && /^Arrow(Up|Down|Left|Right)$/.test(e.key)) {
       e.preventDefault();
@@ -604,10 +722,10 @@
       sfx("tap"), jump(n.dataset.sec, !0), n.focus();
     }
   });
-  BUS.on("lab", () => dlg.open && draw());
+  BUS.on("lab", () => dlg.open && !sub && draw());
   var PHONE = matchMedia("(max-width: 640px)");
   dlg.addEventListener("pointerdown", (e) => {
-    if (!PHONE.matches || e.button !== 0 || !e.target.closest(".st-grab,.st-head") || e.target.closest("button")) return;
+    if (!PHONE.matches || e.button !== 0 || !e.target.closest(".st-grab,.st-head,.st-ph") || e.target.closest("button")) return;
     let y0 = e.clientY, h = dlg.offsetHeight, dy = 0, last = { y: y0, t: e.timeStamp }, v = 0;
     try {
       dlg.setPointerCapture(e.pointerId);
@@ -624,21 +742,22 @@
     };
     dlg.addEventListener("pointermove", move), dlg.addEventListener("pointerup", up), dlg.addEventListener("pointercancel", up);
   });
-  var SETTINGS = { open: (to) => show(to), close: () => hide(), redraw: () => dlg.open && draw() };
+  var SETTINGS = { open: (to) => show(to), close: (now) => hide(now), redraw: () => dlg.open && !sub && draw(), page };
 
   // site/src/cbp/kit/go.ts
   var TO = [
-    ["go.today", "today"],
-    ["go.cards", "cards"],
-    ["go.reviews", "reviews", "review"],
-    ["go.browse", "reviews", "browse"]
-  ], TYPING = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
+    ["page.today", "today"],
+    ["page.reviews", "reviews", "review"],
+    ["page.browse", "reviews", "browse"],
+    ["page.cards", "cards"],
+    ["page.essays", "essays"],
+    ["page.progress", "progress"]
+  ], TYPING2 = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
   addEventListener("keydown", (e) => {
-    if (e.defaultPrevented || e.isComposing || e.repeat || e.target?.closest?.(TYPING) || document.querySelector("dialog[open]")) return;
-    let hit = TO.find(([id]) => KEYS2.is(e, id));
-    if (!hit || !VIEWS.includes(hit[1])) return;
-    e.preventDefault();
-    let [, view, sub] = hit;
+    let hit2 = TO.find(([id]) => KEYS2.is(e, id));
+    if (!hit2 || !VIEWS.includes(hit2[1]) || !KEYS2.free(e)) return;
+    e.preventDefault(), SETTINGS.close(!0);
+    let [, view, sub2] = hit2;
     if (view !== VIEW) {
       try {
         sfx("tap");
@@ -646,7 +765,7 @@
       }
       setView(view);
     }
-    let b = sub && document.querySelector(`#view-reviews [data-v="${sub}"]`);
+    let b = sub2 && document.querySelector(`#view-reviews [data-v="${sub2}"]`);
     b && b.getAttribute("aria-current") !== "true" && b.click();
   });
   var PLACES = [], at = -1, moving = !1, noteT = 0;
@@ -688,7 +807,7 @@
       if (!d) return;
       e.preventDefault();
       let t = e.target;
-      e.repeat || t?.closest?.(TYPING) || document.querySelector("dialog[open]") || step(d);
+      e.repeat || t?.closest?.(TYPING2) || document.querySelector("dialog[open]") || step(d);
     },
     !0
   );
@@ -783,7 +902,7 @@
       else if ("img" in p) h += `<img src="${escA(p.img.src)}"${p.img.from ? ` data-from="${escA(p.img.from)}"` : ""}>`, i++;
       else {
         let t = "";
-        for (let q = out[i]; i < out.length && isChar(q) && q.f === p.f && q.s === p.s; q = out[++i]) t += isSp(q) ? hardSpace(out, i) ? "" : " " : q.c;
+        for (let q2 = out[i]; i < out.length && isChar(q2) && q2.f === p.f && q2.s === p.s; q2 = out[++i]) t += isSp(q2) ? hardSpace(out, i) ? "" : " " : q2.c;
         t = escT(t).replace(/\u0001/g, "&nbsp;"), p.f & BIT.hl && (t = `<mark>${t}</mark>`), p.f & BIT.ul && (t = `<u>${t}</u>`), p.f & BIT.i && (t = `<i>${t}</i>`), p.f & BIT.b && (t = `<b>${t}</b>`), p.s && (t = `<span style="${escA(p.s)}">${t}</span>`), h += t;
       }
     }
@@ -878,18 +997,18 @@
   }
   function placeFmt() {
     if (!FMT) return;
-    let s = getSelection(), r = s && s.rangeCount ? s.getRangeAt(0) : null, hit = r && !s.isCollapsed ? fieldOf(r.commonAncestorContainer) : null;
-    if (!TOUCH2() || !hit || !hit.f.offsetParent) return FMT.hidden = !0, void (FMT._f = null);
-    FMT._f = hit;
-    let home = hit.f.closest("dialog") ?? document.body;
+    let s = getSelection(), r = s && s.rangeCount ? s.getRangeAt(0) : null, hit2 = r && !s.isCollapsed ? fieldOf(r.commonAncestorContainer) : null;
+    if (!TOUCH2() || !hit2 || !hit2.f.offsetParent) return FMT.hidden = !0, void (FMT._f = null);
+    FMT._f = hit2;
+    let home = hit2.f.closest("dialog") ?? document.body;
     FMT.parentElement !== home && home.appendChild(FMT), FMT.hidden = !1;
     let rect = r.getBoundingClientRect(), vv = visualViewport, top = vv ? vv.offsetTop : 0, h = vv ? vv.height : innerHeight, w = FMT.offsetWidth, bh = FMT.offsetHeight, y = rect.bottom + 14;
     y + bh > top + h - 8 && (y = rect.top - bh - 14), FMT.style.left = Math.max(8, Math.min(innerWidth - w - 8, rect.left + rect.width / 2 - w / 2)) + "px", FMT.style.top = Math.max(top + 8, y) + "px";
   }
   function fmtBar() {
     FMT || (FMT = document.createElement("div"), FMT.className = "rv-fmt", FMT.hidden = !0, FMT.innerHTML = '<button type="button" data-k="b" aria-label="Bold"><b>B</b></button><button type="button" data-k="i" aria-label="Italic"><i>I</i></button><button type="button" data-k="ul" aria-label="Underline"><u>U</u></button><button type="button" data-k="hl" aria-label="Highlight"><span>H</span></button>', document.body.appendChild(FMT), FMT.addEventListener("pointerdown", (e) => e.preventDefault()), FMT.addEventListener("mousedown", (e) => e.preventDefault()), FMT.addEventListener("click", (e) => {
-      let b = e.target.closest("[data-k]"), hit = FMT._f;
-      !b || !hit || (hit.ed.toggle(hit.f, b.dataset.k), sfx("tap"), placeFmt());
+      let b = e.target.closest("[data-k]"), hit2 = FMT._f;
+      !b || !hit2 || (hit2.ed.toggle(hit2.f, b.dataset.k), sfx("tap"), placeFmt());
     }), document.addEventListener("selectionchange", () => requestAnimationFrame(placeFmt)), visualViewport?.addEventListener("resize", () => FMT.hidden || placeFmt()), visualViewport?.addEventListener("scroll", () => FMT.hidden || placeFmt()), typeof BUS < "u" && BUS.on("view", () => FMT && (FMT.hidden = !0)));
   }
   var ATTACHED = /* @__PURE__ */ new WeakMap();
@@ -938,8 +1057,8 @@
       if (!sel || sel[0] !== sel[1] || sel[0] <= p.at) return;
       let { out } = read(f), c = sel[0];
       for (let k = p.at; k < c; k++) {
-        let q = out[k];
-        isChar(q) && (q.f = (q.f | p.on) & ~p.off);
+        let q2 = out[k];
+        isChar(q2) && (q2.f = (q2.f | p.on) & ~p.off);
       }
       f.innerHTML = write(out), select(f, c), pend = null;
     }
@@ -1022,5 +1141,13 @@
   Object.assign(window, { EDITOR, KNOWN });
   Object.assign(window, { SOUND, HOLD, RUBY, KEYS: KEYS2, SETTINGS });
   Object.assign(window, { HABIT: habit_exports });
+  new MutationObserver((recs) => {
+    for (let r of recs)
+      for (let n of r.addedNodes) {
+        if (!(n instanceof HTMLElement) || !n.classList.contains("toast")) continue;
+        let top = [...document.querySelectorAll("dialog[open]")].filter((d) => d.matches(":modal")).pop();
+        top && top.append(n);
+      }
+  }).observe(document.body, { childList: !0 });
   BUS.on("leave", () => SOUND.stop());
 })();

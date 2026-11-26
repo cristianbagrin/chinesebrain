@@ -1579,7 +1579,11 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
     bind(el) {
       let b = el.querySelector(".rs-designs");
       b && (b.onclick = () => {
-        sfx("tap"), SETTINGS.close(), setView("reviews"), go("designs");
+        sfx("tap"), SETTINGS.page(
+          "Card designs",
+          (host) => (TY_HOST = host, showDesigns()),
+          () => TY_HOST = null
+        );
       });
     }
   });
@@ -1622,15 +1626,17 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
       }
     }
   }
-  var TY = { id: 0, tab: "fields", tmpl: 0, side: "qfmt" }, USED = ["Chinese", "Chinese phrases", "Chinese radicals"];
+  var TY = { id: 0, tab: "fields", tmpl: 0, side: "qfmt" }, USED = ["Chinese", "Chinese phrases", "Chinese radicals"], TY_HOST = null, RX_APP = app;
   function showDesigns() {
-    let types = [...S.types.values()].filter((t2) => USED.includes(t2.name) || [...S.notes.values()].some((n) => n.mid === t2.id));
+    let app2 = TY_HOST?.isConnected ? TY_HOST : RX_APP, types = [...S.types.values()].filter((t2) => USED.includes(t2.name) || [...S.notes.values()].some((n) => n.mid === t2.id));
     S.types.has(TY.id) || (TY.id = col().notetype);
     let t = S.types.get(TY.id);
-    app.innerHTML = `<section class="ty"><div class="ty-top"><button type="button" class="btn-q ty-back" aria-label="Back to settings">\u2039 Settings</button>
+    app2.innerHTML = `<section class="ty"><div class="ty-top">${app2 === RX_APP ? '<button type="button" class="btn-q ty-back" aria-label="Back to settings">\u2039 Settings</button>' : ""}
     <div class="br-f" role="radiogroup" aria-label="Note type">${types.map((x) => `<button type="button" role="radio" data-ty="${x.id}" aria-checked="${x.id === t.id}">${esc2(x.name.replace(/^Chinese /, "").replace(/^Chinese$/, "Words"))}</button>`).join("")}</div>
-    <div class="br-f" role="radiogroup" aria-label="Part">${["fields", "cards", "css"].map((k) => `<button type="button" role="radio" data-tab="${k}" aria-checked="${TY.tab === k}">${k === "fields" ? "Fields" : k === "cards" ? "Front and back" : "Styling"}</button>`).join("")}</div></div><div class="ty-body"></div></section>`, $(".ty-back", app).onclick = () => (go("review"), SETTINGS.open()), app.querySelectorAll("[data-ty]").forEach((b) => b.onclick = () => (TY.id = Number(b.dataset.ty), TY.tmpl = 0, showDesigns())), app.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => (TY.tab = b.dataset.tab, showDesigns()));
-    let body = $(".ty-body", app), sample = [...S.notes.values()].find((x) => x.mid === t.id) ?? { id: 0, guid: "", mid: t.id, mod: 0, tags: [], flds: t.fields.map((f) => f.name) };
+    <div class="br-f" role="radiogroup" aria-label="Part">${["fields", "cards", "css"].map((k) => `<button type="button" role="radio" data-tab="${k}" aria-checked="${TY.tab === k}">${k === "fields" ? "Fields" : k === "cards" ? "Front and back" : "Styling"}</button>`).join("")}</div></div><div class="ty-body"></div></section>`;
+    let tb = app2.querySelector(".ty-back");
+    tb && (tb.onclick = () => (go("review"), SETTINGS.open())), app2.querySelectorAll("[data-ty]").forEach((b) => b.onclick = () => (TY.id = Number(b.dataset.ty), TY.tmpl = 0, showDesigns())), app2.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => (TY.tab = b.dataset.tab, showDesigns()));
+    let body = $(".ty-body", app2), sample = [...S.notes.values()].find((x) => x.mid === t.id) ?? { id: 0, guid: "", mid: t.id, mod: 0, tags: [], flds: t.fields.map((f) => f.name) };
     if (TY.tab === "fields") {
       let fs = t.fields.slice().sort((a, b) => a.ord - b.ord);
       body.innerHTML = `<ol class="flist">${fs.map((f, i) => `<li><input value="${esc2(f.name)}" data-ren="${f.ord}" aria-label="Field name"><button type="button" class="btn-q" data-up="${i}" ${i ? "" : "disabled"} aria-label="Move up">\u2191</button><button type="button" class="btn-q" data-dn="${i}" ${i < fs.length - 1 ? "" : "disabled"} aria-label="Move down">\u2193</button><button type="button" class="btn-q bk-del" data-rm="${f.ord}" aria-label="Delete field">\xD7</button></li>`).join("")}</ol>
@@ -1682,6 +1688,8 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
   addEventListener(
     "keydown",
     (e) => {
+      if (TY_HOST?.isConnected && !e.isComposing && (KEYS.is(e, "undo") || KEYS.is(e, "redo")) && !e.target.closest?.('input, textarea, select, [contenteditable="true"]'))
+        return e.preventDefault(), e.stopImmediatePropagation(), void (KEYS.is(e, "redo") ? redo() : undo()).then(() => TY_HOST?.isConnected && showDesigns());
       if (VIEW !== "reviews" || e.isComposing) return;
       let t = e.target, typing = !!t.closest?.('input, textarea, select, [contenteditable="true"]'), eat = () => (e.preventDefault(), e.stopImmediatePropagation());
       if (!typing && (KEYS.is(e, "undo") || KEYS.is(e, "redo")))

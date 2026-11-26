@@ -1,7 +1,9 @@
-/* Shortcuts to the pages, from anywhere (KEYS 'go.*', his to change): T Today, C Cards, R Reviews, B Reviews › Browse.
-   They step aside while he types in a field, while a dialog is open, and for any key a page used first (a test's B and C
-   are its choices): this listens last, on window, and lets a handled key (defaultPrevented) be. */
+/* Shortcuts to the pages, from anywhere (KEYS 'page.*', his to change): Shift and the page's first letter, Shift+T Today,
+   Shift+R Reviews, Shift+B Reviews › Browse, Shift+C Cards, Shift+E Essays, Shift+P Progress (Shift+A, the Tutor, is in
+   tutor/main.ts). They step aside while he types in a field, over a dialog other than Settings (which closes for them), and
+   for any key a page used first: this listens last, on window, and lets a handled key (defaultPrevented) be (KEYS.free). */
 import { KEYS } from './keys.ts';
+import { SETTINGS } from './settings.ts';
 
 declare const VIEWS: string[];
 declare const VIEW: string;
@@ -9,20 +11,20 @@ declare function setView(v: string): void;
 declare function sfx(k: string): void;
 
 const TO: [string, string, string?][] = [
-  ['go.today', 'today'],
-  ['go.cards', 'cards'],
-  ['go.reviews', 'reviews', 'review'],
-  ['go.browse', 'reviews', 'browse'],
+  ['page.today', 'today'],
+  ['page.reviews', 'reviews', 'review'],
+  ['page.browse', 'reviews', 'browse'],
+  ['page.cards', 'cards'],
+  ['page.essays', 'essays'],
+  ['page.progress', 'progress'],
 ];
 const TYPING = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
 
 addEventListener('keydown', (e) => {
-  if (e.defaultPrevented || e.isComposing || e.repeat) return;
-  const t = e.target as HTMLElement | null;
-  if (t?.closest?.(TYPING) || document.querySelector('dialog[open]')) return;
   const hit = TO.find(([id]) => KEYS.is(e, id));
-  if (!hit || !VIEWS.includes(hit[1])) return;
+  if (!hit || !VIEWS.includes(hit[1]) || !KEYS.free(e)) return;
   e.preventDefault();
+  SETTINGS.close(true);
   const [, view, sub] = hit;
   if (view !== VIEW) {
     try {

@@ -81,63 +81,75 @@ SHEET.addEventListener('keydown',e=>{if(e.key==='Escape')WR_undim();});
 
 /* ---------- paragraphs: one <div> per line of the saved text ----------
    The browser splits a paragraph on Enter by itself (its own undo, IME untouched); this only keeps the shape: an empty
-   sheet gets its first <div> when he starts, Shift+Enter is a new paragraph too (a line break inside one wouldn't
-   survive the round trip), a paste goes in as plain text, a paragraph at a time, and no bold or italic. */
+   box gets its first <div> when he starts, Shift+Enter is a new paragraph too (a line break inside one wouldn't
+   survive the round trip), a paste goes in as plain text, a paragraph at a time, and no bold or italic.
+   PARA_* are the same for every box he writes his essay in: Today's sheet here, a past day's edit on Essays (essays.js). */
 try{document.execCommand('defaultParagraphSeparator',false,'div');}catch(e){}
-SHEET.setAttribute('contenteditable','true');
 const WR_BLK=n=>n.nodeType===1&&(n.nodeName==='DIV'||n.nodeName==='P');
-function WR_set(t){
-  t=norm(t);
-  SHEET.innerHTML=t?t.split('\n').map(l=>`<div>${l?esc(l):'<br>'}</div>`).join(''):'';
-  WR_ph();
-}
+const PARA_html=t=>{t=norm(t);return t?t.split('\n').map(l=>`<div>${l?esc(l):'<br>'}</div>`).join(''):'';};
 // the text, one line a paragraph (what store.js saves): a <div> is a line; a <br> inside one (or a pasted newline)
 // starts another; the <br> that only holds an empty paragraph open is nothing
-function WR_text(){
+function PARA_text(root){
   const out=[]; let line=null;
   const end=()=>{if(line!==null){out.push(line);line=null;}};
   const walk=el=>{for(const n of el.childNodes){
     if(n.nodeType===3){n.data.split('\n').forEach((p,i)=>{if(i){out.push(line||'');line='';}line=(line||'')+p;});}
-    else if(n.nodeName==='BR'){if(n.nextSibling===null&&el!==SHEET&&WR_BLK(el)){if(line===null)line='';}else{out.push(line||'');line=null;}}
+    else if(n.nodeName==='BR'){if(n.nextSibling===null&&el!==root&&WR_BLK(el)){if(line===null)line='';}else{out.push(line||'');line=null;}}
     else if(WR_BLK(n)){end();walk(n);if(line===null)line='';end();}
     else if(n.nodeType===1) walk(n);
   }};
-  walk(SHEET); end();
+  walk(root); end();
   const t=out.join('\n').replace(/\u00a0/g,' ');
   return t.trim()?norm(t):'';
 }
-// the placeholder shows on an empty sheet (an empty paragraph counts as empty)
-function WR_ph(){SHEET.classList.toggle('blank',!SHEET.textContent);}
-// typing into a bare sheet: the first paragraph's <div> is there first, so every line is a block
-function WR_seed(){
-  if(SHEET.querySelector('div')) return;
-  const t=SHEET.textContent;
-  SHEET.innerHTML=`<div>${t?esc(t):'<br>'}</div>`;
-  placeCaret(SHEET,t.length);
+// typing into a bare box: the first paragraph's <div> is there first, so every line is a block
+function PARA_seed(el){
+  if(el.querySelector('div')) return;
+  const t=el.textContent;
+  el.innerHTML=`<div>${t?esc(t):'<br>'}</div>`;
+  placeCaret(el,t.length);
 }
-SHEET.addEventListener('focus',()=>{if(!SHEET.textContent)WR_seed();});
-SHEET.addEventListener('beforeinput',e=>{
-  const t=e.inputType||'';
-  if(/^format/.test(t)){e.preventDefault();return;}
-  if(t==='insertLineBreak'){e.preventDefault();document.execCommand('insertParagraph');return;}
-  if(!e.isComposing&&/^insert/.test(t)&&!SHEET.querySelector('div')) WR_seed();
-});
-SHEET.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.shiftKey&&!e.isComposing){e.preventDefault();document.execCommand('insertParagraph');}});
-function WR_paste(text){
+// the caret at a place in the saved text (a newline is the step into the next paragraph); null: the end
+function PARA_caret(el,o){
+  if(o==null) return placeCaret(el,null);
+  const before=PARA_text(el).slice(0,o), n=before.split('\n').length-1;
+  const blk=[...el.children].filter(WR_BLK)[n];
+  blk?placeCaret(blk,o-(before.lastIndexOf('\n')+1)):placeCaret(el,null);
+}
+function PARA_paste(text){
   const L=String(text||'').replace(/\r\n?/g,'\n').split('\n');
   L.forEach((l,i)=>{if(i)document.execCommand('insertParagraph');if(l)document.execCommand('insertText',false,l);});
 }
-SHEET.addEventListener('paste',e=>{
-  e.preventDefault(); e.stopPropagation();
-  WR_paste((e.clipboardData||window.clipboardData).getData('text/plain'));
-});
-SHEET.addEventListener('drop',e=>{
-  const t=e.dataTransfer&&e.dataTransfer.getData('text/plain'); if(!t) return;
-  e.preventDefault();
-  const r=document.caretRangeFromPoint?document.caretRangeFromPoint(e.clientX,e.clientY):null;
-  if(r){const s=getSelection();s.removeAllRanges();s.addRange(r);}
-  WR_paste(t);
-});
+// makes a box a paragraph editor (once per element; contenteditable comes and goes with the box's own edit mode)
+function PARA_attach(el){
+  el.setAttribute('contenteditable','true');
+  if(el._para) return; el._para=true;
+  el.addEventListener('focus',()=>{if(el.isContentEditable&&!el.textContent)PARA_seed(el);});
+  el.addEventListener('beforeinput',e=>{
+    const t=e.inputType||'';
+    if(/^format/.test(t)){e.preventDefault();return;}
+    if(t==='insertLineBreak'){e.preventDefault();document.execCommand('insertParagraph');return;}
+    if(!e.isComposing&&/^insert/.test(t)&&!el.querySelector('div')) PARA_seed(el);
+  });
+  el.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.shiftKey&&!e.isComposing&&el.isContentEditable){e.preventDefault();document.execCommand('insertParagraph');}});
+  el.addEventListener('paste',e=>{
+    if(!el.isContentEditable) return;
+    e.preventDefault(); e.stopPropagation();
+    PARA_paste((e.clipboardData||window.clipboardData).getData('text/plain'));
+  });
+  el.addEventListener('drop',e=>{
+    const t=el.isContentEditable&&e.dataTransfer&&e.dataTransfer.getData('text/plain'); if(!t) return;
+    e.preventDefault();
+    const r=document.caretRangeFromPoint?document.caretRangeFromPoint(e.clientX,e.clientY):null;
+    if(r){const s=getSelection();s.removeAllRanges();s.addRange(r);}
+    PARA_paste(t);
+  });
+}
+function WR_set(t){SHEET.innerHTML=PARA_html(t);WR_ph();}
+const WR_text=()=>PARA_text(SHEET);
+// the placeholder shows on an empty sheet (an empty paragraph counts as empty)
+function WR_ph(){SHEET.classList.toggle('blank',!SHEET.textContent);}
+PARA_attach(SHEET);
 
 /* ---------- typing and saving ---------- */
 SHEET.addEventListener('input',()=>{

@@ -14,8 +14,11 @@
      LAB.get('card-model' | 'pinyin-model' | 'idea-model' | 'deeper-model' | 'test-model' | 'grade-model' | 'essay-model'
              | 'tutor-model')  'haiku' | 'sonnet' | 'opus';   LAB.get('draw-model') 'both' | 'mai' | 'flux';
      LAB.get('card-ahead') 'on' | 'off'
-   SETTINGS.open('keys' | 'Reviews' | … | undefined: the section last shown), SETTINGS.close(), SETTINGS.redraw(). */
-import { KEYS, type Def } from './keys.ts';
+   SETTINGS.open('keys' | 'Reviews' | … | undefined: the section last shown), SETTINGS.close(now?), SETTINGS.redraw(),
+   SETTINGS.page(title, render(host), leave?): a page of its own inside the window, with a way back (Card designs).
+   Search: the field at the top filters every row as he types (find.ts); Escape empties it first, ⌘F or / goes to it. */
+import { KEYS, combo, type Def } from './keys.ts';
+import { words, hit, marked } from './find.ts';
 
 type LabDef = { id: string; label: string; options: [string, string][]; def: string; group: string; v: string; scope?: string };
 type Row = { id: string; group: string; html: () => string; bind: (el: HTMLElement) => void };
@@ -122,6 +125,8 @@ const SECS: Sec[] = [
 ];
 const glyph = (d: string) => `<svg class="st-gl" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
 const X = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+const LENS = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>';
+const BACK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
 
 const btn = document.getElementById('settingsbtn')!;
 // the page's old panel holder becomes the window
@@ -134,7 +139,9 @@ if (!dlg.isConnected) document.body.append(dlg);
 btn.innerHTML =
   '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>';
 
-let sec = 'Everyday', listening = '';
+let sec = 'Everyday', listening = '', q = '';
+// a page of its own inside the window (SETTINGS.page): Card designs
+let sub: { title: string; render: (host: HTMLElement) => void; leave?: () => void } | null = null;
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)');
 const isSwitch = (d: LabDef) => d.options.length === 2 && d.options[0][0] === 'on' && d.options[1][0] === 'off';
 const sw = (attr: string, on: boolean, label: string) => `<div class="st-row"><span class="st-l">${esc(label)}</span><button type="button" role="switch" class="st-tg" aria-checked="${on}" aria-label="${esc(label)}" ${attr}><i></i></button></div>`;
@@ -178,6 +185,8 @@ function keysHTML() {
     .join('');
 }
 function draw() {
+  if (sub) return drawSub();
+  dlg.classList.remove('st-wide');
   const a = document.activeElement as HTMLElement | null;
   const keep = a && dlg.contains(a) ? a.dataset.x ?? a.dataset.key ?? a.dataset.sec ?? a.dataset.xs ?? a.dataset.reset ?? (a.dataset.sound != null ? 'sound' : a.id) : '';
   const body = dlg.querySelector('.st-body');
@@ -186,7 +195,7 @@ function draw() {
   const list = sections(by);
   if (!list.some((s) => s.id === sec)) sec = list[0].id;
   dlg.innerHTML = `<div class="st-grab" aria-hidden="true"></div>
-    <nav class="st-side" aria-label="Sections"><h2 id="st-title">Settings</h2><div class="st-toc">${list
+    <nav class="st-side" aria-label="Sections"><h2 id="st-title">Settings</h2><div class="st-find${q ? ' on' : ''}" role="search">${LENS}<input id="st-q" type="text" enterkeyhint="search" placeholder="Search" aria-label="Search settings" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(q)}"><button type="button" class="st-qx" aria-label="Clear">${X}</button></div><div class="st-toc">${list
       .map((s) => `<button type="button" class="st-ti" data-sec="${esc(s.id)}" aria-current="${s.id === sec}">${glyph(s.icon)}<span>${esc(s.label)}</span></button>`)
       .join('')}</div></nav>
     <div class="st-main">
@@ -198,7 +207,7 @@ function draw() {
               changed(s.id) ? `<button type="button" class="st-reset" data-reset="${esc(s.id)}">Reset</button>` : ''
             }</div>${s.id === 'Shortcuts' ? keysHTML() : `<div class="st-grp">${by[s.id].join('')}</div>`}</section>`,
         )
-        .join('')}</div>
+        .join('')}<div class="empty st-none" hidden>No matches</div></div>
     </div>`;
   for (const r of Object.values(LAB.rows)) {
     const el = dlg.querySelector<HTMLElement>(`[data-row="${r.id}"]`);
@@ -207,11 +216,105 @@ function draw() {
   const nb = dlg.querySelector<HTMLElement>('.st-body')!;
   nb.scrollTop = top;
   nb.addEventListener('scroll', spy, { passive: true });
+  if (q) filter(false);
   if (keep) {
-    const q = `[data-x="${keep}"][aria-checked="true"],[data-x="${keep}"],[data-key="${keep}"],[data-sec="${keep}"],[data-xs="${keep}"],[data-reset="${keep}"]`;
-    (dlg.querySelector<HTMLElement>(q) ?? (keep === 'sound' ? dlg.querySelector<HTMLElement>('[data-sound]') : keep ? dlg.querySelector<HTMLElement>('#' + CSS.escape(keep)) : null) ?? dlg.querySelector<HTMLElement>('.st-x'))?.focus({ preventScroll: true });
+    const sel = `[data-x="${keep}"][aria-checked="true"],[data-x="${keep}"],[data-key="${keep}"],[data-sec="${keep}"],[data-xs="${keep}"],[data-reset="${keep}"]`;
+    (dlg.querySelector<HTMLElement>(sel) ?? (keep === 'sound' ? dlg.querySelector<HTMLElement>('[data-sound]') : keep ? dlg.querySelector<HTMLElement>('#' + CSS.escape(keep)) : null) ?? dlg.querySelector<HTMLElement>('.st-x'))?.focus({ preventScroll: true });
+    if (keep === 'st-q') {
+      const i = dlg.querySelector<HTMLInputElement>('#st-q')!;
+      i.setSelectionRange(i.value.length, i.value.length);
+    }
   }
   mark();
+}
+/* ---------- search: every row whose label, options or section has all the words he typed; the rest hide ---------- */
+const MARKS = '.st-l, .st-sh h3, .st-cap, .st-ti span, .st-o button:not([aria-label])';
+const txt = (el: Element | null | undefined) => (el ? ((el as HTMLElement).dataset?.t ?? el.textContent ?? '') : '');
+/** The text a row is found by: what it shows, its options (a menu's too) and the names of its buttons. */
+const rowText = (r: Element) => [r.textContent ?? '', ...[...r.querySelectorAll('[aria-label]')].map((b) => b.getAttribute('aria-label')!)].join(' ');
+function marks(root: Element, ws: string[]) {
+  root.querySelectorAll<HTMLElement>(MARKS).forEach((el) => {
+    if (el.dataset.t == null) {
+      if (el.children.length) return;
+      el.dataset.t = el.textContent ?? '';
+    }
+    const h = ws.length ? marked(el.dataset.t, ws) : esc(el.dataset.t);
+    if (el.innerHTML !== h) el.innerHTML = h;
+  });
+}
+function filter(top = true) {
+  const ws = words(q);
+  const body = dlg.querySelector<HTMLElement>('.st-body');
+  if (!body) return;
+  dlg.classList.toggle('st-q-on', ws.length > 0);
+  dlg.querySelector('.st-find')?.classList.toggle('on', !!q);
+  let shown = 0;
+  for (const se of body.querySelectorAll<HTMLElement>('.st-sec')) {
+    const name = txt(se.querySelector('.st-sh h3'));
+    let n = 0;
+    for (const g of se.querySelectorAll<HTMLElement>('.st-grp')) {
+      const cap = g.previousElementSibling?.matches('.st-cap') ? g.previousElementSibling : null;
+      let first: HTMLElement | null = null, last: HTMLElement | null = null;
+      for (const r of [...g.children] as HTMLElement[]) {
+        const on = hit(ws, name, txt(cap), rowText(r));
+        r.hidden = !on;
+        r.classList.remove('f0', 'f1');
+        if (on) (first ??= r), (last = r);
+      }
+      first?.classList.add('f0');
+      last?.classList.add('f1');
+      g.hidden = !first;
+      if (cap) (cap as HTMLElement).hidden = !first;
+      if (first) n++;
+    }
+    se.hidden = !n;
+    const ti = dlg.querySelector<HTMLElement>(`.st-ti[data-sec="${CSS.escape(se.dataset.s!)}"]`);
+    if (ti) ti.hidden = !n;
+    if (n) shown++;
+  }
+  marks(dlg, ws);
+  body.querySelector<HTMLElement>('.st-none')!.hidden = shown > 0;
+  if (!top) return;
+  body.scrollTop = 0;
+  const f = body.querySelector<HTMLElement>('.st-sec:not([hidden])');
+  if (f && f.dataset.s !== sec) (sec = f.dataset.s!), mark();
+}
+function setQ(v: string) {
+  q = v;
+  const i = dlg.querySelector<HTMLInputElement>('#st-q');
+  if (i && i.value !== v) i.value = v;
+  filter();
+}
+dlg.addEventListener('input', (e) => {
+  if ((e.target as HTMLElement).id === 'st-q') setQ((e.target as HTMLInputElement).value);
+});
+
+/* ---------- a page of its own inside the window (SETTINGS.page): a title, the way back to Settings, the page ---------- */
+function drawSub() {
+  if (!sub) return;
+  dlg.classList.add('st-wide');
+  dlg.innerHTML = `<div class="st-grab" aria-hidden="true"></div><div class="st-page"><div class="st-ph"><button type="button" class="st-back" id="st-back">${BACK}<span>Settings</span></button><h2 id="st-title">${esc(sub.title)}</h2><button type="button" class="st-x" id="st-close" aria-label="Close">${X}</button></div><div class="st-pbody"></div></div>`;
+  sub.render(dlg.querySelector<HTMLElement>('.st-pbody')!);
+}
+function page(title: string, render: (host: HTMLElement) => void, leave?: () => void) {
+  if (!dlg.open) show();
+  endSub();
+  sub = { title, render, leave };
+  drawSub();
+  dlg.querySelector<HTMLElement>('#st-back')!.focus({ preventScroll: true });
+}
+function back() {
+  if (!sub) return;
+  endSub();
+  draw();
+  jump(sec, false);
+  (dlg.querySelector<HTMLElement>('.st-ti[aria-current="true"]') ?? dlg.querySelector<HTMLElement>('button'))?.focus({ preventScroll: true });
+}
+function endSub() {
+  if (!sub) return;
+  const from = sub;
+  sub = null;
+  from.leave?.();
 }
 /* One page, every section on it: the list on the left jumps to a section, and the section in view is the one lit
    (the line 1/4 down the page decides). A jump holds the light on its section until the scroll stops. */
@@ -227,7 +330,8 @@ function spy() {
   if (jumping) return;
   const b = dlg.querySelector<HTMLElement>('.st-body');
   if (!b) return;
-  const all = [...b.querySelectorAll<HTMLElement>('.st-sec')];
+  const all = [...b.querySelectorAll<HTMLElement>('.st-sec:not([hidden])')];
+  if (!all.length) return;
   const line = b.getBoundingClientRect().top + b.clientHeight / 4;
   let cur = all[0];
   for (const s of all) if (s.getBoundingClientRect().top <= line) cur = s;
@@ -260,6 +364,7 @@ function jump(to: string, smooth: boolean) {
 let closing = 0;
 function show(to?: string) {
   listening = '';
+  if (to) endSub();
   if (to === 'keys') sec = 'Shortcuts';
   else if (to && to !== 'main') sec = to;
   clearTimeout(closing);
@@ -276,7 +381,18 @@ function show(to?: string) {
   btn.setAttribute('aria-expanded', 'true');
   (dlg.querySelector<HTMLElement>('.st-ti[aria-current="true"]') ?? dlg.querySelector<HTMLElement>('button'))?.focus({ preventScroll: true });
 }
-function hide() {
+/** Away with a short fade; `now` (a page key pressed in it): at once, so the page it goes to has the focus. */
+function hide(now = false) {
+  if (now && dlg.open) {
+    clearTimeout(closing);
+    listening = '';
+    dlg.classList.remove('on', 'out');
+    dlg.style.transform = '';
+    btn.setAttribute('aria-expanded', 'false');
+    dlg.close();
+    endSub();
+    return;
+  }
   if (!dlg.open || dlg.classList.contains('out')) return;
   listening = '';
   dlg.classList.remove('on');
@@ -286,6 +402,7 @@ function hide() {
     dlg.classList.remove('out');
     dlg.style.transform = '';
     dlg.close();
+    endSub();
     btn.focus({ preventScroll: true });
   }, REDUCED.matches ? 120 : 200);
 }
@@ -295,8 +412,11 @@ btn.onclick = (e) => {
   dlg.open && !dlg.classList.contains('out') ? hide() : show();
 };
 // Escape (the dialog's cancel) closes it the same way as the ×
+// (from a page of its own, back to Settings first; with a search, the search goes first)
 dlg.addEventListener('cancel', (e) => {
   e.preventDefault();
+  if (sub) return back();
+  if (q) return setQ('');
   hide();
 });
 dlg.addEventListener('click', (e) => {
@@ -330,6 +450,12 @@ dlg.addEventListener('click', (e) => {
     return draw();
   }
   if (t.closest('#st-close')) return sfx('tap'), hide();
+  if (t.closest('#st-back')) return sfx('tap'), back();
+  if (t.closest('.st-qx')) {
+    sfx('tap');
+    setQ('');
+    return dlg.querySelector<HTMLElement>('#st-q')?.focus();
+  }
   const rs = t.closest<HTMLElement>('[data-reset]');
   if (rs) {
     const g = rs.dataset.reset!;
@@ -377,6 +503,26 @@ document.addEventListener('keydown', (e) => {
     sfx('tap');
     return up ? hide() : show();
   }
+  if (up && !sub && !listening && !e.isComposing) {
+    // Escape empties the search before it closes the window (the dialog's own cancel would close it)
+    if (e.key === 'Escape' && q) {
+      e.preventDefault();
+      return setQ('');
+    }
+    // ⌘F, or / anywhere but a field: to the search
+    if (combo(e) === 'mod+f' || (e.key === '/' && !KEYS.typing(e.target))) {
+      e.preventDefault();
+      const i = dlg.querySelector<HTMLInputElement>('#st-q')!;
+      i.focus();
+      return i.select();
+    }
+    // Enter in the search: to the first row found
+    if ((e.target as HTMLElement).id === 'st-q' && e.key === 'Enter') {
+      e.preventDefault();
+      const r = dlg.querySelector<HTMLElement>('.st-body .st-grp:not([hidden]) > :not([hidden])');
+      return (r?.matches('button') ? r : r?.querySelector<HTMLElement>('button, select, input'))?.focus();
+    }
+  }
   // the sections, with the arrow keys, while one of them has the focus
   const ti = (e.target as HTMLElement).closest?.('.st-ti');
   if (up && ti && /^Arrow(Up|Down|Left|Right)$/.test(e.key)) {
@@ -389,12 +535,12 @@ document.addEventListener('keydown', (e) => {
     n.focus();
   }
 });
-BUS.on('lab', () => dlg.open && draw());
+BUS.on('lab', () => dlg.open && !sub && draw());
 
 // ---------- the phone's sheet: drag it down by its top to send it away ----------
 const PHONE = matchMedia('(max-width: 640px)');
 dlg.addEventListener('pointerdown', (e) => {
-  if (!PHONE.matches || e.button !== 0 || !(e.target as HTMLElement).closest('.st-grab,.st-head') || (e.target as HTMLElement).closest('button')) return;
+  if (!PHONE.matches || e.button !== 0 || !(e.target as HTMLElement).closest('.st-grab,.st-head,.st-ph') || (e.target as HTMLElement).closest('button')) return;
   const y0 = e.clientY, h = dlg.offsetHeight;
   let dy = 0, last = { y: y0, t: e.timeStamp }, v = 0;
   try {
@@ -427,4 +573,4 @@ dlg.addEventListener('pointerdown', (e) => {
   dlg.addEventListener('pointercancel', up);
 });
 
-export const SETTINGS = { open: (to?: string) => show(to), close: () => hide(), redraw: () => dlg.open && draw() };
+export const SETTINGS = { open: (to?: string) => show(to), close: (now?: boolean) => hide(now), redraw: () => dlg.open && !sub && draw(), page };

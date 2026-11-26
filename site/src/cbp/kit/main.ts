@@ -3,14 +3,14 @@
 //   SOUND     one voice at a time (sound.ts)            HOLD   press and hold, with a fill (hold.ts)
 //   RUBY      pinyin above the characters (ruby.ts)      KEYS   every shortcut, his to change (keys.ts)
 //   SETTINGS  the one Settings panel (settings.ts); the choices themselves are LAB's (core.js)
-//   go.ts     T, C, R, B open Today, Cards, Reviews, Browse from any page; ⌘[ ⌘] go back and forward
+//   go.ts     Shift+T, R, B, C, E, P open Today, Reviews, Browse, Cards, Essays, Progress; ⌘[ ⌘] back and forward
 // The type tokens and the styles for these are in board/css/base.css and board/css/kit.css.
 import { SOUND } from './sound.ts';
 import { HOLD } from './hold.ts';
 import { RUBY } from './ruby.ts';
 import { KEYS } from './keys.ts';
 import { SETTINGS } from './settings.ts';
-// T, C, R, B: to the pages from anywhere (go.ts)
+// Shift and a page's first letter: to that page from anywhere (go.ts)
 import './go.ts';
 // Habit: the habit's rules (day done, rest day, never miss twice, reviews a day), shared with the server
 import * as HABIT from '../habit.ts';
@@ -26,6 +26,18 @@ Object.assign(window, { SOUND, HOLD, RUBY, KEYS, SETTINGS });
 // Habit
 Object.assign(window, { HABIT });
 // (end Habit)
+
+// a toast (core.js, cards.js, the reviews' own) shows above an open dialog: the window is modal, so one on the page behind
+// would sit under it, inert, until it closed. Added while a modal dialog is open, it goes into that dialog (still fixed to
+// the bottom of the screen); its own code removes it as before.
+new MutationObserver((recs) => {
+  for (const r of recs)
+    for (const n of r.addedNodes) {
+      if (!(n instanceof HTMLElement) || !n.classList.contains('toast')) continue;
+      const top = [...document.querySelectorAll<HTMLDialogElement>('dialog[open]')].filter((d) => d.matches(':modal')).pop();
+      if (top) top.append(n);
+    }
+}).observe(document.body, { childList: true });
 
 // leaving a page silences it: a voice never carries over into the next one
 declare const BUS: { on(e: string, f: (...a: any[]) => void): void };
