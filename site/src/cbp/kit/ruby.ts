@@ -70,3 +70,8 @@ export const RUBY = {
   ready: load,
   CSS: '.rb-on.rb-on{line-height:2.3}.rbw{white-space:nowrap}ruby{ruby-position:over;ruby-align:center;margin:0 .08em}rt{font-family:Inter,system-ui,sans-serif;font-size:max(.55em,14px);font-weight:450;letter-spacing:0;color:#757B87;-webkit-text-stroke:0;line-height:1.1}',
 };
+
+// Cards: a word's or a sentence's reading as plain text ("fànshòu"), from the same code, for the study card's head
+import { sentence as pyLine } from '../pinyin.ts';
+Object.assign(RUBY, { text: async (t: string) => pyLine(await load(), t) });
+// (end Cards)

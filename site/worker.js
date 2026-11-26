@@ -828,7 +828,13 @@ async function api(request, env, path) {
         // the board's own documents, once the website is the source and this account may change them
         if (path === 'plus/db') {
           if (!flags.includes('plus.write')) throw new Fail(403, 'read_only', 'Read-only for now.');
+          // Cards: a note's audio is made here on every save, whatever device saved it (src/cbp/cards.ts voiced)
+          if (body.col === 'notes' && body.op === 'set' && body.data) body.data = await cards.voiced(env, String(body.id), body.data);
+          // (end Cards)
           const out = await plus.write(env, body);
+          // Cards: the page learns the audio's address with the answer
+          if (body.col === 'notes' && body.op === 'set' && body.data) out.audio = body.data.audio ?? '';
+          // (end Cards)
           // a note made on the Cards page joins his collection once reviews live here (src/cbp/anki.ts)
           if (body.col === 'notes' && body.op === 'set') out.anki = await anki.fromBoard(env, String(body.id), body.data).catch((e) => (console.error(e), null));
           return out;

@@ -1,9 +1,14 @@
 /* Chinese Brain Plus: the card he adds, beside the study card on the Cards page (Stage 3). /plus only: it hooks into the
    board's Cards page (plus/board/js/cards.js, copied from life/chinese/board) and fills its side column (.cd-side).
-   His Anki note type "Chinese", as an editor that behaves like Anki's: every field takes anything (bold, italics, Cmd+U
-   to mark the word, which shows as a highlight, pictures pasted, dropped or dragged in from anywhere, as many as he
-   likes). Fields: Sentence, Word (shown while Option's extras are on, or once he has changed it), Picture, Notes; Pinyin is done for him from the sentence (src/cbp/cards.ts pinyin) and
-   never shown; Audio comes when he presses V (Azure, YunJhe or HsiaoChen).
+   His Anki note type "Chinese", as an editor that behaves like Anki's: every field takes anything (Cmd+B, Cmd+I, Cmd+U,
+   Cmd+Shift+H marks the word, which shows as a highlight and is <u> in Anki; on a phone a small bar comes up over a
+   selection; pictures pasted, dropped or dragged in from anywhere, as many as he likes). Fields: Sentence, Word (shown
+   while Option's extras are on, or once he has changed it), Picture, Notes; Pinyin is done for him from the sentence
+   (src/cbp/cards.ts pinyin) and never shown; Audio is made on the server whenever a note is saved (cards.ts voiced),
+   and V plays it (made then if it isn't yet).
+   A word can have several cards (notes/<card id>, then notes/<card id>.2, .3…): their numbers show above the fields
+   once the first is added, + starts another. Add: a press adds and moves on to the next word, a hold (or
+   Shift+Cmd+Enter) adds and stays, with the next card for the same word ready.
    Pictures to choose from sit in one strip under the fields: drawings in his flashcard style, then photos from
    Wikimedia Commons (straight from Commons, so they show fast); a click puts one in Picture (again takes it out), a drag
    puts it anywhere. "More images" finds more photos, "More drawings" draws two more. A picture in a field is picked with a
@@ -12,7 +17,18 @@
    `notes/<card id>` and cards the word. Unsaved fields survive a reload (localStorage, per word). Until reviews move
    here (Stage 4), the Mac's nightly hands new notes to Anki (scripts/cbp-push.py --anki). */
 (() => {
-  const RV = { notes: {}, st: {}, pics: {}, busy: {}, saving: false, shown: '', kept: {}, pending: new Set() };
+  const RV = { notes: {}, st: {}, pics: {}, busy: {}, saving: false, shown: '', kept: {}, pending: new Set(), slot: {} };
+  // a word's cards: the first is notes/<card id> (as before), the next ones notes/<card id>.2, .3…
+  const noteId = (w, n) => (n > 1 ? `${cardId(w)}.${n}` : cardId(w));
+  const notesOf = (w) => {
+    const id = cardId(w), out = [];
+    for (const k of Object.keys(RV.notes)) {
+      if (k === id) out.push(1);
+      else if (k.startsWith(id + '.') && /^\d+$/.test(k.slice(id.length + 1))) out.push(+k.slice(id.length + 1));
+    }
+    return out.sort((a, b) => a - b);
+  };
+  const slotOf = (w) => RV.slot[w] || 1;
   const FIELDS = [['chinese', 'Sentence'], ['word', 'Word'], ['mnemonic', 'Mnemonic'], ['picture', 'Picture'], ['notes', 'Notes']];
   // his three note types (Anki's names): Phrase makes only the picture → phrase card; Radical has a Mnemonic, no Word
   // His three note types (the switch comes up with Option, like the Word field): a Word (almost always) is a sentence
@@ -50,11 +66,12 @@
     t.querySelectorAll('img').forEach((i) => i.remove());
     return t.textContent.replace(/\n{2,}/g, '\n').trim();
   };
-  const draftKey = (w) => 'cbp-draft:' + w;
+  // a draft per card: the first card's key is the word's (as before), the next ones add #2, #3…
+  const draftKey = (w, n = slotOf(w)) => 'cbp-draft:' + w + (n > 1 ? '#' + n : '');
   const draft = {
-    get(w) {
+    get(w, n) {
       try {
-        const d = JSON.parse(localStorage.getItem(draftKey(w)) || 'null');
+        const d = JSON.parse(localStorage.getItem(draftKey(w, n)) || 'null');
         return d && d.v === 1 ? d : null;
       } catch {
         return null;
@@ -62,12 +79,12 @@
     },
     set(w, st) {
       try {
-        localStorage.setItem(draftKey(w), JSON.stringify({ v: 1, at: Date.now(), ...Object.fromEntries(FIELDS.map(([k]) => [k, st[k]])), audio: st.audio, type: st.type }));
+        localStorage.setItem(draftKey(w, st.n), JSON.stringify({ v: 1, at: Date.now(), ...Object.fromEntries(FIELDS.map(([k]) => [k, st[k]])), audio: st.audio, audioFor: st.audioFor, type: st.type }));
       } catch {}
     },
-    drop(w) {
+    drop(w, n) {
       try {
-        localStorage.removeItem(draftKey(w));
+        localStorage.removeItem(draftKey(w, n));
       } catch {}
     },
   };
@@ -91,22 +108,25 @@
     const pre = zs.length > 1 ? '- ' : '';
     return { chinese: tail && c.html.endsWith(tail) ? c.html.slice(0, -tail.length) : c.html, py: ps.map((p) => pre + strip(p)).join('\n') };
   }
-  function state(w) {
-    if (RV.st[w]) return RV.st[w];
-    const n = RV.notes[cardId(w)];
+  /** The card on screen for a word (its slot n): saved, a draft, or new from the study card. */
+  function state(w, k = slotOf(w)) {
+    const id = noteId(w, k);
+    if (RV.st[id]) return RV.st[id];
+    const n = RV.notes[id];
     if (n) {
       // the first notes (2026-11-21) kept the picture as one address and the notes as plain text
       const picture = /^\/api\/plus\/media\/[^<\s]+$/.test(n.picture || '') ? `<img src="${esc(n.picture)}">` : n.picture || '';
       const notes = /</.test(n.notes || '') ? n.notes : esc(n.notes || '').replace(/\n/g, '<br>');
-      return (RV.st[w] = { chinese: n.chinese || '', word: n.word || w, mnemonic: n.mnemonic || '', type: n.type || 'Chinese', picture, notes, audio: n.audio || '', py: n.pinyin || '', pyFor: plain(n.chinese || ''), saved: true });
+      return (RV.st[id] = { n: k, chinese: n.chinese || '', word: n.word || w, mnemonic: n.mnemonic || '', type: n.type || 'Chinese', picture, notes, audio: n.audio || '', audioFor: n.audioFor || (n.audio ? plain(n.chinese || '') : ''), py: n.pinyin || '', pyFor: n.pinyin ? plain(n.chinese || '') : '', saved: true });
     }
     const d = cardOf(w);
     if (!cardOK(d)) return null;
-    const c = parseCard(d.text), first = c.mine[0] || c.ex[0], s = first ? fromSentence(first, c.word || w) : { chinese: '', py: '' };
-    const st = { chinese: s.chinese, word: esc(c.word || w), mnemonic: '', type: 'Chinese', picture: '', notes: '', audio: '', py: s.py, pyFor: plain(s.chinese), saved: false };
-    const dr = draft.get(w);
-    if (dr) Object.assign(st, Object.fromEntries(FIELDS.map(([k]) => [k, dr[k] ?? st[k]])), { audio: dr.audio || '', type: dr.type || st.type, dirty: true });
-    return (RV.st[w] = st);
+    // the first card takes the study card's first sentence; another card the next one along, if there is one
+    const c = parseCard(d.text), list = [...c.mine, ...c.ex], first = list[k - 1], s = first ? fromSentence(first, c.word || w) : { chinese: '', py: '' };
+    const st = { n: k, chinese: s.chinese, word: esc(c.word || w), mnemonic: '', type: 'Chinese', picture: '', notes: '', audio: '', audioFor: '', py: s.py, pyFor: s.py ? plain(s.chinese) : '', saved: false };
+    const dr = draft.get(w, k);
+    if (dr) Object.assign(st, Object.fromEntries(FIELDS.map(([f]) => [f, dr[f] ?? st[f]])), { audio: dr.audio || '', audioFor: dr.audioFor || '', type: dr.type || st.type, dirty: true });
+    return (RV.st[id] = st);
   }
 
   // ---------- pasted things, made safe (formatting and pictures stay, everything else becomes text) ----------
@@ -129,7 +149,7 @@
           continue;
         }
         const src = n.tagName === 'IMG' ? (n.getAttribute('src') || '').replace(location.origin + '/api/plus/media/', '/api/plus/media/') : '';
-        const color = n.style?.color, bg = n.style?.backgroundColor, fw = n.style?.fontWeight;
+        const color = n.style?.color, bg = n.style?.backgroundColor, fw = n.style?.fontWeight, ul = /underline/.test(n.style?.textDecorationLine || n.style?.textDecoration || '');
         for (const a of [...n.attributes]) n.removeAttribute(a.name);
         if (n.tagName === 'IMG') {
           if (/^(https:|data:image\/|blob:|\/api\/plus\/media\/)/.test(src)) n.setAttribute('src', src);
@@ -138,6 +158,7 @@
         if (color) n.style.color = color;
         if (bg) n.style.backgroundColor = bg;
         if (fw && +fw >= 600) n.style.fontWeight = 'bold';
+        if (ul && n.tagName === 'SPAN') n.style.textDecoration = 'underline';
       }
     })(t.content);
     return t.innerHTML;
@@ -221,7 +242,7 @@
   const EL = document.createElement('section');
   EL.className = 'rv';
   EL.hidden = true;
-  EL.innerHTML = `<div class="rv-typebox opt"><div class="rv-type" role="radiogroup" aria-label="Note type">${TYPES.map(([t, l]) => `<button type="button" role="radio" data-rv="type" data-t="${t}" aria-checked="false">${l}</button>`).join('')}</div></div><div class="rv-fields">${FIELDS.map(([k, label]) => `<div class="rv-field rv-${k}${k === 'word' ? ' opt' : ''}"><span class="rv-l" id="rv-l-${k}">${label}</span><div class="rv-f${k === 'chinese' || k === 'word' ? ' zh' : ''}" data-f="${k}" contenteditable="true" spellcheck="false" lang="${k === 'notes' ? 'en' : 'zh-Hant'}" role="textbox" aria-multiline="true" aria-labelledby="rv-l-${k}"></div>${k === 'chinese' ? '<button type="button" class="rv-say" data-rv="say" aria-label="Read it aloud (V)">V</button>' : ''}</div>`).join('')}</div>
+  EL.innerHTML = `<div class="rv-slots" role="tablist" aria-label="Cards for this word" hidden></div><div class="rv-typebox opt"><div class="rv-type" role="radiogroup" aria-label="Note type">${TYPES.map(([t, l]) => `<button type="button" role="radio" data-rv="type" data-t="${t}" aria-checked="false">${l}</button>`).join('')}</div></div><div class="rv-fields">${FIELDS.map(([k, label]) => `<div class="rv-field rv-${k}${k === 'word' ? ' opt' : ''}"><span class="rv-l" id="rv-l-${k}">${label}</span><div class="rv-f${k === 'chinese' || k === 'word' ? ' zh' : ''}" data-f="${k}" contenteditable="true" spellcheck="false" lang="${k === 'notes' ? 'en' : 'zh-Hant'}" role="textbox" aria-multiline="true" aria-labelledby="rv-l-${k}"></div>${k === 'chinese' ? '<button type="button" class="rv-say" data-rv="say" aria-label="Read it aloud (V)">V</button>' : ''}</div>`).join('')}</div>
   <div class="rv-strip" aria-label="Pictures to choose from"></div>
   <div class="rv-bar"><button type="button" class="rv-add" data-rv="add" data-cardit></button></div>`;
   CD_EL.querySelector('.cd-side').appendChild(EL);
@@ -250,6 +271,245 @@
   CD_EL.querySelector('.cd-img')?.classList.add('opt');
   const $ = (s) => EL.querySelector(s);
   const field = (k) => EL.querySelector(`.rv-f[data-f="${k}"]`);
+
+  // ---------- rich text in the fields, the way Ten Dollar Words does it (app/js/editor.js toggleStyle): the field is read
+  // into styled characters, a style goes on (or, if every character already has it, off) over the selection, and the
+  // field is written back as clean HTML: <b>, <i>, <span style="text-decoration:underline">, and <u> for the word's mark
+  // (a highlight here; Anki's Chinese note type turns it green, and into the blank on card 3). No execCommand('bold'):
+  // browsers nest and restyle what it makes. The fields keep their own undo, so Cmd+Z steps back through typing and
+  // formatting alike. ----------
+  const RT = (() => {
+    const BIT = { b: 1, i: 2, ul: 4, hl: 8 };
+    const BLOCK = /^(DIV|P|LI|UL|OL|H[1-6]|BLOCKQUOTE)$/;
+    /** The field as pieces, one per UTF-16 unit of text ({c, f, s}), a line break ({br}) or a picture ({img}); `at` and
+     *  `end` say where each node starts and ends among them. A block (what Enter makes) starts a new line. */
+    function read(f) {
+      const out = [], at = new Map(), end = new Map();
+      const walk = (node, fl, sty) => {
+        for (const n of node.childNodes) {
+          if (n.nodeType === 3) {
+            at.set(n, out.length);
+            for (let k = 0; k < n.nodeValue.length; k++) out.push({ c: n.nodeValue[k], f: fl, s: sty });
+          } else if (n.nodeType === 1) {
+            const t = n.tagName;
+            if (BLOCK.test(t) && out.length && !out[out.length - 1].br) out.push({ br: 1 });
+            at.set(n, out.length);
+            if (t === 'BR') out.push({ br: 1 });
+            else if (t === 'IMG') out.push({ img: n });
+            else {
+              let f2 = fl, s2 = sty;
+              const st = n.style;
+              if (t === 'B' || t === 'STRONG' || +st?.fontWeight >= 600 || st?.fontWeight === 'bold') f2 |= BIT.b;
+              if (t === 'I' || t === 'EM' || st?.fontStyle === 'italic') f2 |= BIT.i;
+              if (/underline/.test(st?.textDecorationLine || st?.textDecoration || '')) f2 |= BIT.ul;
+              if (t === 'U') f2 |= BIT.hl;
+              if (st?.color || st?.backgroundColor) s2 = [st.color && `color:${st.color}`, st.backgroundColor && `background-color:${st.backgroundColor}`].filter(Boolean).join(';');
+              walk(n, f2, s2);
+            }
+          }
+          end.set(n, out.length);
+        }
+      };
+      walk(f, 0, '');
+      return { out, at, end };
+    }
+    const escT = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/ /g, '&nbsp;');
+    /** Pieces back to HTML: runs of one style each, the tags always in the same order. */
+    function write(out) {
+      let h = '', i = 0;
+      while (i < out.length) {
+        const p = out[i];
+        if (p.br) (h += '<br>'), i++;
+        else if (p.img) {
+          const im = document.createElement('img');
+          im.setAttribute('src', p.img.getAttribute('src') || '');
+          if (p.img.dataset.from) im.dataset.from = p.img.dataset.from;
+          (h += im.outerHTML), i++;
+        } else {
+          let t = '';
+          for (; i < out.length && out[i].c != null && out[i].f === p.f && out[i].s === p.s; i++) t += out[i].c;
+          t = escT(t);
+          if (p.f & BIT.hl) t = `<u>${t}</u>`;
+          if (p.f & BIT.ul) t = `<span style="text-decoration:underline">${t}</span>`;
+          if (p.f & BIT.i) t = `<i>${t}</i>`;
+          if (p.f & BIT.b) t = `<b>${t}</b>`;
+          if (p.s) t = `<span style="${p.s}">${t}</span>`;
+          h += t;
+        }
+      }
+      return h;
+    }
+    /** A point in the DOM (a selection's end) → its place among the pieces. */
+    function index(f, m, node, off) {
+      if (node.nodeType === 3) return (m.at.get(node) ?? 0) + off;
+      const kids = node.childNodes;
+      if (off < kids.length) return m.at.get(kids[off]) ?? 0;
+      return node === f ? m.out.length : m.end.get(node) ?? m.out.length;
+    }
+    function selOf(f) {
+      const s = getSelection();
+      if (!s.rangeCount) return null;
+      const r = s.getRangeAt(0);
+      if (!f.contains(r.startContainer) || !f.contains(r.endContainer)) return null;
+      const m = read(f);
+      return [index(f, m, r.startContainer, r.startOffset), index(f, m, r.endContainer, r.endOffset)];
+    }
+    /** A place among the pieces → a point in the DOM. */
+    function point(f, i) {
+      const m = read(f);
+      for (const [n, a] of m.at) if (n.nodeType === 3 && i >= a && i <= a + n.nodeValue.length) return [n, i - a];
+      for (const [n, a] of m.at) if (n.nodeType === 1 && a === i && (n.tagName === 'BR' || n.tagName === 'IMG')) return [n.parentNode, [...n.parentNode.childNodes].indexOf(n)];
+      return [f, f.childNodes.length];
+    }
+    function select(f, a, b) {
+      const r = document.createRange();
+      try {
+        r.setStart(...point(f, a));
+        r.setEnd(...point(f, b ?? a));
+      } catch {
+        return;
+      }
+      const s = getSelection();
+      s.removeAllRanges();
+      s.addRange(r);
+    }
+    // ---- undo ----
+    const H = new WeakMap();
+    const hist = (f) => H.get(f) || (H.set(f, { u: [], r: [], t: 0, k: '' }), H.get(f));
+    /** The field as it is, kept before a change. Typing within a second of the last keystroke is one step. */
+    function snap(f, kind) {
+      if (!f) return;
+      const h = hist(f), now = Date.now();
+      if (kind === 'type' && h.k === 'type' && now - h.t < 1000) return void (h.t = now);
+      h.u.push({ html: f.innerHTML, sel: selOf(f) });
+      if (h.u.length > 200) h.u.shift();
+      h.r = [];
+      h.k = kind;
+      h.t = now;
+    }
+    function step(f, from, to) {
+      const h = hist(f), x = h[from].pop();
+      if (!x) return;
+      h[to].push({ html: f.innerHTML, sel: selOf(f) });
+      h.k = '';
+      f.innerHTML = x.html;
+      if (x.sel) select(f, ...x.sel);
+      changed();
+    }
+    // ---- styles ----
+    const api = {
+      pend: null,
+      snap,
+      undo: (f) => step(f, 'u', 'r'),
+      redo: (f) => step(f, 'r', 'u'),
+      forget: (f) => H.delete(f),
+      /** kind: b, i, ul or hl. With nothing selected, it applies to what he types next. */
+      toggle(f, kind) {
+        const bit = BIT[kind], sel = selOf(f);
+        if (!sel) return;
+        let [a, b] = sel;
+        if (a > b) [a, b] = [b, a];
+        const { out } = read(f);
+        if (a === b) {
+          const before = out[a - 1], had = before && before.c != null ? before.f & bit : 0;
+          const p = api.pend && api.pend.f === f && api.pend.at === a ? api.pend : { f, at: a, on: 0, off: 0 };
+          if (p.on & bit) p.on &= ~bit;
+          else if (p.off & bit) p.off &= ~bit;
+          else if (had) p.off |= bit;
+          else p.on |= bit;
+          api.pend = p.on || p.off ? p : null;
+          return;
+        }
+        snap(f, 'format');
+        const all = out.slice(a, b).every((p) => p.c == null || !/\S/.test(p.c) || p.f & bit);
+        for (let k = a; k < b; k++) if (out[k].c != null) out[k].f = all ? out[k].f & ~bit : out[k].f | bit;
+        f.innerHTML = write(out);
+        select(f, a, b);
+        changed();
+      },
+      /** What he typed since a style was asked for with nothing selected gets it. */
+      typed(f) {
+        const p = api.pend;
+        if (!p || p.f !== f) return;
+        const sel = selOf(f);
+        if (!sel || sel[0] !== sel[1] || sel[0] <= p.at) return;
+        const { out } = read(f), c = sel[0];
+        for (let k = p.at; k < c; k++) if (out[k].c != null) out[k].f = (out[k].f | p.on) & ~p.off;
+        f.innerHTML = write(out);
+        select(f, c);
+        api.pend = null;
+      },
+    };
+    return api;
+  })();
+  EL.addEventListener('beforeinput', (e) => {
+    const f = e.target.closest?.('.rv-f');
+    if (!f) return;
+    const t = e.inputType || '';
+    if (t === 'historyUndo' || t === 'historyRedo') {
+      e.preventDefault();
+      return t === 'historyUndo' ? RT.undo(f) : RT.redo(f);
+    }
+    // the phone's own B / I / U (in its selection menu) do what the shortcuts do; no other styling from the browser
+    const fm = { formatBold: 'b', formatItalic: 'i', formatUnderline: 'ul' }[t];
+    if (fm || t.startsWith('format')) {
+      e.preventDefault();
+      if (fm) RT.toggle(f, fm);
+      return;
+    }
+    if (t === 'insertCompositionText') return;
+    RT.snap(f, /^(insertText|deleteContent(Backward|Forward))$/.test(t) ? 'type' : 'edit');
+  });
+  EL.addEventListener('compositionstart', (e) => RT.snap(e.target.closest?.('.rv-f'), 'type'));
+  EL.addEventListener('compositionend', (e) => {
+    const f = e.target.closest?.('.rv-f');
+    if (f) setTimeout(() => (RT.typed(f), changed()));
+  });
+  EL.addEventListener('input', (e) => {
+    const f = e.target.closest?.('.rv-f');
+    if (f && !e.isComposing && RT.pend) RT.typed(f);
+  });
+  EL.addEventListener('pointerdown', () => (RT.pend = null));
+  EL.addEventListener('focusout', () => (RT.pend = null));
+
+  // ---------- on a phone, a selection in a field brings up a small bar under it (no toolbar the rest of the time) ----------
+  const FMT = document.createElement('div');
+  FMT.className = 'rv-fmt';
+  FMT.hidden = true;
+  FMT.innerHTML = '<button type="button" data-k="b" aria-label="Bold"><b>B</b></button><button type="button" data-k="i" aria-label="Italic"><i>I</i></button><button type="button" data-k="ul" aria-label="Underline"><u>U</u></button><button type="button" data-k="hl" aria-label="Highlight"><span>H</span></button>';
+  document.body.appendChild(FMT);
+  const TOUCH = matchMedia('(pointer:coarse)');
+  // a press on the bar keeps the selection (no focus moves to the button)
+  FMT.addEventListener('pointerdown', (e) => e.preventDefault());
+  FMT.addEventListener('mousedown', (e) => e.preventDefault());
+  FMT.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-k]'), f = FMT._f;
+    if (!b || !f) return;
+    RT.toggle(f, b.dataset.k);
+    sfx('tap');
+    placeFmt();
+  });
+  function placeFmt() {
+    const s = getSelection(), r = s.rangeCount ? s.getRangeAt(0) : null;
+    const f = r && !s.isCollapsed && r.commonAncestorContainer && (r.commonAncestorContainer.nodeType === 1 ? r.commonAncestorContainer : r.commonAncestorContainer.parentElement)?.closest?.('.rv .rv-f');
+    if (!TOUCH.matches || !f || EL.hidden) return void ((FMT.hidden = true), (FMT._f = null));
+    FMT._f = f;
+    FMT.hidden = false;
+    const rect = r.getBoundingClientRect(), vv = visualViewport, top = vv ? vv.offsetTop : 0, h = vv ? vv.height : innerHeight;
+    const w = FMT.offsetWidth, bh = FMT.offsetHeight;
+    // under the selection (the phone's own menu sits above it); above it when there's no room left over the keyboard
+    let y = rect.bottom + 14;
+    if (y + bh > top + h - 8) y = rect.top - bh - 14;
+    FMT.style.left = Math.max(8, Math.min(innerWidth - w - 8, rect.left + rect.width / 2 - w / 2)) + 'px';
+    FMT.style.top = Math.max(top + 8, y) + 'px';
+  }
+  document.addEventListener('selectionchange', () => requestAnimationFrame(placeFmt));
+  visualViewport?.addEventListener('resize', () => FMT.hidden || placeFmt());
+  visualViewport?.addEventListener('scroll', () => FMT.hidden || placeFmt());
+  BUS.on('view', (v) => v !== 'cards' && (FMT.hidden = true));
+
+  // Add: a press adds and moves on; a hold adds and stays (the button fills while held, kit/hold.ts)
+  HOLD($('.rv-add'), { tap: () => add(false), hold: () => add(true) });
 
   function readFields() {
     const st = CD.cur && state(CD.cur);
@@ -285,6 +545,8 @@
     // More images and More drawings close the strip, as tiles of their own
     const more = (k, label, on) => `<button type="button" class="rv-tile rv-mt" data-rv="${k}"${on ? ' disabled' : ''}><span>${label}</span></button>`;
     tiles.push(more('more-img', 'More images', busy.photos), more('more-draw', 'More drawings', busy.draw));
+    // Gemini, with the word filled in (G on a keyboard; cards.js CD_gemini)
+    tiles.push(`<a class="rv-tile rv-mt" data-rv="gemini" href="${esc(CD_gemURL(w))}" target="_blank" rel="noopener"><span>Gemini</span></a>`);
     // rebuilt only when the tiles themselves change: typing elsewhere must not reload the pictures
     const html = tiles.join(''), strip = $('.rv-strip');
     if (RV.stripHTML !== html || strip.dataset.w !== w) {
@@ -307,20 +569,38 @@
     // a type other than Word stays in sight, so it's never picked by mistake and forgotten
     $('.rv-typebox').classList.toggle('kept', EL.dataset.type !== 'Chinese');
   }
+  // a word's cards, once one is added: their numbers, and + for another
+  function paintSlots(w) {
+    const box = $('.rv-slots'), have = notesOf(w), cur = slotOf(w);
+    box.hidden = !have.length && cur === 1;
+    if (box.hidden) return (box.innerHTML = '');
+    const all = [...new Set([...have, cur])].sort((a, b) => a - b);
+    const html = all.map((n) => `<button type="button" role="tab" data-rv="slot" data-n="${n}" aria-selected="${n === cur}">${n}</button>`).join('') + (have.includes(cur) ? '<button type="button" class="rv-slot-new" data-rv="slot-new" aria-label="Another card">+</button>' : '');
+    if (box.innerHTML !== html) box.innerHTML = html;
+  }
   function paint() {
     const w = CD.cur, st = w && state(w);
     EL.hidden = !st;
     if (!st) return;
     paintType(st);
-    if (RV.shown !== w) {
-      // the fields only when the word changes, so typing is never interrupted
-      RV.shown = w;
-      for (const [k] of FIELDS) field(k).innerHTML = kept(st[k]);
+    paintSlots(w);
+    const key = noteId(w, slotOf(w));
+    if (RV.shown !== key) {
+      // the fields only when the word (or its card) changes, so typing is never interrupted
+      RV.shown = key;
+      for (const [k] of FIELDS) (field(k).innerHTML = kept(st[k])), RT.forget(field(k));
       wordShown(w, st);
       pictures(w);
     }
     paintBar();
     paintStrip();
+  }
+  /** Another card for the word: the next number, its sentence the study card's next one. */
+  function newSlot(w) {
+    if (CD.cur === w) readFields();
+    const have = notesOf(w);
+    RV.slot[w] = Math.max(1, slotOf(w), ...have) + 1;
+    paint();
   }
 
   // ---------- pictures to choose from ----------
@@ -413,6 +693,7 @@
   function pick(full) {
     const f = field('picture');
     const there = [...f.querySelectorAll('img')].find((i) => (i.getAttribute('data-from') || i.getAttribute('src')) === full);
+    RT.snap(f, 'edit');
     if (there) there.remove();
     else if (document.activeElement !== f) {
       // not typing in it (a tap on a phone): no focus, so no keyboard springs up
@@ -439,10 +720,14 @@
     const w = CD.cur, st = w && state(w);
     if (!st || RV.voiceBusy || !plain(st.chinese)) return;
     if (!st.audio) {
+      // iOS plays a sound after a wait only if the tap itself started the player
+      SOUND.unlock?.();
       RV.voiceBusy = true;
       paintBar();
       try {
-        st.audio = (await call('voice', { text: plain(st.chinese) })).url;
+        const text = plain(st.chinese);
+        st.audio = (await call('voice', { text })).url;
+        st.audioFor = text;
         st.dirty = true;
         draft.set(w, st);
       } catch (e) {
@@ -469,7 +754,7 @@
 
   // ---------- Add ----------
   async function save(w) {
-    const st = state(w);
+    const k = slotOf(w), id = noteId(w, k), st = state(w, k);
     if (!st || !plain(st.chinese)) return false;
     if (CD.cur === w) readFields();
     if (st.type === 'Chinese phrases' && !/<img/i.test(st.picture || '')) {
@@ -486,7 +771,7 @@
       await Promise.all([...RV.jobs]);
       settle();
       const py = await pinyinOf(st);
-      const d = cardOf(w) || {}, c = parseCard(d.text), prev = RV.notes[cardId(w)];
+      const d = cardOf(w) || {}, c = parseCard(d.text), prev = RV.notes[id];
       const note = {
         // a phrase is for no one word
         word: st.type === 'Chinese phrases' ? '' : st.word.replace(/<[^>]+>/g, '').trim() ? st.word : esc(c.word || w),
@@ -496,17 +781,20 @@
         notes: st.notes,
         type: st.type || 'Chinese',
         mnemonic: st.mnemonic || '',
+        // the server makes the audio, or keeps this one if it was made for this sentence (cards.ts voiced)
         audio: st.audio,
+        audioFor: st.audio ? st.audioFor || '' : '',
         made: prev?.made || new Date().toISOString(),
         edited: new Date().toISOString(),
         exported: prev?.exported || null,
       };
       if (/src="(blob:|data:|https:)/.test(note.chinese + note.word + note.picture + note.notes)) throw new Error('A picture is still on its way: try again in a moment.');
-      await DBH.doc('notes/' + cardId(w)).set(note);
-      RV.notes[cardId(w)] = note;
+      const r = await DBH.doc('notes/' + id).set(note);
+      if (r && typeof r.audio === 'string') (note.audio = st.audio = r.audio), (note.audioFor = st.audioFor = r.audio ? plain(st.chinese) : '');
+      RV.notes[id] = note;
       st.saved = true;
       st.dirty = false;
-      draft.drop(w);
+      draft.drop(w, k);
       return true;
     } catch (e) {
       console.error(e);
@@ -524,11 +812,27 @@
     if (d && d.text && !d.carded && state(w) && !(await save(w))) return;
     cardIt();
   };
-  async function add() {
+  /** Add (a press, Cmd+Enter): the card is saved, the word carded, and the next word comes up. Add and stay (a hold,
+   *  Shift+Cmd+Enter): the same, then the next card for this word, ready to fill. */
+  async function add(stay) {
     const w = CD.cur;
-    if (cardCarded(w)) {
-      if (await save(w)) sfx('save');
-    } else CD_cardIt();
+    if (!w || RV.saving || !state(w)) return;
+    const d = cardOf(w), first = !cardCarded(w) && !!(d && d.text);
+    if (!(await save(w))) return;
+    if (first) cardIt(); // stamped, confetti, Undo; it brings the next word up by itself
+    else sfx('save');
+    if (stay) {
+      clearTimeout(CD.advT);
+      if (CD.cur === w) newSlot(w);
+      return;
+    }
+    if (first) return;
+    clearTimeout(CD.advT);
+    CD.advT = setTimeout(() => {
+      if (CD.cur !== w) return;
+      const L = CD_words(), i = L.indexOf(w), nx = L[i + 1] || L[i - 1];
+      if (nx && nx !== w) CD_go(nx);
+    }, 450);
   }
 
   // ---------- events ----------
@@ -537,7 +841,7 @@
     if (!st) return;
     const before = plain(st.chinese);
     readFields();
-    if (plain(st.chinese) !== before) st.audio = '';
+    if (plain(st.chinese) !== before) (st.audio = ''), (st.audioFor = '');
     st.dirty = true;
     draft.set(w, st);
     paintBar();
@@ -557,6 +861,7 @@
     const f = e.target.closest('.rv-f');
     if (!f) return;
     e.preventDefault();
+    RT.snap(f, 'edit');
     const files = e.clipboardData?.files;
     if (files && files.length && insertFiles(files)) return changed();
     const html = e.clipboardData?.getData('text/html');
@@ -575,6 +880,7 @@
     const f = e.target.closest('.rv-f');
     if (!f) return;
     const files = e.dataTransfer?.files;
+    RT.snap(f, 'edit');
     if (!files || !files.length) {
       // HTML from the strip or another page: the browser drops it where the pointer is; cleaned and kept on input
       setTimeout(() => {
@@ -601,45 +907,38 @@
       pick(tile.dataset.full);
       return;
     }
-    if (!e.target.closest('.rv-f')) return;
-    // Cmd+U marks the word (Chrome would open the page's source otherwise); Cmd+B and Cmd+I are the browser's own
-    if (KEYS.is(e, 'cd.mark')) {
+    const f = e.target.closest('.rv-f');
+    if (!f) return;
+    // Cmd+B, Cmd+I, Cmd+U, Cmd+Shift+H (the word's mark): on the selection, or on what he types next
+    const fmt = [['cd.bold', 'b'], ['cd.italic', 'i'], ['cd.underline', 'ul'], ['cd.mark', 'hl']].find(([id]) => KEYS.is(e, id));
+    if (fmt) {
       e.preventDefault();
       e.stopPropagation();
-      mark(e.target.closest('.rv-f'));
-      changed();
+      RT.toggle(f, fmt[1]);
       return;
     }
+    // the fields keep their own undo (typing and formatting alike), so the board's Cmd+Z stays out of them
+    if (KEYS.is(e, 'undo') || KEYS.is(e, 'redo')) {
+      e.preventDefault();
+      e.stopPropagation();
+      KEYS.is(e, 'redo') ? RT.redo(f) : RT.undo(f);
+      return;
+    }
+    if (/^(Arrow|Home|End|Page)/.test(e.key)) RT.pend = null;
     if (RV.selImg && (e.key === 'Backspace' || e.key === 'Delete')) {
       e.preventDefault();
+      RT.snap(f, 'edit');
       RV.selImg.remove();
       unselectImg();
       changed();
       return;
     }
-    if (KEYS.is(e, 'cd.add')) {
+    if (KEYS.is(e, 'cd.addstay') || KEYS.is(e, 'cd.add')) {
       e.preventDefault();
-      add();
+      e.stopPropagation();
+      add(KEYS.is(e, 'cd.addstay'));
     }
   });
-  /** Cmd+U: marks the selection, or takes the mark off again if any of it is marked. Done with insertHTML so Cmd+Z undoes
-   *  it (the browser's own underline can't see a mark drawn as a highlight, so it nested a new one each time). */
-  function mark(f) {
-    const sel = getSelection();
-    if (!f || !sel.rangeCount || sel.isCollapsed) return;
-    const r = sel.getRangeAt(0);
-    const up = (n) => { for (; n && n !== f; n = n.parentNode) if (n.nodeName === 'U') return n; return null; };
-    const us = [...f.querySelectorAll('u')].filter((u) => r.intersectsNode(u));
-    const html = (frag) => { const d = document.createElement('div'); d.appendChild(frag); return d.innerHTML; };
-    if (us.length) {
-      const a = up(r.startContainer), b = up(r.endContainer);
-      if (a) r.setStartBefore(a);
-      if (b) r.setEndAfter(b);
-      sel.removeAllRanges();
-      sel.addRange(r);
-      document.execCommand('insertHTML', false, html(r.cloneContents()).replace(/<\/?u>/g, ''));
-    } else document.execCommand('insertHTML', false, `<u>${html(r.cloneContents())}</u>`);
-  }
   // a picture in a field: a click picks it (a ring shows it), Backspace takes it out, a drag moves it
   function unselectImg() {
     RV.selImg?.classList.remove('rv-sel');
@@ -686,6 +985,7 @@
   };
   function lift(x, y) {
     const im = DRAG.p.im, r = im.getBoundingClientRect();
+    RT.snap(im.closest('.rv-f'), 'edit');
     clearTimeout(DRAG.p.t);
     Object.assign(DRAG, { on: true, im, r, dx: x - r.left, dy: y - r.top, x, y, moved: false });
     unselectImg();
@@ -795,11 +1095,20 @@
     if (!b || !w) return;
     e.stopPropagation();
     const k = b.dataset.rv;
-    if (k === 'add') add();
-    else if (k === 'type') {
+    if (k === 'add') return; // HOLD: a press adds and moves on, a hold adds and stays
+    if (k === 'gemini') return CD_gemini(w, false); // the link opens Gemini; the word goes on the clipboard too
+    if (k === 'slot' || k === 'slot-new') {
+      readFields();
+      if (k === 'slot') (RV.slot[w] = +b.dataset.n), paint();
+      else newSlot(w);
+      sfx('tap');
+      return;
+    }
+    if (k === 'type') {
       const st = state(w);
       readFields();
       const was = st.type || 'Chinese';
+      RT.snap(field('chinese'), 'edit');
       st.type = b.dataset.t;
       // a Radical's first field is the character itself; the sentence comes back when he switches away
       if (st.type === 'Chinese radicals' && was !== st.type) {
@@ -831,7 +1140,8 @@
       const c = parseCard(d.text), s = (m[1] ? c.mine : c.ex)[+m[2]];
       if (s) {
         const f = fromSentence(s, c.word || w);
-        Object.assign(st, { chinese: f.chinese, py: f.py, pyFor: plain(f.chinese), audio: '', dirty: true });
+        RT.snap(field('chinese'), 'edit');
+        Object.assign(st, { chinese: f.chinese, py: f.py, pyFor: f.py ? plain(f.chinese) : '', audio: '', audioFor: '', dirty: true });
         field('chinese').innerHTML = st.chinese;
         draft.set(w, st);
         paintBar();

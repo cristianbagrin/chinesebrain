@@ -13,7 +13,7 @@
    Collection `cards`, one doc per word, id "w" + the code points: {word, text, chat:[{q,a}], made, model,
    src: next|any|second, parent, carded, filed, making, dropped, knows:{char:true|false}}. The five Next up words are written
    ahead when the board opens on a computer. ---------- */
-const CD={docs:{},kit:null,busy:{},open:null,cur:null,ahead:false,loaded:false};
+const CD={docs:{},kit:null,busy:{},open:null,cur:null,ahead:false,loaded:false,pyw:{},hist:[],back:-1,home:null};
 const CD_MODELS={haiku:'claude-haiku-5-5',opus:'claude-opus-5-5',sonnet:'claude-sonnet-5-5'};
 // Settings › AI: 'card-model' and 'card-ahead' (defined in kit/settings.ts, saved to his account)
 const cardId=w=>'w'+[...String(w)].map(c=>c.codePointAt(0).toString(16)).join('-');
@@ -38,10 +38,9 @@ const knownChar=c=>!!(CD.kit&&(CD.kit.charSet.has(c)||CD.kit.compSet.has(c)));
 
 const CARD_FORMAT=`Write the card as lines that each start with one of these tags, in this order. Nothing else: no headings, no markdown except **bold**, no closing remarks.
 word: the word
-pinyin: its Taiwan reading
 meaning: short English
-mine: Chinese | pinyin | English            (one per saved sentence of his, if any)
-ex: Chinese | pinyin | English              (exactly two; a short exchange fits on one line: A：… B：…)
+mine: Chinese | English            (one per saved sentence of his, if any)
+ex: Chinese | English              (exactly two; a short exchange fits on one line: A：… B：…)
 char: 字 | its meaning                       (one per character of the word, in order)
 part: 扌 | hand                              (a component of the char above)
 part: 巨 | giant, huge | ask                 (a common character on neither of his lists: meaning only, not taken apart; the board asks him if he knows it)
@@ -56,7 +55,9 @@ For a character he knows, write its char line and nothing under it. Write no "do
 
 Each how: line is the story of one character new to him: how its parts make that character, with the parts written inside it in Chinese, the way a Taiwanese friend would explain it, down to earth, so he sees it every time he looks at the character ("耂 is an old person hunched over with long hair, the top of 老"). A character with no parts gets the story of its shape. Never a story of the word as a whole: joining the characters into the word he does himself. A word whose characters he all knows gets no how: lines. Wild and funny when it helps it stick, never long. No separate logic or mnemonic lines.
 
-Before you send, check: every line is as short as it can be; every word and phrase is what people in Taiwan say (mainland-only usage is wrong here: 揹黑鍋, not 背鍋); every pinyin tone mark is right; every character new to him has a how: line of 1 or 2 sentences built from its parts, and no line tells a story of the whole word; each know point is about real use (which word a Taiwanese person reaches for, register, collocations), not grammar talk; nothing is introduced by a label or title before the point ("The 'progress' trap: …" becomes just the point); Chinese text has only Chinese punctuation.`;
+No pinyin anywhere: the board writes the readings itself.
+
+Before you send, check: every line is as short as it can be; every word and phrase is what people in Taiwan say (mainland-only usage is wrong here: 揹黑鍋, not 背鍋); every character new to him has a how: line of 1 or 2 sentences built from its parts, and no line tells a story of the whole word; each know point is about real use (which word a Taiwanese person reaches for, register, collocations), not grammar talk; nothing is introduced by a label or title before the point ("The 'progress' trap: …" becomes just the point); Chinese text has only Chinese punctuation.`;
 
 function cardPrompt(kit,word){
   const saved=(kit.saved||{})[word.replace(/臺/g,'台')]||[];   // words.py kit keys them in 台 form
@@ -108,7 +109,8 @@ function parseCard(t){
     // a glyph field holds the character alone; a note after it ("㠭 (squashed into the middle)") moves to the end of the meaning
     if(/^(char|part|sub)$/.test(k)&&f[0]){const g=/^(\S+?)\s*(\(.*\)|（.*）|\s.+)$/.exec(f[0].trim());if(g){f[0]=g[1];f[1]=((f[1]||'')+' '+g[2].trim()).trim();}}
     if(k==='word'||k==='pinyin'||k==='meaning'||k==='story'||k==='hook'){c[k]=v;last={o:c,k};}
-    else if(k==='mine'||k==='ex'){const s={zh:f[0]||'',py:f[1]||'',en:f.slice(2).join(' | ')};c[k].push(s);last={o:s,k:'en'};}
+    // Chinese | English (from 2026-11-26: the pinyin comes from code), or Chinese | pinyin | English (older cards)
+    else if(k==='mine'||k==='ex'){const s=f.length>2?{zh:f[0]||'',py:f[1]||'',en:f.slice(2).join(' | ')}:{zh:f[0]||'',py:'',en:f[1]||''};c[k].push(s);last={o:s,k:'en'};}
     else if(k==='char'){const x={c:f[0]||'',m:f.slice(1).join(' | '),parts:[],logic:''};c.chars.push(x);last={o:x,k:'m'};}
     else if(k==='part'&&ch){const ask=/^ask$/i.test(f[f.length-1]||'')&&f.length>2;const x={c:f[0]||'',m:(ask?f.slice(1,-1):f.slice(1)).join(' | '),ask,subs:[]};ch.parts.push(x);last={o:x,k:'m'};}
     else if(k==='sub'&&pt){const x={c:f[0]||'',m:f.slice(1).join(' | ')};pt.subs.push(x);last={o:x,k:'m'};}
@@ -349,7 +351,7 @@ const CD_waitText=(d,b)=>b?'Writing the card':String(d.err||'').startsWith('rate
 function cardParts(word,d,b){
   const text=b&&!b.chat?b.text:d.text, c=parseCard(text), w=c.word||word;
   const blk=(area,title,h)=>h?`<section class="cd-blk" data-area="${area}">${title?`<h3 class="cd-h">${title}</h3>`:''}${h}</section>`:'';
-  const head=`<header class="cd-head"><h2 class="cd-w zh" lang="zh-Hant">${esc(w)}</h2><div class="cd-hm"><p class="cd-py">${esc(c.pinyin||'')}</p><p class="cd-en">${inl(c.meaning||'')}</p></div>
+  const head=`<header class="cd-head"><h2 class="cd-w zh" lang="zh-Hant">${esc(w)}</h2><div class="cd-hm"><p class="cd-py" data-w="${esc(w)}">${esc(CD.pyw[w]||c.pinyin||'')}</p><p class="cd-en">${inl(c.meaning||'')}</p></div>
     ${text&&!b?`<button type="button" class="cd-btn cd-redo opt" data-act="retry">Rewrite</button>`:''}
     ${!text?(!b&&!d.err?`<button type="button" class="cd-btn cd-write" data-act="retry">Write it <kbd>↵</kbd></button>`:`<p class="cd-wait">${CD_waitText(d,b)}</p>${d.err&&!b?'<button type="button" class="cd-btn" data-act="retry">Try again</button>':''}`):''}</header>`;
   if(!text) return {head,left:'',right:''};
@@ -387,8 +389,30 @@ function CD_words(){
     .sort((a,b)=>String(a.made||a.making||'').localeCompare(String(b.made||b.making||'')))
     .forEach(d=>walk(d.parent&&cardOf(d.parent)?d.parent:d.word));
   Object.values(CD.docs).forEach(d=>{if(d.word&&!seen.has(d.word)&&!d.carded&&!d.dropped&&(cardOK(d)||d.making))walk(d.word);});
-  if(CD.cur&&!out.includes(CD.cur)) out.splice(Math.min(CD.at||0,out.length),0,CD.cur);
+  if(CD.cur&&!out.includes(CD.cur)&&CD.back<0) out.splice(Math.min(CD.at||0,out.length),0,CD.cur);
   return out;
+}
+/* ← goes back through the last three words he was on, one at a time (his call, 2026-11-26). While he is back there,
+   those words show greyed at the front of the tabs; → (or opening any word) leaves them and the tabs are as before. */
+function CD_left_(w){if(!w)return;CD.hist=CD.hist.filter(x=>x!==w);CD.hist.push(w);if(CD.hist.length>3)CD.hist.shift();}
+function CD_tabs(){
+  const L=CD_words();
+  if(CD.back<0) return L;
+  return [...CD.hist.filter(x=>!L.includes(x)),...L];
+}
+const CD_past=w=>CD.back>=0&&CD.hist.includes(w)&&!CD_words().includes(w);
+function CD_left(){
+  if(CD.back<0){
+    const h=CD.hist.filter(x=>x!==CD.cur); if(!h.length){CD_step(-1);return;}
+    CD.hist=h; CD.home=CD.cur; CD.back=h.length-1;
+  }else if(CD.back>0) CD.back--;
+  else return;
+  clearTimeout(CD.advT); CD.cur=CD.hist[CD.back]; CD_paintAll(); sfx('tap');
+}
+function CD_right(){
+  if(CD.back<0){CD_step(1);return;}
+  const home=CD.home; CD.back=-1; CD.home=null;
+  const L=CD_words(); CD.cur=home&&L.includes(home)?home:(L[0]||home); CD_paintAll(); sfx('tap');
 }
 // why Claude added a second card: from the card it came with
 function CD_whyFor(w){
@@ -415,17 +439,17 @@ function CD_paintAll(){
   CD_EL.querySelector('.cd-nav').hidden=none;
   CD_EL.querySelectorAll('.cd-img,.cd-done').forEach(x=>{x.hidden=none;});
   if(none){CD_EL.querySelector('.cd-tabs').innerHTML='';return;}
-  const words=CD_words(), w=CD.cur, id=cardId(w), d=CD.docs[id]||{}, b=CD.busy[id], at=words.indexOf(w), nu=CD_pool();
-  CD.at=at;
+  const words=CD_tabs(), w=CD.cur, id=cardId(w), d=CD.docs[id]||{}, b=CD.busy[id], at=words.indexOf(w), nu=CD_pool();
+  if(CD.back<0) CD.at=at;
   CD_SH.setAttribute('aria-label','Card: '+w);
   if(CD_SH.dataset.w!==w) CD_EL.querySelectorAll('.opt.kept').forEach(x=>x.classList.remove('kept'));
-  CD_EL.querySelector('.cd-tabs').innerHTML=words.map(x=>{const dx=cardOf(x)||{};return `<button type="button" role="tab" class="cd-tab${dx.text||CD.busy[cardId(x)]?'':' todo'}" data-tab="${esc(x)}" aria-selected="${x===w}"><span class="zh" lang="zh-Hant">${esc(x)}</span>${dx.carded?'<i class="cd-tick" aria-label="carded">✓</i>':x===w&&(nu.has(x)||dx.word)?`<i class="cd-tx" data-drop="${esc(x)}" role="button" aria-label="${nu.has(x)?'Have it already':'Drop'} ${esc(x)}">×</i>`:''}</button>`;}).join('');
+  CD_EL.querySelector('.cd-tabs').innerHTML=words.map(x=>{const dx=cardOf(x)||{};return `<button type="button" role="tab" class="cd-tab${dx.text||CD.busy[cardId(x)]?'':' todo'}${CD_past(x)?' past':''}" data-tab="${esc(x)}" aria-selected="${x===w}"><span class="zh" lang="zh-Hant">${esc(x)}</span>${dx.carded?'<i class="cd-tick" aria-label="carded">✓</i>':x===w&&(nu.has(x)||dx.word)?`<i class="cd-tx" data-drop="${esc(x)}" role="button" aria-label="${nu.has(x)?'Have it already':'Drop'} ${esc(x)}">×</i>`:''}</button>`;}).join('');
   const sel=CD_EL.querySelector('.cd-tab[aria-selected="true"]'); if(sel&&CD.tabT!==w){CD.tabT=w;sel.scrollIntoView({block:'nearest',inline:'nearest'});}
   const img=CD_EL.querySelector('[data-act="img"]'); img.href=imgURL(w);
   const done=CD_EL.querySelector('.cd-done'); done.setAttribute('aria-pressed',String(!!d.carded)); done.textContent=d.carded?'Carded':'Card it'; done.disabled=!d.text;
-  CD_EL.querySelector('[data-act="prev"]').disabled=at<=0;
-  CD_EL.querySelector('[data-act="next"]').disabled=at<0||at>=words.length-1;
-  CD_EL.querySelector('.cd-nav').hidden=words.length<2;
+  CD_EL.querySelector('[data-act="prev"]').disabled=CD.back<0?at<=0&&!CD.hist.some(x=>x!==w):CD.back===0;
+  CD_EL.querySelector('[data-act="next"]').disabled=CD.back<0&&(at<0||at>=words.length-1);
+  CD_EL.querySelector('.cd-nav').hidden=words.length<2&&!CD.hist.some(x=>x!==w);
   CD_EL.querySelector('.cd-side').hidden=!CD_EL.querySelector('.cd-side').children.length;
   const q=CD_EL.querySelector('.cd-q'), send=CD_EL.querySelector('.cd-send');
   q.placeholder='Ask about '+w; q.disabled=send.disabled=!d.text||!!b;
@@ -450,6 +474,8 @@ function CD_inert(){}
 // a word's card, on the Cards page: written now if it isn't yet (unless opt.write is false)
 function openCard(word,src,opt={}){
   word=String(word||'').trim(); if(!word) return;
+  if(CD.cur&&CD.cur!==word&&CD.back<0) CD_left_(CD.cur);
+  CD.back=-1; CD.home=null;
   CD.open=word; CD.cur=word; clearTimeout(CD.advT);
   if(VIEW!=='cards'){CD.pend={src,opt};setView('cards');return;}
   CD_show(src,opt);
@@ -472,6 +498,8 @@ BUS.on('leave',v=>{if(v==='cards'){CD.open=null;clearTimeout(CD.advT);}});
 // a tab: show its card; looking writes nothing (Enter or Write it does), but a second card it asks for gets written
 function CD_go(w){
   if(!w||w===CD.cur) return;
+  if(CD.back<0) CD_left_(CD.cur);
+  CD.back=-1; CD.home=null;
   clearTimeout(CD.advT); CD.cur=w; CD_paintAll();
   const d=cardOf(w);
   if(cardOK(d)){const c=parseCard(d.text);if(c.second&&!cardOK(cardOf(c.second.w)))secondCard(w,c.second.w);}
@@ -585,7 +613,7 @@ CD_EL.addEventListener('click',e=>{
   if(!a) return;
   const act=a.dataset.act;
   if(act==='retry') makeCard(w,CD_src(w),{redo:true});
-  else if(act==='prev'||act==='next'){CD_step(act==='next'?1:-1);if(e.detail)a.blur();}
+  else if(act==='prev'||act==='next'){(act==='next'?CD_right:CD_left)();if(e.detail)a.blur();}
   else if(act==='carded'){CD_cardIt();if(e.detail)a.blur();}
 });
 CD_EL.querySelector('.cd-anyw').addEventListener('submit',e=>{
@@ -601,8 +629,9 @@ document.addEventListener('keydown',e=>{
   const t=e.target; if(t&&(t.tagName==='INPUT'||t.isContentEditable)) return;
   const sent=t&&t.classList&&t.classList.contains('cd-sent');
   if(KEYS.is(e,'cd.images')){e.preventDefault();window.open(imgURL(CD.cur),'_blank','noopener');}
-  else if(KEYS.is(e,'cd.next')){e.preventDefault();CD_step(1);}
-  else if(KEYS.is(e,'cd.prev')){e.preventDefault();CD_step(-1);}
+  else if(KEYS.is(e,'cd.next')){e.preventDefault();CD_right();}
+  else if(KEYS.is(e,'cd.prev')){e.preventDefault();CD_left();}
+  else if(KEYS.is(e,'cd.gemini')){e.preventDefault();CD_gemini(CD.cur);}
   else if(sent&&KEYS.is(e,'cd.copy')){e.preventDefault();CD_copy(t);}
   else if(sent&&KEYS.is(e,'cd.pinyin')){e.preventDefault();CD_py(t);}
   else if(KEYS.is(e,'cd.write')){
@@ -646,7 +675,24 @@ function NU_try(q){
 }
 
 // a sentence showing its pinyin keeps it through repaints (the pinyin is drawn into the text, so it's put back)
-{const paint=CD_paintAll;CD_paintAll=function(...a){paint.apply(this,a);CD_EL.querySelectorAll('.cd-sent.py .cd-szh').forEach(p=>RUBY.on(p));};}
+{const paint=CD_paintAll;CD_paintAll=function(...a){paint.apply(this,a);CD_EL.querySelectorAll('.cd-sent.py .cd-szh').forEach(p=>RUBY.on(p));CD_pyHead();};}
+// the word's reading in the card's head comes from code (pinyin.ts through RUBY.text), the same every time; Claude
+// writes no pinyin (2026-11-26)
+function CD_pyHead(){
+  const el=CD_EL.querySelector('.cd-py[data-w]'); if(!el) return;
+  const w=el.dataset.w; if(CD.pyw[w]){el.textContent=CD.pyw[w];return;}
+  if(!RUBY.text||!CD_HAN.test(w)) return;
+  RUBY.text(w).then(t=>{t=String(t||'').trim();if(!t)return;CD.pyw[w]=t.charAt(0).toLowerCase()+t.slice(1);
+    const e=CD_EL.querySelector('.cd-py[data-w]');if(e&&e.dataset.w===w)e.textContent=CD.pyw[w];}).catch(()=>{});
+}
+/* G (or the Gemini tile beside the pictures): Gemini with the word filled in. Gemini reads ?q= when it can; the word is
+   on the clipboard too, for when it doesn't. From the Home Screen app it opens in the browser over it. */
+const CD_gemURL=w=>'https://gemini.google.com/app?q='+encodeURIComponent(w);
+function CD_gemini(w,open=true){
+  if(!w) return;
+  try{navigator.clipboard&&navigator.clipboard.writeText(w).catch(()=>{});}catch(_){}
+  if(open) window.open(CD_gemURL(w),'_blank','noopener');
+}
 BUS.on('data',writeAhead);
 BUS.on('lab',id=>{if(id==='card-ahead')writeAhead();});
 (function wait(n){

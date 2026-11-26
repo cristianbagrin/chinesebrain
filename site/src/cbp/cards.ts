@@ -265,3 +265,42 @@ export async function voice(env: Env, b: { text?: unknown }) {
   if (!r.ok) throw new Error(`voice: ${r.status} ${(await r.text()).slice(0, 200)}`);
   return { url: await keepMedia(env, await r.arrayBuffer(), 'audio/mpeg'), voice: VOICES[first].replace(/^zh-TW-|Neural$/g, '') };
 }
+
+// ---------- the card's audio, made on the server when a note is saved ----------
+/** The sentence of a note as lines to read aloud: no markup, no "- " at the start of a line. */
+export const voiceLines = (html: string) =>
+  String(html ?? '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(div|p|li)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .split('\n')
+    .map((l) => l.replace(/^\s*[-–]\s*/, '').trim())
+    .filter(Boolean)
+    .join('\n');
+/** What decides whether a recording still fits the sentence: its characters, nothing else. */
+const sameSay = (a: string, b: string) => voiceLines(a).replace(/[\s，。！？、,.!?:;：；「」"]/g, '') === voiceLines(b).replace(/[\s，。！？、,.!?:;：；「」"]/g, '');
+/** A note about to be saved (db notes/<id>) gets its audio here, whatever device saved it: kept when the sentence
+ *  is the one the audio was made for (the note's own, or the version saved before), made anew when it changed.
+ *  A voice that fails leaves the note as it came: the save never fails over its audio. */
+export async function voiced(env: Env, id: string, note: Record<string, unknown> | null) {
+  if (!note || typeof note !== 'object') return note;
+  const text = voiceLines(String(note.chinese ?? ''));
+  if (!text) return { ...note, audio: '', audioFor: '' };
+  if (note.audio && typeof note.audioFor === 'string' && sameSay(note.audioFor, text)) return note;
+  const row = await env.CBP.prepare("SELECT data FROM docs WHERE col = 'notes' AND id = ?").bind(id).first<{ data: string }>();
+  const prev = row ? (JSON.parse(row.data) as Record<string, unknown>) : null;
+  if (prev?.audio && sameSay(typeof prev.audioFor === 'string' ? prev.audioFor : String(prev.chinese ?? ''), text)) return { ...note, audio: prev.audio, audioFor: text };
+  try {
+    const v = await voice(env, { text });
+    return { ...note, audio: v.url, audioFor: text };
+  } catch (e) {
+    console.error(e);
+    return note;
+  }
+}

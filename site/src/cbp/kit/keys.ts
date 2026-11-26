@@ -41,7 +41,7 @@ export const DEFS: Def[] = [
     ['rv.revoice', 'Make its audio again', 'shift+v'],
   ]),
   ...D('Cards', undefined, [
-    ['cd.prev', 'Previous word', 'arrowleft'],
+    ['cd.prev', 'Back', 'arrowleft'],
     ['cd.next', 'Next word', 'arrowright'],
     ['cd.write', 'Write it, then card it', 'enter'],
     ['cd.voice', 'Play the sentence', 'v'],
@@ -49,8 +49,17 @@ export const DEFS: Def[] = [
   ]),
   ...D('Cards', 'field', [
     ['cd.add', 'Add', 'mod+enter'],
-    ['cd.mark', 'Mark the word', 'mod+u'],
+    ['cd.mark', 'Highlight', 'mod+shift+h'],
   ]),
+  // Cards: add and stay, Gemini, rich text in the card's fields
+  ...D('Cards', undefined, [['cd.gemini', 'Gemini', 'g']]),
+  ...D('Cards', 'field', [
+    ['cd.addstay', 'Add and stay', 'mod+shift+enter'],
+    ['cd.bold', 'Bold', 'mod+b'],
+    ['cd.italic', 'Italic', 'mod+i'],
+    ['cd.underline', 'Underline', 'mod+u'],
+  ]),
+  // (end Cards)
   ...D('Cards', 'sentence', [
     ['cd.copy', 'Copy the sentence', 'space'],
     ['cd.pinyin', 'Pinyin over the sentence', 'shift+enter'],
