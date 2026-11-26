@@ -1423,4 +1423,17 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
       })
     );
   }
+  window.RVH = {
+    ready: () => ready,
+    left: () => ready ? left() : null,
+    cards: () => S.cards.values(),
+    dayOf: (ms) => ck().dayOf(ms),
+    today: () => ck().today,
+    date: (n) => {
+      let d0 = col().day0;
+      return new Date(Date.UTC(+d0.slice(0, 4), +d0.slice(5, 7) - 1, +d0.slice(8, 10)) + n * 864e5).toISOString().slice(0, 10);
+    }
+  };
+  start()?.then(() => BUS.emit("reviews:changed"));
+  onChange(() => ready && BUS.emit("reviews:changed"));
 })();

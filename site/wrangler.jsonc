@@ -47,9 +47,9 @@
   "r2_buckets": [{ "binding": "FILES", "bucket_name": "cbp-files" }],
   // Workers AI: the monthly test's scene photos (FLUX schnell, inside the free daily allowance)
   "ai": { "binding": "AI" },
-  // hourly (src/cbp/nightly.ts): at 14:00 UTC, 10 pm in Taipei, the nightly; every other hour, an essay whose day is
-  // over gets its corrections; at 19:00 the media sweep (src/cbp/cards.ts)
-  "triggers": { "crons": ["0 14 * * *", "0 21 * * *"] },
+  // every half hour (worker.js scheduled): the evening nudge's check (src/cbp/push.ts); at 14:00 UTC, 10 pm in Taipei,
+  // the nightly (src/cbp/nightly.ts); at 21:00 UTC, 5 am, the morning jobs. One trigger: the free plan allows 5 per account.
+  "triggers": { "crons": ["*/30 * * * *"] },
   "env": {
     // https://chinese-staging.cristianbagrin.com: the next version, open only to accounts with the
     // `staging` switch. Same accounts and switches as the live site (the Durable Objects and FLAGS are

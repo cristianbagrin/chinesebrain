@@ -1,5 +1,11 @@
 "use strict";
 (() => {
+  var __defProp = Object.defineProperty;
+  var __export = (target, all) => {
+    for (var name in all)
+      __defProp(target, name, { get: all[name], enumerable: !0 });
+  };
+
   // site/src/cbp/kit/sound.ts
   var el = typeof Audio == "function" ? new Audio() : null;
   el && (el.preload = "auto");
@@ -398,6 +404,8 @@
   LAB.define("grade-model", "Grading tests", M, "sonnet", "AI", A);
   LAB.define("essay-model", "Essay marks", M, "opus", "AI", A);
   LAB.define("tutor-model", "Tutor", M, "sonnet", "AI", A);
+  var hm = (v) => `${+v.slice(0, 2) - 12}:${v.slice(3)} pm`;
+  LAB.define("nudge", "Evening nudge", [["off", "Off"], ...Array.from({ length: 14 }, (_, i) => `${17 + (i >> 1)}:${i % 2 ? "30" : "00"}`).map((v) => [v, hm(v)])], "21:00", "Habit", A);
   var ORDER = ["text-size", "pinyin", "autoplay", "card-model", "card-ahead", "pinyin-model", "idea-model", "draw-model", "deeper-model", "test-model", "grade-model", "essay-model", "tutor-model"], GROUPS = ["Everyday", "Reviews", "AI"], token = () => lsGet("cb-token") ?? "", acctIds = () => Object.values(LAB.defs).filter((d) => d.scope === "account").map((d) => d.id), pushT = 0;
   LAB.push = () => {
     clearTimeout(pushT), pushT = window.setTimeout(() => {
@@ -433,6 +441,7 @@
   var page = "main", listening = "", isSwitch = (d) => d.options.length === 2 && d.options[0][0] === "on" && d.options[1][0] === "off", sw = (attr, on2, label) => `<div class="st-row"><span class="st-l">${esc(label)}</span><button type="button" role="switch" class="st-tg" aria-checked="${on2}" aria-label="${esc(label)}" ${attr}><i></i></button></div>`;
   function row(d) {
     if (isSwitch(d)) return sw(`data-x="${d.id}" data-v="${d.v === "on" ? "off" : "on"}"`, d.v === "on", d.label);
+    if (d.options.length > 6) return `<div class="st-row"><label class="st-l" for="st-${d.id}">${esc(d.label)}</label><select class="st-sel" id="st-${d.id}" data-xs="${d.id}">${d.options.map(([v, l]) => `<option value="${esc(v)}"${d.v === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></div>`;
     let big = d.id === "text-size";
     return `<div class="st-row"><span class="st-l">${esc(d.label)}</span><span class="st-o${big ? " st-sz" : ""}" role="radiogroup" aria-label="${esc(d.label)}">${d.options.map(([v, l]) => `<button type="button" role="radio" aria-checked="${d.v === v}" data-x="${d.id}" data-v="${esc(v)}"${big ? ` aria-label="${esc(l)}"` : ""}>${big ? `<span class="sz-${esc(v)}">Aa <span class="zh">\u4E2D\u6587</span></span>` : esc(l)}</button>`).join("")}</span></div>`;
   }
@@ -484,6 +493,10 @@
     if (t.id === "st-kreset")
       return KEYS.reset(), sfx("swish"), draw();
   });
+  box.addEventListener("change", (e) => {
+    let s = e.target.closest("select[data-xs]");
+    s && (LAB.set(s.dataset.xs, s.value), sfx("tap"));
+  });
   addEventListener(
     "keydown",
     (e) => {
@@ -505,7 +518,80 @@
   BUS.on("lab", () => !box.hidden && page === "main" && draw());
   var SETTINGS = { open: (to) => open(!0, to), close: () => open(!1), redraw: () => !box.hidden && draw() };
 
+  // site/src/cbp/habit.ts
+  var habit_exports = {};
+  __export(habit_exports, {
+    LOW_SENTENCES: () => LOW_SENTENCES,
+    addDays: () => addDays,
+    blank: () => blank,
+    dayOf: () => dayOf,
+    han: () => han,
+    left: () => left,
+    merge: () => merge,
+    met: () => met,
+    monday: () => monday,
+    reviewDays: () => reviewDays,
+    sentences: () => sentences,
+    walk: () => walk
+  });
+  var LOW_SENTENCES = 3, HAN3 = /[㐀-鿿豈-﫿]/g, han = (t) => (String(t ?? "").match(HAN3) ?? []).length, sentences = (t) => String(t ?? "").split(/[。！？!?；;\n]+/).filter((s) => han(s) > 0).length, blank = () => ({ rv: 0, cleared: !0, chars: 0, sent: 0, cards: 0, test: !1 }), active = (d) => d.rv > 0 || d.chars > 0 || d.cards > 0 || d.test, met = (d, low) => d.cleared && (low ? d.sent >= 3 : d.chars > 0), P = (s) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)), K = (ms) => new Date(ms).toISOString().slice(0, 10), addDays = (s, n) => K(P(s) + n * 864e5), monday = (s) => addDays(s, -((new Date(P(s)).getUTCDay() + 6) % 7)), dayOf = (ms, tzMin = 480, rollover = 4) => K(ms + tzMin * 6e4 - rollover * 36e5);
+  function walk(days, today) {
+    let out = {}, start = Object.keys(days).filter((k) => k <= today && days[k] && days[k].chars > 0).sort()[0];
+    if (!start) return { days: out, streak: 0, start: null, low: !1 };
+    let prev = "pre", restWeek = "";
+    for (let k = start; k <= today; k = addDays(k, 1)) {
+      let d = days[k] ?? blank(), low = prev === "miss", st;
+      met(d, low) ? st = "done" : k === today ? st = "open" : restWeek !== monday(k) && (prev === "done" || prev === "rest") ? (st = "rest", restWeek = monday(k)) : st = active(d) ? "partial" : "miss", out[k] = { st, low, deep: st === "done" && d.test }, prev = st === "partial" ? "miss" : st;
+    }
+    let streak = 0;
+    for (let k = today; out[k]; k = addDays(k, -1)) {
+      let s = out[k].st;
+      if (s === "done") streak++;
+      else {
+        if (s === "rest" || s === "open") continue;
+        break;
+      }
+    }
+    return { days: out, streak, start, low: out[today]?.low ?? !1 };
+  }
+  function reviewDays(cards, day, today) {
+    let count = /* @__PURE__ */ new Map(), diff = /* @__PURE__ */ new Map(), mark2 = (a, b) => {
+      b <= a || (diff.set(a, (diff.get(a) ?? 0) + 1), diff.set(b, (diff.get(b) ?? 0) - 1));
+    }, list = [...cards], byNote = /* @__PURE__ */ new Map();
+    for (let c of list) if (c.nid != null) for (let r of c.revs ?? []) r[1] >= 1 && r[1] <= 4 && (byNote.get(c.nid) ?? byNote.set(c.nid, /* @__PURE__ */ new Set()).get(c.nid)).add(day(r[0]));
+    for (let c of list) {
+      let sib = c.nid != null ? byNote.get(c.nid) : void 0, revs = [...c.revs ?? []].sort((a, b) => a[0] - b[0]);
+      for (let i = 0; i < revs.length; i++) {
+        let r = revs[i], d = day(r[0]);
+        if (r[1] >= 1 && r[1] <= 4 && r[6] <= 3 && count.set(d, (count.get(d) ?? 0) + 1), !(r[2] > 0)) continue;
+        let due = d + r[2], next = revs[i + 1], until = next ? day(next[0]) : c.queue >= 0 ? today : due;
+        for (; sib && due < until && sib.has(due); ) due++;
+        mark2(due, Math.min(until, today));
+      }
+    }
+    let open2 = /* @__PURE__ */ new Set(), ks = [...diff.keys()].sort((a, b) => a - b), run = 0;
+    for (let i = 0; i < ks.length - 1; i++)
+      if (run += diff.get(ks[i]), run > 0) for (let x = ks[i]; x < ks[i + 1]; x++) open2.add(x);
+    return { count, open: open2 };
+  }
+  function merge(a, b) {
+    let x = { ...blank(), cleared: !1, ...a ?? {} }, y = { ...blank(), cleared: !1, ...b ?? {} };
+    return {
+      rv: Math.max(+x.rv || 0, +y.rv || 0),
+      cleared: !!(x.cleared || y.cleared),
+      chars: Math.max(+x.chars || 0, +y.chars || 0),
+      sent: Math.max(+x.sent || 0, +y.sent || 0),
+      cards: Math.max(+x.cards || 0, +y.cards || 0),
+      test: !!(x.test || y.test)
+    };
+  }
+  function left(d, low) {
+    let rv = !d?.cleared, es = !(d && (low ? d.sent >= 3 : d.chars > 0)), essay = low ? "three sentences" : "your essay";
+    return rv && es ? `Reviews and ${essay}.` : rv ? "Reviews left." : low ? "Three sentences left." : "Your essay is left.";
+  }
+
   // site/src/cbp/kit/main.ts
   Object.assign(window, { SOUND, HOLD, RUBY, KEYS, SETTINGS });
+  Object.assign(window, { HABIT: habit_exports });
   BUS.on("leave", () => SOUND.stop());
 })();

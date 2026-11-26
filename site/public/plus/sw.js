@@ -43,3 +43,26 @@ self.addEventListener('fetch', (e) => {
   }
   if (u.hostname === 'fonts.googleapis.com' || u.hostname === 'fonts.gstatic.com') return e.respondWith(cacheFirst(req, 'cbp-fonts'));
 });
+
+// Habit: the evening nudge (src/cbp/push.ts sends it; Settings › Habit turns it on for this phone). A tap opens the
+// board, or brings it forward when it's already open.
+self.addEventListener('push', (e) => {
+  let m = {};
+  try {
+    m = e.data ? e.data.json() : {};
+  } catch {
+    m = { body: e.data ? e.data.text() : '' };
+  }
+  e.waitUntil(self.registration.showNotification(m.title || 'Chinese', { body: m.body || '', tag: m.tag || 'nudge', icon: '/plus/icon-192.png', badge: '/plus/icon-192.png', data: { url: m.url || '/plus' } }));
+});
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = new URL(e.notification.data?.url || '/plus', location.origin).href;
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cs) => {
+      const c = cs.find((x) => new URL(x.url).pathname.startsWith('/plus'));
+      return c ? c.focus() : self.clients.openWindow(url);
+    }),
+  );
+});
+// (end Habit)

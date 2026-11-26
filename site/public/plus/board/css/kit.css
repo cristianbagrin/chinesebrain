@@ -80,3 +80,8 @@ rt{font-family:var(--ui);font-size:max(.55em,14px);font-weight:450;letter-spacin
 .rb-on.rb-on{line-height:2.3}
 .rbw{white-space:nowrap}
 .st-row.st-sub{min-height:0;padding:0 0 6px;justify-content:flex-end;margin:-8px 0 0}
+/* Habit: a dropdown choice (the nudge's time), and the nudge's own row */
+.st-sel{flex:none;font:inherit;font-size:16px;font-weight:500;color:var(--ink);background:var(--wash);border:0;border-radius:999px;padding:8px 14px;cursor:pointer;-webkit-appearance:none;appearance:none;text-align:center}
+.st-sel:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.st-say{flex:none;font-size:16px;color:var(--ink-3);text-align:right}
+/* (end Habit) */

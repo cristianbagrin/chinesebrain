@@ -56,6 +56,10 @@ LAB.define('test-model', 'Writing tests', M, 'sonnet', 'AI', A);
 LAB.define('grade-model', 'Grading tests', M, 'sonnet', 'AI', A);
 LAB.define('essay-model', 'Essay marks', M, 'opus', 'AI', A);
 LAB.define('tutor-model', 'Tutor', M, 'sonnet', 'AI', A);
+// Habit: the evening nudge on his phone (src/cbp/push.ts), at a time he picks, Taipei time; habit.js adds the phone's switch
+const hm = (v: string) => `${+v.slice(0, 2) - 12}:${v.slice(3)} pm`;
+LAB.define('nudge', 'Evening nudge', [['off', 'Off'], ...Array.from({ length: 14 }, (_, i) => `${17 + (i >> 1)}:${i % 2 ? '30' : '00'}`).map((v): [string, string] => [v, hm(v)])], '21:00', 'Habit', A);
+// (end Habit)
 const ORDER = ['text-size', 'pinyin', 'autoplay', 'card-model', 'card-ahead', 'pinyin-model', 'idea-model', 'draw-model', 'deeper-model', 'test-model', 'grade-model', 'essay-model', 'tutor-model'];
 const GROUPS = ['Everyday', 'Reviews', 'AI'];
 
@@ -112,6 +116,9 @@ const isSwitch = (d: LabDef) => d.options.length === 2 && d.options[0][0] === 'o
 const sw = (attr: string, on: boolean, label: string) => `<div class="st-row"><span class="st-l">${esc(label)}</span><button type="button" role="switch" class="st-tg" aria-checked="${on}" aria-label="${esc(label)}" ${attr}><i></i></button></div>`;
 function row(d: LabDef) {
   if (isSwitch(d)) return sw(`data-x="${d.id}" data-v="${d.v === 'on' ? 'off' : 'on'}"`, d.v === 'on', d.label);
+  // Habit: a choice with many options (the nudge's time) is a dropdown
+  if (d.options.length > 6) return `<div class="st-row"><label class="st-l" for="st-${d.id}">${esc(d.label)}</label><select class="st-sel" id="st-${d.id}" data-xs="${d.id}">${d.options.map(([v, l]) => `<option value="${esc(v)}"${d.v === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></div>`;
+  // (end Habit)
   const big = d.id === 'text-size';
   return `<div class="st-row"><span class="st-l">${esc(d.label)}</span><span class="st-o${big ? ' st-sz' : ''}" role="radiogroup" aria-label="${esc(d.label)}">${d.options
     .map(([v, l]) => `<button type="button" role="radio" aria-checked="${d.v === v}" data-x="${d.id}" data-v="${esc(v)}"${big ? ` aria-label="${esc(l)}"` : ''}>${big ? `<span class="sz-${esc(v)}">Aa <span class="zh">中文</span></span>` : esc(l)}</button>`)
@@ -207,6 +214,14 @@ box.addEventListener('click', (e) => {
     return draw();
   }
 });
+// Habit: a dropdown's choice
+box.addEventListener('change', (e) => {
+  const s = (e.target as HTMLElement).closest<HTMLSelectElement>('select[data-xs]');
+  if (!s) return;
+  LAB.set(s.dataset.xs!, s.value);
+  sfx('tap');
+});
+// (end Habit)
 // a new key for an action: the next key he presses (Esc leaves it as it was)
 addEventListener(
   'keydown',

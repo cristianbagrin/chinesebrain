@@ -21,6 +21,9 @@ import * as tutor from './src/cbp/tutor.ts';
 import * as jobs from './src/cbp/jobs.ts';
 // Essays
 import * as look from './src/cbp/look.ts';
+// Habit: the day log and the evening nudge (src/cbp/push.ts)
+import * as push from './src/cbp/push.ts';
+// (end Habit)
 
 const MAX_BODY = 1_500_000;
 const MAX_ITEMS = 60_000;
@@ -718,6 +721,9 @@ async function plusMachine(request, env, url) {
       return new Response(readable, { headers: { 'Content-Type': 'application/json' } });
     };
     if (url.pathname === '/api/plus/push/manifest') return json(await plus.manifest(env));
+    // Habit: the evening nudge by hand (?force=1 sends now, whatever the time and the day)
+    if (url.pathname === '/api/plus/push/nudge') return json(await push.nudge(env, { force }));
+    // (end Habit)
     if (url.pathname === '/api/plus/push') return json(await plus.push(env, await request.json()));
     // once the website is the source: the Mac pulls what changed, and the switch-over itself
     if (url.pathname === '/api/plus/push/pull') return json(await plus.pull(env, await request.json()));
@@ -856,6 +862,11 @@ async function api(request, env, path) {
         if (path === 'plus/pinyin') return await cards.pinyin(env, body);
         // his settings, saved to the account (src/cbp/settings.ts)
         if (path === 'plus/settings') return await settings.save(env, body);
+        // Habit: the board's report of a day, and the phones that want the evening nudge (src/cbp/push.ts)
+        if (path === 'plus/habit') return await push.report(env, body);
+        if (path === 'plus/nudge/sub') return await push.subscribe(env, body, request.headers.get('User-Agent') ?? '');
+        if (path === 'plus/nudge/unsub') return await push.unsubscribe(env, body);
+        // (end Habit)
         if (path === 'plus/voice') return await cards.voice(env, body);
         // the tutor (src/cbp/tutor.ts)
         if (path === 'plus/tutor') {
@@ -867,6 +878,9 @@ async function api(request, env, path) {
     } catch (e) {
       if (e instanceof plus.WriteError) throw new Fail(e.code === 'read_only' ? 403 : 400, e.code, e.message);
       if (e instanceof cards.Bad) throw new Fail(400, 'invalid_argument', e.message);
+      // Habit
+      if (e instanceof push.Bad) throw new Fail(400, 'invalid_argument', e.message);
+      // (end Habit)
       if (e instanceof ai.Quota) throw new Fail(429, 'rate_limited', 'Not now: try again in a while.');
       throw e;
     }
@@ -875,6 +889,10 @@ async function api(request, env, path) {
     if (path === 'plus/anki/check') return anki.check(env);
     if (path === 'plus/anki/media-map') return json(await anki.mediaMap(env));
     if (path === 'plus/settings') return settings.settings(env);
+    // Habit
+    if (path === 'plus/habit') return push.log(env);
+    if (path === 'plus/nudge/key') return push.key(env);
+    // (end Habit)
     if (path === 'plus/taste') return taste.board(env);
     if (path === 'plus/taste/results') return taste.results(env);
     if (path === 'plus/taste/img') return taste.img(env, q.get('item') ?? '', Number(q.get('n')));
@@ -1169,6 +1187,13 @@ export default {
   //          the media sweep
   async scheduled(event, env, ctx) {
     const t = new Date(event.scheduledTime + 8 * 3600e3), hour = t.getUTCHours();
+    // Habit: one trigger every half hour (wrangler.jsonc). Each run checks the evening nudge (src/cbp/push.ts); the
+    // night jobs below run only at 10 pm and 5 am, as their own two triggers did before.
+    if (event.cron === '*/30 * * * *') {
+      ctx.waitUntil(push.nudge(env, { now: event.scheduledTime }).then((r) => r && console.log('nudge', JSON.stringify(r)), (e) => console.error('nudge', e)));
+      if (t.getUTCMinutes() >= 30 || (hour !== 22 && hour !== 5)) return;
+    }
+    // (end Habit)
     const todo = [];
     if (hour === 22) todo.push(['nightly', () => ownerBrain(env).then((b) => nightly.nightly(env, b))], ['monthly-test lessons', () => jobs.afterTest(env)]);
     else {

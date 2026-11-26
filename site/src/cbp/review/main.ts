@@ -1301,3 +1301,22 @@ async function prefetch() {
     }),
   );
 }
+
+// Habit: what the habit (board/js/habit.js) reads, never changes. RVH.ready(): the collection is on this device;
+// RVH.left(): cards still to do today (null until ready); RVH.cards(): every card with its reviews; RVH.dayOf(ms): the
+// collection's day of a moment and RVH.date(n): that day as 'YYYY-MM-DD'; RVH.today(): today's day number.
+// BUS 'reviews:changed' after the collection loads and whenever it changes here or on another device.
+(window as unknown as { RVH: unknown }).RVH = {
+  ready: () => ready,
+  left: () => (ready ? left() : null),
+  cards: () => S.cards.values(),
+  dayOf: (ms: number) => ck().dayOf(ms),
+  today: () => ck().today,
+  date: (n: number) => {
+    const d0 = col().day0;
+    return new Date(Date.UTC(+d0.slice(0, 4), +d0.slice(5, 7) - 1, +d0.slice(8, 10)) + n * 864e5).toISOString().slice(0, 10);
+  },
+};
+void start()?.then(() => BUS.emit('reviews:changed'));
+onChange(() => ready && BUS.emit('reviews:changed'));
+// (end Habit)

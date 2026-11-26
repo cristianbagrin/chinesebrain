@@ -316,4 +316,6 @@ function PR_render(){
 ['data','essays','reviews','test','nodb'].forEach(ev=>BUS.on(ev,()=>PR_render()));
 BUS.on('lab',id=>{if(id==='habit'||id==='board-k')PR_render();});
 BUS.on('view',v=>{if(v==='progress')PR_render();});
+// the habit's days changed (reviews arrived, the server's log, a new day): the year follows
+BUS.on('habit',()=>{if(VIEW==='progress'&&STATE)HB_render(document.getElementById('pr-habit'),true);});
 BUS.on('leave',v=>{if(v==='progress'){PR.hover=null;PR_gtip.hide();}});
