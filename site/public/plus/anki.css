@@ -81,6 +81,7 @@
 .tg-a{display:flex;flex-wrap:wrap;align-items:center;gap:2px}
 .tg-a .btn-q{padding:8px 12px}
 .tg-a .tg-go{color:var(--ink);font-weight:550;background:var(--wash)}
+.tg-a .zh{font-size:var(--fs-m);font-weight:400}
 .tg-more{margin:var(--s1) 0 0 calc(-1 * var(--s3))}
 .sd-help .tg-a{margin-left:calc(-1 * var(--s2))}
 
