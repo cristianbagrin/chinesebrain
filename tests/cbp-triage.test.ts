@@ -6,11 +6,12 @@ import { verdict, triage } from '../site/src/cbp/review/triage.ts';
 const NOW = Date.UTC(2026, 10, 27, 10, 0);
 const DAY = 864e5;
 // [ms, grade, ivl, lastIvl, factor, time, type]: type 0 learning, 1 review, 2 relearning, 4 manual
-const rev = (daysAgo: number, g: number, type = 1): Rev => [NOW - daysAgo * DAY, g, 1, 1, 0, 3000, type];
+const rev = (daysAgo: number, g: number, type = 1, ms = 3000): Rev => [NOW - daysAgo * DAY, g, 1, 1, 0, ms, type];
 let id = 1;
 const card = (c: Partial<Card> = {}): Card => ({ id: id++, nid: 100, did: 1, ord: 0, type: 2, queue: 2, due: 0, ivl: 10, reps: 5, lapses: 0, left: 0, flags: 0, mod: 0, revs: [], ...c });
 
-test('too easy: Easy three times running on a review card, or green', () => {
+test('too easy: Easy three times running, quickly, on a review card, or green', () => {
+  assert.equal(verdict(card({ revs: [rev(20, 4), rev(10, 4, 1, 9000), rev(1, 4)] }), []), null); // one slow Easy: he had to think
   assert.deepEqual(verdict(card({ revs: [rev(30, 3), rev(20, 4), rev(10, 4), rev(1, 4)] }), []), { ease: 'easy', why: 'easy3' });
   assert.equal(verdict(card({ revs: [rev(20, 4), rev(10, 3), rev(1, 4)] }), []), null); // a Good breaks it
   assert.equal(verdict(card({ revs: [rev(10, 4), rev(1, 4)] }), []), null); // only twice

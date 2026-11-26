@@ -782,8 +782,8 @@ CREATE INDEX ix_notes_csum ON notes (csum);`;
     let leechy = th > 0 && c.lapses >= th || c.lapses >= 2 && tags.some((t) => /^leech$/i.test(t));
     if (c.queue === -1) return leechy && lapsedSince(c, seen) ? { ease: "hard", why: "leech" } : null;
     if (leechy && lapsedSince(c, seen)) return { ease: "hard", why: "leech" };
-    let g = answers(c, seen).map((r) => r[1]), last = (n) => g.slice(-n);
-    return g.length >= 3 && last(3).every((x) => x === 1) ? { ease: "hard", why: "again" } : c.lapses >= 3 && g.length >= 2 && last(4).filter((x) => x === 1).length >= 2 ? { ease: "hard", why: "again" } : flag === 3 ? { ease: "easy", why: "green" } : c.type === 2 && g.length >= 3 && last(3).every((x) => x === 4) ? { ease: "easy", why: "easy3" } : null;
+    let a = answers(c, seen), g = a.map((r) => r[1]), last = (n) => g.slice(-n);
+    return g.length >= 3 && last(3).every((x) => x === 1) ? { ease: "hard", why: "again" } : c.lapses >= 3 && g.length >= 2 && last(4).filter((x) => x === 1).length >= 2 ? { ease: "hard", why: "again" } : flag === 3 ? { ease: "easy", why: "green" } : c.type === 2 && g.length >= 3 && a.slice(-3).every((r) => r[1] === 4 && r[5] < 5e3) ? { ease: "easy", why: "easy3" } : null;
   }
   function triage(cards, tagsOf2, th, seen = {}, skip = /* @__PURE__ */ new Set()) {
     let by = /* @__PURE__ */ new Map();

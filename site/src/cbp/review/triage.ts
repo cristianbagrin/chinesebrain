@@ -7,7 +7,8 @@
 //   again      Again three times running, or 2 of its last 4 answers Again with 3+ lapses
 // A card is too easy when:
 //   green      he flagged it green
-//   easy3      Easy three times running, on a review card
+//   easy3      Easy three times running on a review card, each answered in under FAST ms. Easy alone isn't enough: Easy
+//              is his usual "got it" (3 of 4 answers on Nov 27; Easy x3 matched 754 cards, the fast ones 33).
 // Hard wins over easy. Suspended cards are left out (he retired or combined them), except a leech the scheduler
 // suspended. A word he waved off (`seen`, ms) comes back only for something new after that: a review streak counts its
 // answers since then, a leech needs a lapse since then; flags were cleared when he waved it off.
@@ -16,6 +17,8 @@ import type { Card } from '../sched.ts';
 export type Ease = 'easy' | 'hard';
 export type Why = 'red' | 'leech' | 'again' | 'green' | 'easy3';
 export type Verdict = { ease: Ease; why: Why } | null;
+/** An answer this quick (ms, Anki's own timer) means he didn't have to think. */
+export const FAST = 5000;
 
 /** A graded answer (Again…Easy), not a manual or rescheduling entry: [ms, grade, type]. */
 const answers = (c: Card, since = 0) => c.revs.filter((r) => r[1] >= 1 && r[1] <= 4 && r[6] !== 4 && r[6] !== 5 && r[0] > since);
@@ -28,12 +31,12 @@ export function verdict(c: Card, tags: string[], th = 8, seen = 0): Verdict {
   const leechy = (th > 0 && c.lapses >= th) || (c.lapses >= 2 && tags.some((t) => /^leech$/i.test(t)));
   if (c.queue === -1) return leechy && lapsedSince(c, seen) ? { ease: 'hard', why: 'leech' } : null;
   if (leechy && lapsedSince(c, seen)) return { ease: 'hard', why: 'leech' };
-  const g = answers(c, seen).map((r) => r[1]);
+  const a = answers(c, seen), g = a.map((r) => r[1]);
   const last = (n: number) => g.slice(-n);
   if (g.length >= 3 && last(3).every((x) => x === 1)) return { ease: 'hard', why: 'again' };
   if (c.lapses >= 3 && g.length >= 2 && last(4).filter((x) => x === 1).length >= 2) return { ease: 'hard', why: 'again' };
   if (flag === 3) return { ease: 'easy', why: 'green' };
-  if (c.type === 2 && g.length >= 3 && last(3).every((x) => x === 4)) return { ease: 'easy', why: 'easy3' };
+  if (c.type === 2 && g.length >= 3 && a.slice(-3).every((r) => r[1] === 4 && r[5] < FAST)) return { ease: 'easy', why: 'easy3' };
   return null;
 }
 
