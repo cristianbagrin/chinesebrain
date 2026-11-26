@@ -265,10 +265,13 @@ $('.tu-top', PANE).addEventListener('pointerdown', (e) => {
   const move = (m: PointerEvent) => step(m.clientX, m.clientY, m.timeStamp);
   const up = (u: PointerEvent) => {
     removeEventListener('pointermove', move);
+    removeEventListener('pointerup', up);
+    removeEventListener('pointercancel', up);
     end(u);
   };
   addEventListener('pointermove', move);
-  addEventListener('pointerup', up, { once: true });
+  addEventListener('pointerup', up);
+  addEventListener('pointercancel', up);
 });
 // two fingers on a trackpad, sideways over the pane: it follows, and lets go when the fingers stop
 let wx = 0, wT = 0, wv = 0;

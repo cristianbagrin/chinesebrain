@@ -120,7 +120,7 @@ export function index(cards: Iterable<Card>, noteOf: (nid: number) => Note | und
       audio: /\[sound:/i.test(all),
       flag: card.flags & 7,
       leech: note.tags.some((t) => /^leech$/i.test(t)),
-      uses: word in uses ? uses[word] : null,
+      uses: Object.prototype.hasOwnProperty.call(uses, word) ? uses[word] : null,
       zh: [word, fld('Chinese'), fld('Mnemonic'), fld('Notes')].map(strip).join('\n'),
       py: toneless(fld('Pinyin')),
       en: latin.toLowerCase(),

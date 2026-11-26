@@ -275,7 +275,7 @@
     html: async (text) => frag(await load(), text),
     shown: () => LAB.get("pinyin") === "on",
     ready: load,
-    CSS: ".rb-on.rb-on{line-height:2.1}.rbw{white-space:nowrap}ruby{ruby-position:over;ruby-align:center;margin:0 .08em}rt{font-family:Inter,system-ui,sans-serif;font-size:max(.45em,13px);font-weight:450;letter-spacing:0;color:#757B87;opacity:.8;-webkit-text-stroke:0;line-height:1.1}"
+    CSS: ".rb-on.rb-on{line-height:2.1}.rbw{white-space:nowrap}ruby{ruby-position:over;ruby-align:center;margin:0 .08em}rt{font-family:Inter,system-ui,sans-serif;font-size:max(.45em,var(--fs-xs,13.8px));font-weight:450;letter-spacing:0;color:#757B87;opacity:.8;-webkit-text-stroke:0;line-height:1.1}"
   };
   Object.assign(RUBY, { text: async (t) => sentence(await load(), t) });
 
@@ -774,7 +774,7 @@
   }
 
   // site/src/cbp/kit/editor.ts
-  var BIT = { b: 1, i: 2, ul: 4, hl: 8 }, isChar = (p) => !!p && "c" in p, escT = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/ /g, "&nbsp;"), escA = (t) => t.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  var BIT = { b: 1, i: 2, ul: 4, hl: 8 }, isChar = (p) => !!p && "c" in p, escT = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"), isSp = (p) => isChar(p) && (p.c === " " || p.c === "\xA0"), edge = (p) => !p || "br" in p, hardSpace = (out, k) => edge(out[k - 1]) || edge(out[k + 1]) || isSp(out[k - 1]), escA = (t) => t.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
   function write(out) {
     let h = "", i = 0;
     for (; i < out.length; ) {
@@ -783,8 +783,8 @@
       else if ("img" in p) h += `<img src="${escA(p.img.src)}"${p.img.from ? ` data-from="${escA(p.img.from)}"` : ""}>`, i++;
       else {
         let t = "";
-        for (let q = out[i]; i < out.length && isChar(q) && q.f === p.f && q.s === p.s; q = out[++i]) t += q.c;
-        t = escT(t), p.f & BIT.hl && (t = `<mark>${t}</mark>`), p.f & BIT.ul && (t = `<u>${t}</u>`), p.f & BIT.i && (t = `<i>${t}</i>`), p.f & BIT.b && (t = `<b>${t}</b>`), p.s && (t = `<span style="${escA(p.s)}">${t}</span>`), h += t;
+        for (let q = out[i]; i < out.length && isChar(q) && q.f === p.f && q.s === p.s; q = out[++i]) t += isSp(q) ? hardSpace(out, i) ? "" : " " : q.c;
+        t = escT(t).replace(/\u0001/g, "&nbsp;"), p.f & BIT.hl && (t = `<mark>${t}</mark>`), p.f & BIT.ul && (t = `<u>${t}</u>`), p.f & BIT.i && (t = `<i>${t}</i>`), p.f & BIT.b && (t = `<b>${t}</b>`), p.s && (t = `<span style="${escA(p.s)}">${t}</span>`), h += t;
       }
     }
     return h;
@@ -892,8 +892,12 @@
       !b || !hit || (hit.ed.toggle(hit.f, b.dataset.k), sfx("tap"), placeFmt());
     }), document.addEventListener("selectionchange", () => requestAnimationFrame(placeFmt)), visualViewport?.addEventListener("resize", () => FMT.hidden || placeFmt()), visualViewport?.addEventListener("scroll", () => FMT.hidden || placeFmt()), typeof BUS < "u" && BUS.on("view", () => FMT && (FMT.hidden = !0)));
   }
+  var ATTACHED = /* @__PURE__ */ new WeakMap();
   function attach(root, o) {
-    let fieldIn = (t) => {
+    ATTACHED.get(root)?.abort();
+    let ac = new AbortController();
+    ATTACHED.set(root, ac);
+    let on2 = (type, f) => root.addEventListener(type, f, { signal: ac.signal }), fieldIn = (t) => {
       let f = t?.closest?.(o.field);
       return f && root.contains(f) ? f : null;
     }, changed2 = (f) => o.changed?.(f), H = /* @__PURE__ */ new WeakMap(), hist = (f) => H.get(f) ?? (H.set(f, { u: [], r: [], t: 0, k: "" }), H.get(f));
@@ -939,7 +943,7 @@
       }
       f.innerHTML = write(out), select(f, c), pend = null;
     }
-    root.addEventListener("beforeinput", (e) => {
+    on2("beforeinput", (e) => {
       let f = fieldIn(e.target);
       if (!f) return;
       let t = e.inputType || "";
@@ -951,13 +955,13 @@
         return;
       }
       t !== "insertCompositionText" && snap(f, /^(insertText|deleteContent(Backward|Forward))$/.test(t) ? "type" : "edit");
-    }), root.addEventListener("compositionstart", (e) => snap(fieldIn(e.target), "type")), root.addEventListener("compositionend", (e) => {
+    }), on2("compositionstart", (e) => snap(fieldIn(e.target), "type")), on2("compositionend", (e) => {
       let f = fieldIn(e.target);
       f && setTimeout(() => (typed(f), changed2(f)));
-    }), root.addEventListener("input", (e) => {
+    }), on2("input", (e) => {
       let f = fieldIn(e.target);
       f && !e.isComposing && pend && typed(f);
-    }), root.addEventListener("pointerdown", () => pend = null), root.addEventListener("focusout", () => pend = null), root.addEventListener("keydown", (e) => {
+    }), on2("pointerdown", () => pend = null), on2("focusout", () => pend = null), on2("keydown", (e) => {
       let f = fieldIn(e.target);
       if (!f) return;
       let fmt = [["cd.bold", "b"], ["cd.italic", "i"], ["cd.underline", "ul"], ["cd.mark", "hl"]].find(([id]) => KEYS.is(e, id));
@@ -970,7 +974,7 @@
         return;
       }
       /^(Arrow|Home|End|Page)/.test(e.key) && (pend = null);
-    }), root.addEventListener("paste", (e) => {
+    }), on2("paste", (e) => {
       let f = fieldIn(e.target);
       if (!f) return;
       e.preventDefault(), snap(f, "edit");
@@ -978,7 +982,7 @@
       if (files.length && o.files?.(files, f)) return changed2(f);
       let html = e.clipboardData?.getData("text/html");
       html ? document.execCommand("insertHTML", !1, clean(html)) : document.execCommand("insertText", !1, e.clipboardData?.getData("text/plain") || ""), o.pasted?.(f), changed2(f);
-    }), root.addEventListener("drop", (e) => {
+    }), on2("drop", (e) => {
       let f = fieldIn(e.target);
       if (!f) return;
       let files = [...e.dataTransfer?.files ?? []];
@@ -991,7 +995,9 @@
       e.preventDefault();
       let pos = document.caretRangeFromPoint?.(e.clientX, e.clientY);
       f.focus(), pos && (getSelection()?.removeAllRanges(), getSelection()?.addRange(pos)), o.files?.(files, f) && changed2(f);
-    }), fmtBar(), ROOTS.push({ root, sel: o.field, ed });
+    }), fmtBar();
+    for (let i = ROOTS.length - 1; i >= 0; i--) ROOTS[i].root === root && ROOTS.splice(i, 1);
+    ROOTS.push({ root, sel: o.field, ed });
     for (let i = ROOTS.length - 1; i >= 0; i--) !ROOTS[i].root.isConnected && ROOTS[i].root !== root && ROOTS.splice(i, 1);
     return ed;
   }

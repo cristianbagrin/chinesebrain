@@ -6,7 +6,7 @@
 // Web Push by hand on Web Crypto (no dependencies): VAPID (RFC 8292, ES256) and aes128gcm payloads (RFC 8291).
 // Keys: VAPID_PUBLIC (base64url, 65 bytes uncompressed P-256) and VAPID_PRIVATE (base64url, the 32-byte `d`), both
 // secrets; `node scripts/vapid.mjs` makes a pair.
-import { merge, met, left, dayOf, addDays, type Day } from './habit.ts';
+import { merge, met, left, dayOf, addDays, walk, type Day } from './habit.ts';
 
 type Stmt = { bind(...v: unknown[]): Stmt; first<T>(): Promise<T | null>; all<T>(): Promise<{ results: T[] }>; run(): Promise<unknown> };
 export type Env = { CBP: { prepare(sql: string): Stmt }; VAPID_PUBLIC?: string; VAPID_PRIVATE?: string; SUPPORT?: string };
@@ -145,15 +145,20 @@ export async function nudge(env: Env, o: { now?: number; force?: boolean } = {})
   const day = today(now);
   const row = await env.CBP.prepare('SELECT data FROM habit WHERE day = ?').bind(day).first<{ data: string }>();
   const d = row ? (JSON.parse(row.data) as Day & { low?: boolean; done?: boolean }) : null;
-  // the day before ended as a miss when nothing reported it done: the board sends `low` with today's report, but a day
-  // it never saw still lowers the bar
-  const low = d?.low ?? false;
+  // the bar after a miss: the board sends `low` with today's report; a day it hasn't reported yet gets it from the log
+  // (the habit's own walk over the days before: a missed day lowers the bar, a rest day doesn't)
+  let low = d?.low;
+  if (low == null) {
+    const { results } = await env.CBP.prepare('SELECT day, data FROM habit WHERE day >= ? AND day < ?').bind(addDays(day, -60), day).all<{ day: string; data: string }>();
+    low = walk(Object.fromEntries(results.map((r) => [r.day, JSON.parse(r.data) as Day])), day).low;
+  }
   const last = await meta<{ day: string }>(env, 'job.nudge');
   if (!o.force && (d?.done || last?.day === day)) return { day, skipped: d?.done ? 'done' : 'sent' };
   const { results: subs } = await env.CBP.prepare('SELECT endpoint, p256dh, auth FROM push_subs').all<Sub>();
   const body = left(d, low);
   const sent: number[] = [];
   for (const s of subs) sent.push(await send(env, s, { title: 'Chinese', body, tag: 'nudge', url: '/plus' }).catch(() => 0));
-  await env.CBP.prepare('INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v').bind('job.nudge', JSON.stringify({ day, at: new Date(now).toISOString(), body, sent })).run();
+  // a forced try isn't the day's nudge: the evening's own still goes
+  if (!o.force) await env.CBP.prepare('INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v').bind('job.nudge', JSON.stringify({ day, at: new Date(now).toISOString(), body, sent })).run();
   return { day, body, sent };
 }

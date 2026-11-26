@@ -1178,7 +1178,7 @@ const PLUS_CSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; styl
 const MOVED = { '/welcome': '/brain/guide#welcome', '/brain/welcome': '/brain/guide#welcome', '/privacy': '/brain/privacy', '/dashboard': '/brain/dashboard', '/guide': '/brain/guide', '/whats-new': '/brain/whats-new' };
 
 export default {
-  // twice a day (wrangler.jsonc), Taipei time. Nothing polls: each run does what is due and stops, and only work that
+  // every half hour (one trigger, wrangler.jsonc): the evening nudge; the night jobs at two hours, Taipei time. Nothing polls: each run does what is due and stops, and only work that
   // needs judging calls Claude.
   //   10 pm  the nightly (src/cbp/nightly.ts): Chinese Brain marks, the finished test filed, cards, the day's test;
   //          then, if it filed a monthly test, that test's lessons

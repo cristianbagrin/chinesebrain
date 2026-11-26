@@ -222,9 +222,9 @@ const cardCss = (t: NoteType) => t.css.replace(/@import[^;]+;/g, '');
 const XICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
 const OVER = `:host{display:block}.card{background:transparent!important;min-height:100%;box-sizing:border-box}hr{border:0;border-top:1px solid #E4E6EC;margin:22px 0}
 a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn))){display:none}
-img{max-width:100%!important;max-height:calc(min(38vh,400px) / var(--rw-z,1) / var(--rw-z2,1))!important;width:auto!important;height:auto!important;object-fit:contain!important}
+img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!important;height:auto!important;object-fit:contain!important}
 .cbp-pics{display:flex!important;justify-content:center;align-items:center;gap:10px;margin-inline:auto;max-width:100%}
-.cbp-pics>img{flex:0 1 auto;min-width:0;margin:0!important;max-width:calc((100% - (var(--n) - 1) * 10px) / var(--n))!important;max-height:calc(min(30vh,320px) / var(--rw-z,1) / var(--rw-z2,1))!important}`;
+.cbp-pics>img{flex:0 1 auto;min-width:0;margin:0!important;max-width:calc((100% - (var(--n) - 1) * 10px) / var(--n))!important;max-height:min(30vh,320px)!important}`;
 /** Pictures side by side: two or three in a row (only spaces between them) share one line, each shown whole, instead of
  *  stacking and pushing the card past the screen. The note stays as it is; only what's drawn changes. */
 function sideBySide(root: ParentNode) {
@@ -278,7 +278,8 @@ function fitCard(host: HTMLElement, root: ShadowRoot) {
   root.querySelectorAll('img').forEach((i) => i.complete || i.addEventListener('load', fit, { once: true }));
   (host as HTMLElement & { _fit?: () => void })._fit = fit;
 }
-addEventListener('resize', () => document.querySelectorAll<HTMLElement>('.rw-card .host').forEach((h) => (h as HTMLElement & { _fit?: () => void })._fit?.()));
+const refit = (h: Element | null | undefined) => (h as (HTMLElement & { _fit?: () => void }) | null | undefined)?._fit?.();
+addEventListener('resize', () => document.querySelectorAll<HTMLElement>('.rw-card .host').forEach(refit));
 
 // ---------- views inside the tab ----------
 type View = 'review' | 'browse' | 'designs';
@@ -395,7 +396,8 @@ function showReview(): void {
     autoplayed = side;
     if (SOUND.autoplay()) playAll(root);
   }
-  if (RV.py) void RUBY.set(root.querySelector('.card'), true);
+  // the pinyin makes the card taller once it's drawn (the lexicon loads first): it's fitted again then
+  if (RV.py) void RUBY.set(root.querySelector('.card'), true).then(() => refit(host));
   if (!sitting) {
     sitting = true;
     BUS.emit('reviews:start');
@@ -486,7 +488,8 @@ async function act(a: string) {
   if (a === 'py') {
     RV.py = !RV.py;
     sfx('tap');
-    return void RUBY.set($('.host', app)?.shadowRoot?.querySelector('.card'), RV.py);
+    const host = $('.host', app);
+    return void RUBY.set(host?.shadowRoot?.querySelector('.card'), RV.py).then(() => refit(host));
   }
   if (a === 'play') return playAll($('.host', app)?.shadowRoot);
   if (a === 'edit') return editDialog(S.notes.get(c.nid)!);
@@ -763,10 +766,15 @@ function editor(host: HTMLElement, note0: Note, onClose?: () => void) {
   EDITOR.attach(host, {
     field: '.rv-f',
     changed: () => (save(), paintSnd()),
-    files: (files, f) => (void upload(files, f, save), true),
+    // only picture files are taken; any other file pastes as the browser would (its name as text)
+    files: (files, f) => files.some((x) => /^image\//.test(x.type)) && (void upload(files, f, save), true),
     pasted: (f) => void keepPics(f, save),
   });
-  host.addEventListener('input', () => (save(), paintSnd()));
+  // one listener per host, even when the same host gets an editor again (Browse's Note closed and opened)
+  const h = host as HTMLElement & { _edAc?: AbortController };
+  h._edAc?.abort();
+  h._edAc = new AbortController();
+  host.addEventListener('input', () => (save(), paintSnd()), { signal: h._edAc.signal });
   host.querySelector<HTMLElement>('[data-e="del"]')!.onclick = async () => {
     clearTimeout(saveT);
     await deleteNote(note.id);
@@ -1351,7 +1359,11 @@ function perDay(ret: number) {
 }
 const saveConf = async (name: string, patch: Partial<Conf>) => {
   const cur = conf();
-  await change(name, [['conf', cur.id, { ...cur, ...patch }]]);
+  try {
+    await change(name, [['conf', cur.id, { ...cur, ...patch }]]);
+  } catch (e) {
+    toast(esc((e as Error).message || 'That didn’t save.'));
+  }
 };
 const fmtDay = (ms: number) => new Date(ms).toLocaleDateString([], { month: 'short', day: 'numeric' });
 LAB.row('rv-new', 'Reviews', {
@@ -1678,7 +1690,8 @@ BUS.on('view', (v: string, prev: string) => {
 BUS.on('lab', (id: string) => {
   if (id !== 'pinyin' || view !== 'review' || !RV.cur) return;
   RV.py = RUBY.shown();
-  void RUBY.set($('.host', app)?.shadowRoot?.querySelector('.card'), RV.py);
+  const host = $('.host', app);
+  void RUBY.set(host?.shadowRoot?.querySelector('.card'), RV.py).then(() => refit(host));
 });
 // the collection loads with the board, so the dot shows from any page
 start();
