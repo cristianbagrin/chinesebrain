@@ -1,0 +1,14 @@
+/* ---------- Noodle, the long-necked kid (noodle.js). Owner: Noodle.
+   A 64×56 canvas drawn at a whole number of device pixels per art pixel (noodle.js sets the size), so: pixelated.
+   Only Noodle himself takes a press (on Today); the Reviews corner takes none. ---------- */
+.nd{display:block;image-rendering:pixelated;image-rendering:crisp-edges;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+html[data-noodle="off"] .nd{display:none}
+/* Today: standing in the forest, left of this month's trunk (fun.js puts it at 58%), or in the Habit's slot */
+#companion>.nd-forest{position:absolute;left:34%;transform:translateX(-50%);z-index:1;cursor:pointer;touch-action:manipulation}
+#today-buddy>.nd-slot{margin:0 auto;cursor:pointer;touch-action:manipulation}
+/* Reviews: bottom left, outside the card's 760px column, under every panel and toast; none where there's no room */
+.nd-corner{position:fixed;left:max(24px,env(safe-area-inset-left,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:1;pointer-events:none;display:none}
+.nd-corner.on{display:block}
+@media (max-width:1079px),(max-height:520px){.nd-corner.on{display:none}}
+/* the end screen on a phone: he comes on to dance, under the buttons */
+.nd-end{margin:var(--s5) auto 0;pointer-events:none}
