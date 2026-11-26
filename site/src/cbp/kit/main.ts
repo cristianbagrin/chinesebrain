@@ -9,8 +9,14 @@ import { HOLD } from './hold.ts';
 import { RUBY } from './ruby.ts';
 import { KEYS } from './keys.ts';
 import { SETTINGS } from './settings.ts';
+// Habit: the habit's rules (day done, rest day, never miss twice, reviews a day), shared with the server
+import * as HABIT from '../habit.ts';
+// (end Habit)
 
 Object.assign(window, { SOUND, HOLD, RUBY, KEYS, SETTINGS });
+// Habit
+Object.assign(window, { HABIT });
+// (end Habit)
 
 // leaving a page silences it: a voice never carries over into the next one
 declare const BUS: { on(e: string, f: (...a: any[]) => void): void };

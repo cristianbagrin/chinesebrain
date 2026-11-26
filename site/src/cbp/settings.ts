@@ -19,6 +19,9 @@ export const SETTINGS: Record<string, { options: string[]; def: string }> = {
   'grade-model': { options: MODEL, def: 'sonnet' },
   'essay-model': { options: MODEL, def: 'opus' },
   'tutor-model': { options: MODEL, def: 'sonnet' },
+  // Habit: the evening nudge's time (Taipei), every half hour 5 pm to 11:30 pm, or off (src/cbp/push.ts)
+  nudge: { options: ['off', ...Array.from({ length: 14 }, (_, i) => `${17 + (i >> 1)}:${i % 2 ? '30' : '00'}`)], def: '21:00' },
+  // (end Habit)
 };
 export type Saved = { values: Record<string, string>; keys: Record<string, string> };
 

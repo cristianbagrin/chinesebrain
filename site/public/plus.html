@@ -44,12 +44,18 @@
   <!-- Today: each block is a direct child of .today so today.css places them (grid areas) -->
   <section class="view" id="view-today" role="tabpanel" aria-labelledby="tab-today">
     <div class="today">
+      <!-- Habit: today's steps and the streak (habit.js) -->
+      <section class="habit-steps" aria-label="Today" id="habit-steps"></section>
+      <!-- (end Habit) -->
       <section class="quiz" aria-label="Test" id="quiz" hidden></section>
       <section class="write" aria-label="Today's essay" id="write"></section>
       <section class="next" aria-label="Next up" id="next"></section>
       <section class="improve-today" aria-label="To improve" id="improve-today"></section>
       <section class="habit-today" aria-label="Habit" id="habit-today"></section>
       <div class="companion" id="companion" aria-hidden="true"></div>
+      <!-- Habit: an empty slot by the tree for the character (noodle.js) -->
+      <div class="today-buddy" id="today-buddy"></div>
+      <!-- (end Habit) -->
     </div>
   </section>
   <section class="view" id="view-cards" role="tabpanel" aria-labelledby="tab-cards" hidden></section>
