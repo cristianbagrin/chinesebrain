@@ -130,7 +130,7 @@ html{--hl-rgb:255 210 0;--es-hl-a:.3}
 .es-tf rt{font-size:max(.42em,var(--fs-s));color:var(--ink-3)}
 .es-tn{font-size:var(--fs-m);line-height:1.5;color:var(--ink-2)}
 .es-tn .zh{font-size:max(1.1em,var(--fs-zh));color:var(--ink)}
-.es-tg{font-size:var(--fs-s);line-height:1.5;color:var(--ink-3)}
+.es-tg{font-size:var(--fs-m);line-height:1.5;color:var(--ink-2)}
 .es-tg .zh{font-family:var(--zh);font-size:var(--fs-zh);color:var(--ink-2);margin-right:4px}
 .es-add{margin-top:var(--s2);display:inline-flex;align-items:center;gap:6px;min-height:40px;border:0;background:var(--ink);color:var(--on-ink);border-radius:999px;padding:7px 16px;font-size:var(--fs-s);font-weight:550;cursor:pointer;transition:transform .15s,background .15s,color .15s}
 @media (hover:hover){.es-add:hover{transform:translateY(-1px)}}

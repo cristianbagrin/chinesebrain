@@ -137,11 +137,16 @@ export async function essay(env: Env) {
     if (lex && gl) {
       const made: [string, string, string, string][] = [];
       for (const c of fixCards(text, day, v.marks, reviews)) {
+        // a one-character blank (一 in 一回家就) takes the word after it, so the card is about the phrase, not the character
+        if ([...c.word].length === 1) {
+          const k = c.sentence.indexOf(c.word), next = PY.segment(lex, c.sentence.slice(k + 1).match(/^[㐀-鿿]+/)?.[0] ?? '')[0];
+          if (next) c.word += next;
+        }
         const id = cardId(c.word);
         if (await getDoc(env as never, 'cards', id)) continue;
         const card = [`word: ${c.word}`, `pinyin: ${reading(lex, gl, c.word).py}`, `meaning: ${c.why}`, `mine: ${c.sentence} | ${PY.sentence(lex, c.sentence)} | `].join('\n');
         await putDoc(env, 'cards', id, { word: c.word, text: card, src: 'fix', parent: null, chat: [], carded: null, filed: null, knows: {}, made: new Date().toISOString(), model: 'code', making: null, err: null, fix: { day, p: c.p, mine: c.mine, nat: c.nat } });
-        made.push([c.word, reading(lex, gl, c.word).py, c.why, 'life']);
+        made.push([c.word, reading(lex, gl, c.word).py, c.p, 'life']);
       }
       if (made.length) {
         const board = ((await getDoc(env as never, 'board', 'data')) ?? {}) as Record<string, unknown>;

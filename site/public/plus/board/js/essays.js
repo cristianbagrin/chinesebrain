@@ -265,7 +265,7 @@ async function ES_fixHTML(s){
     else if(c.nodeName!=='RT') walk(c);
   }};
   walk(box);
-  box.querySelectorAll('.rbw').forEach(w=>{if(!w.querySelector('ruby.d'))w.querySelectorAll('rt').forEach(r=>r.remove());});
+  box.querySelectorAll('.rbw').forEach(w=>{if(!w.querySelector('ruby.d'))w.replaceWith(document.createTextNode([...w.querySelectorAll('ruby')].map(r=>r.firstChild.nodeValue).join('')));});
   return box.innerHTML;
 }
 // the meanings of the words that changed (a word mark: of the Chinese it gives)
