@@ -105,7 +105,6 @@ function HB_heat(full,m,W0,cap){
   if(!heads.length||c1>3){const d0=add(first,7*from);heads.unshift(`<span style="grid-column:1"${d0.getMonth()===T.getMonth()?' class="now"':''}>${MO[from?d0.getMonth():0]}</span>`);}
   return `<div class="hm-in" style="--w:${n};--wt:${total}" data-cols="${n}" data-y="${y}">
     <div class="hm-mo" aria-hidden="true">${heads.join('')}</div>
-    <div class="hm-wd" aria-hidden="true"><span>M</span><span></span><span>W</span><span></span><span>F</span><span></span><span></span></div>
     <div class="hm-g" role="img" aria-label="Every day this year">${cells.join('')}</div></div>`;
 }
 
@@ -118,7 +117,7 @@ function HB_state(){
 function HB_cap(el){
   const k=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--k'))||.92, w=el.clientWidth;
   if(!w) return 0;
-  return Math.max(8,Math.floor((w-(w>560?26*k:0))/(13*k)));
+  return Math.max(8,Math.floor((w-4*k)/(13*k)));
 }
 let HB_capW=0;
 addEventListener('resize',()=>{const el=document.getElementById('habit-today');if(el&&el.clientWidth!==HB_capW){HB_capW=el.clientWidth;HB_soon();}},{passive:true});

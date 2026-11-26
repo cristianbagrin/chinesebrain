@@ -44,6 +44,10 @@ const REDUCED=()=>matchMedia('(prefers-reduced-motion:reduce)').matches;
                          still due today
      'reviews:done'      today's queue just emptied (fires once a day, when the last due card is answered)
      'essay:written' ({date, chars})  today's essay was saved with text in it (write.js; once per save that grows it)
+     'essay:writing'     he is typing in today's essay (write.js, on input); 'essay:left' he stepped away from it (blur,
+                         tab hidden, pagehide): habit.js counts the essay only then
+     'place'             the place inside a page changed (Reviews' Review/Browse, the word on the Cards page): Back and
+                         Forward (kit/go.ts) note it
    LAB: the choices in Settings (kit/settings.ts draws the panel); each sets data-<id> on <html> so CSS can switch too.
      LAB.define(id,label,[[value,label]…],default,group,{scope:'account'})  account choices are saved to his account
      (GET/POST /api/plus/settings) and cached here as 'lab-acct'; the rest stay on this device as lab:<id>.

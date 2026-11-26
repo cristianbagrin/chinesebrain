@@ -3,7 +3,7 @@
 //   SOUND     one voice at a time (sound.ts)            HOLD   press and hold, with a fill (hold.ts)
 //   RUBY      pinyin above the characters (ruby.ts)      KEYS   every shortcut, his to change (keys.ts)
 //   SETTINGS  the one Settings panel (settings.ts); the choices themselves are LAB's (core.js)
-//   go.ts     T, C, R, B open Today, Cards, Reviews, Browse from any page
+//   go.ts     T, C, R, B open Today, Cards, Reviews, Browse from any page; ⌘[ ⌘] go back and forward
 // The type tokens and the styles for these are in board/css/base.css and board/css/kit.css.
 import { SOUND } from './sound.ts';
 import { HOLD } from './hold.ts';

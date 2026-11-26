@@ -5,12 +5,12 @@
 /* ---------- Settings (kit/settings.ts): a window in the middle of the screen, a sheet from the bottom on a phone.
    The pattern for every dialog in Plus: a native modal <dialog class="st">, a quiet dim behind, the page's ground inside,
    white rounded groups of one-line rows with hairlines between, a title, the × top right. ---------- */
-dialog.st{padding:0;border:0;max-width:none;max-height:none;width:min(780px,calc(100vw - 48px));height:min(620px,calc(100dvh - 64px));border-radius:16px;background:var(--bg);color:var(--ink);overflow:hidden;box-shadow:0 24px 70px rgba(21,23,28,.20),0 0 0 1px var(--hair);
+dialog.st{padding:0;border:0;max-width:none;max-height:none;width:min(780px,calc(100vw - 48px));height:min(620px,calc(100dvh - 64px));border-radius:var(--r-l);background:var(--bg);color:var(--ink);overflow:hidden;box-shadow:var(--sh-dlg);
   opacity:0;transform:translateY(8px) scale(.98);transition:opacity .18s var(--ease),transform .22s var(--ease)}
 dialog.st[open]{display:grid;grid-template-columns:200px minmax(0,1fr)}
 dialog.st.on{opacity:1;transform:none}
 dialog.st.out{opacity:0;transform:scale(.985);transition-duration:.15s;transition-timing-function:ease-in;pointer-events:none}
-dialog.st::backdrop{background:rgba(21,23,28,.22);opacity:0;transition:opacity .2s ease}
+dialog.st::backdrop{background:var(--dim);opacity:0;transition:opacity .2s ease}
 dialog.st.on::backdrop{opacity:1}
 dialog.st:focus-visible{outline:none}
 :where(.st) button{font:inherit;color:inherit}
@@ -24,27 +24,31 @@ dialog.st:focus-visible{outline:none}
 .st-toc{display:flex;flex-direction:column;gap:2px}
 .st-ti{display:flex;align-items:center;gap:10px;flex:none;min-height:40px;padding:0 10px;border:0;border-radius:10px;background:none;color:var(--ink-2);font-size:var(--fs-s);font-weight:500;text-align:left;cursor:pointer;white-space:nowrap;transition:background .12s,color .12s,transform .1s}
 .st-ti:active{transform:scale(.98)}
-.st-ti[aria-current="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px var(--shade),0 0 0 1px var(--hair)}
+.st-ti[aria-current="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--sh-1)}
 .st-gl{width:18px;height:18px;flex:none;color:var(--ink-3)}
 .st-ti[aria-current="true"] .st-gl{color:var(--ink)}
 
-/* one section */
-.st-main{display:flex;flex-direction:column;min-width:0;min-height:0}
-.st-head{display:flex;align-items:center;gap:var(--s2);padding:16px 14px 10px 28px}
-.st-head h3{flex:1;margin:0;font-size:var(--fs-l);font-weight:600;line-height:var(--lh-tight);letter-spacing:-.015em}
-.st-reset{border:0;background:none;border-radius:8px;padding:6px 10px;font-size:var(--fs-s);color:var(--ink-3);cursor:pointer}
-.st-x{display:grid;place-items:center;width:36px;height:36px;flex:none;border:0;border-radius:50%;background:none;color:var(--ink-3);cursor:pointer;transition:background .12s,color .12s}
+/* the page: every section, one under the other; the × floats top right */
+.st-main{position:relative;display:flex;flex-direction:column;min-width:0;min-height:0}
+.st-head{position:absolute;z-index:2;top:12px;right:12px}
+.st-now{display:none}
+.st-x{display:grid;place-items:center;width:36px;height:36px;flex:none;border:0;border-radius:50%;background:var(--bg);color:var(--ink-3);cursor:pointer;transition:background .12s,color .12s}
 .st-x svg{width:18px;height:18px}
-.st-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:4px 28px 28px}
+.st-body{position:relative;flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:22px 28px 28px}
+.st-sec+.st-sec{margin-top:var(--s7)}
+.st-sh{display:flex;align-items:baseline;gap:var(--s3);margin:0 4px var(--s3);padding-right:44px}
+.st-sh h3{margin:0;font-size:var(--fs-l);font-weight:600;line-height:var(--lh-tight);letter-spacing:-.015em}
+.st-reset{border:0;background:none;border-radius:8px;padding:4px 8px;margin:-4px 0;font-size:var(--fs-s);color:var(--ink-3);cursor:pointer}
+.st-sec+.st-sec .st-sh{padding-right:0}
 
 /* groups: white, rounded, a hairline between rows (from the label's edge) */
-.st-grp{background:var(--surface);border-radius:var(--r);box-shadow:0 0 0 1px var(--hair),0 1px 2px var(--shade)}
+.st-grp{background:var(--surface);border-radius:var(--r);box-shadow:var(--sh-1)}
 .st-grp>*{position:relative}
 .st-grp>*+*::before{content:"";position:absolute;top:0;left:16px;right:0;border-top:1px solid var(--hair)}
 .st-grp>:first-child,.st-grp>:first-child>button.st-row:first-child{border-radius:var(--r) var(--r) 0 0}
 .st-grp>:last-child,.st-grp>:last-child>button.st-row:last-child{border-radius:0 0 var(--r) var(--r)}
-.st-cap{margin:22px 4px 8px;font-size:var(--fs-s);font-weight:600;line-height:var(--lh-tight);color:var(--ink-3)}
-.st-body>.st-cap:first-child{margin-top:4px}
+.st-cap{margin:22px 4px 8px;font-size:var(--fs-s);font-weight:500;line-height:var(--lh-snug);color:var(--ink-3)}
+.st-sec>.st-cap:nth-child(2){margin-top:4px}
 /* one line per choice: the label left, its control right */
 .st-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:50px;padding:6px 12px 6px 16px;margin:0}
 .st-l{font-size:var(--fs-s);line-height:var(--lh-snug);color:var(--ink);min-width:0}
@@ -64,8 +68,8 @@ button.st-row:focus-visible{outline-offset:-2px}
 .st-tg:disabled{opacity:.5}
 /* two or three options: a segmented control */
 .st-o{flex:none;display:inline-flex;gap:2px;padding:3px;border-radius:999px;background:var(--wash)}
-.st-o button{border:0;background:none;border-radius:999px;padding:5px 12px;font-size:var(--fs-s);font-weight:500;line-height:var(--lh-snug);color:var(--ink-3);cursor:pointer;transition:background .15s,color .15s}
-.st-o button[aria-checked="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px var(--shade),0 0 0 .5px var(--hair)}
+.st-o button{border:0;background:none;border-radius:999px;padding:5px 14px;font-size:var(--fs-s);font-weight:500;line-height:var(--lh-snug);color:var(--ink-3);cursor:pointer;transition:background .15s,color .15s}
+.st-o button[aria-checked="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--sh-1)}
 .st-sz button{padding:3px 12px}
 .sz-normal{font-size:var(--fs-s)}
 .sz-larger{font-size:var(--fs-m)}
@@ -101,22 +105,28 @@ button.st-row:focus-visible{outline-offset:-2px}
 
 /* a phone: a sheet from the bottom; the sections a strip under the title; drag the top down to send it away */
 @media (max-width:640px){
-  dialog.st{width:100%;height:92dvh;margin:auto 0 0;border-radius:18px 18px 0 0;box-shadow:0 -8px 40px rgba(21,23,28,.16);opacity:1;transform:translateY(100%);transition:transform .45s cubic-bezier(.32,.72,0,1)}
+  dialog.st{width:100%;height:92dvh;margin:auto 0 0;border-radius:var(--r-sheet) var(--r-sheet) 0 0;box-shadow:0 -8px 40px rgba(21,23,28,.16);opacity:1;transform:translateY(100%);transition:transform .45s var(--sheet)}
   dialog.st[open]{display:flex;flex-direction:column}
   dialog.st.on{transform:none}
-  dialog.st.out{opacity:1;transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1)}
+  dialog.st.out{opacity:1;transform:translateY(100%);transition:transform .3s var(--sheet)}
   dialog.st.drag{transition:none}
   .st-main{display:contents}
   .st-grab{display:block;order:0;flex:none;height:20px;touch-action:none;position:relative}
   .st-grab::before{content:"";position:absolute;top:7px;left:50%;width:36px;height:5px;margin-left:-18px;border-radius:3px;background:var(--wash-2)}
-  .st-head{order:1;padding:0 8px 8px 16px;touch-action:none}
+  .st-head{position:static;order:1;display:flex;align-items:center;padding:0 8px 8px 16px;touch-action:none}
+  .st-now{display:block;flex:1;margin:0;font-size:var(--fs-l);font-weight:600;line-height:var(--lh-tight);letter-spacing:-.015em}
+  .st-sh{padding-right:0}
   .st-side{order:2;flex:none;padding:0 0 12px;border:0;overflow:visible}
   .st-side h2{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
   .st-toc{flex-direction:row;overflow-x:auto;scrollbar-width:none;padding:2px 16px;gap:4px}
   .st-toc::-webkit-scrollbar{display:none}
   .st-ti{min-height:36px;padding:0 14px;border-radius:999px}
   .st-ti .st-gl{display:none}
-  .st-body{order:3;padding:0 16px calc(24px + env(safe-area-inset-bottom,0px))}
+  .st-body{order:3;padding:4px 16px calc(24px + env(safe-area-inset-bottom,0px))}
+  .st-sec+.st-sec{margin-top:var(--s6)}
+  .st-o button{padding:5px 10px}
+  .st-row{gap:var(--s2)}
+  .st-sh h3{font-size:var(--fs-m)}
   .st-row{padding:6px 10px 6px 14px}
   .st-grp>*+*::before{left:14px}
 }

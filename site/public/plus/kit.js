@@ -292,6 +292,9 @@
       ["go.cards", "Cards", "c"],
       ["go.reviews", "Reviews", "r"],
       ["go.browse", "Browse", "b"],
+      // the pages he was on, like a browser's back and forward (go.ts)
+      ["back", "Back", "mod+["],
+      ["forward", "Forward", "mod+]"],
       // Tutor: the pane from the right, open or away (tutor/main.ts)
       ["tutor", "Tutor", "a"]
     ]),
@@ -323,14 +326,13 @@
       ["cd.voice", "Play the sentence", "v"],
       ["cd.images", "Pictures on the web", "i"]
     ]),
-    ...D("Cards", "field", [
-      ["cd.add", "Add and move on", "mod+shift+enter"],
-      ["cd.mark", "Highlight", "mod+shift+h"]
-    ]),
+    ...D("Cards", "field", [["cd.add", "Add and move on", "mod+shift+enter"]]),
+    ...D("Card fields", "field", [["cd.mark", "Highlight", "mod+shift+h"]]),
     // Cards: add and stay, Gemini, rich text in the card's fields
     ...D("Cards", void 0, [["cd.gemini", "Gemini", "g"]]),
-    ...D("Cards", "field", [
-      ["cd.addstay", "Add and stay", "mod+enter"],
+    ...D("Cards", "field", [["cd.addstay", "Add and stay", "mod+enter"]]),
+    // a card's fields, wherever they're edited (Cards' Add, Reviews' Edit): kit/editor.ts
+    ...D("Card fields", "field", [
       ["cd.bold", "Bold", "mod+b"],
       ["cd.italic", "Italic", "mod+i"],
       ["cd.underline", "Underline", "mod+u"]
@@ -458,7 +460,7 @@
   (document.getElementById("settings") ?? document.body.lastElementChild).replaceWith(dlg);
   dlg.isConnected || document.body.append(dlg);
   btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>';
-  var sec = "Everyday", listening = "", isSwitch = (d) => d.options.length === 2 && d.options[0][0] === "on" && d.options[1][0] === "off", sw = (attr, on2, label) => `<div class="st-row"><span class="st-l">${esc(label)}</span><button type="button" role="switch" class="st-tg" aria-checked="${on2}" aria-label="${esc(label)}" ${attr}><i></i></button></div>`;
+  var sec = "Everyday", listening = "", REDUCED = matchMedia("(prefers-reduced-motion: reduce)"), isSwitch = (d) => d.options.length === 2 && d.options[0][0] === "on" && d.options[1][0] === "off", sw = (attr, on2, label) => `<div class="st-row"><span class="st-l">${esc(label)}</span><button type="button" role="switch" class="st-tg" aria-checked="${on2}" aria-label="${esc(label)}" ${attr}><i></i></button></div>`;
   function row(d) {
     if (isSwitch(d)) return sw(`data-x="${d.id}" data-v="${d.v === "on" ? "off" : "on"}"`, d.v === "on", d.label);
     if (d.options.length > 3) return `<div class="st-row"><label class="st-l" for="st-${d.id}">${esc(d.label)}</label><span class="st-selw"><select class="st-sel" id="st-${d.id}" data-xs="${d.id}">${d.options.map(([v, l]) => `<option value="${esc(v)}"${d.v === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></span></div>`;
@@ -487,29 +489,56 @@
     ).join("");
   }
   function draw() {
-    let a = document.activeElement, keep = a && dlg.contains(a) ? a.dataset.x ?? a.dataset.key ?? a.dataset.sec ?? a.dataset.xs ?? (a.dataset.sound != null ? "sound" : a.id) : "", top = dlg.querySelector(".st-body")?.scrollTop ?? 0, by = rowsBy(), list = sections(by);
-    list.some((s) => s.id === sec) || (sec = list[0].id);
-    let cur = list.find((s) => s.id === sec);
-    dlg.innerHTML = `<div class="st-grab" aria-hidden="true"></div>
+    let a = document.activeElement, keep = a && dlg.contains(a) ? a.dataset.x ?? a.dataset.key ?? a.dataset.sec ?? a.dataset.xs ?? a.dataset.reset ?? (a.dataset.sound != null ? "sound" : a.id) : "", top = dlg.querySelector(".st-body")?.scrollTop ?? 0, by = rowsBy(), list = sections(by);
+    list.some((s) => s.id === sec) || (sec = list[0].id), dlg.innerHTML = `<div class="st-grab" aria-hidden="true"></div>
     <nav class="st-side" aria-label="Sections"><h2 id="st-title">Settings</h2><div class="st-toc">${list.map((s) => `<button type="button" class="st-ti" data-sec="${esc(s.id)}" aria-current="${s.id === sec}">${glyph(s.icon)}<span>${esc(s.label)}</span></button>`).join("")}</div></nav>
     <div class="st-main">
-      <div class="st-head"><h3>${esc(cur.label)}</h3>${changed(sec) ? '<button type="button" class="st-reset" id="st-reset">Reset</button>' : ""}<button type="button" class="st-x" id="st-close" aria-label="Close">${X}</button></div>
-      <div class="st-body">${sec === "Shortcuts" ? keysHTML() : `<div class="st-grp">${by[sec].join("")}</div>`}</div>
+      <div class="st-head"><h2 class="st-now" aria-hidden="true">Settings</h2><button type="button" class="st-x" id="st-close" aria-label="Close">${X}</button></div>
+      <div class="st-body">${list.map(
+      (s) => `<section class="st-sec" data-s="${esc(s.id)}" aria-labelledby="st-s-${esc(s.id)}"><div class="st-sh"><h3 id="st-s-${esc(s.id)}">${esc(s.label)}</h3>${changed(s.id) ? `<button type="button" class="st-reset" data-reset="${esc(s.id)}">Reset</button>` : ""}</div>${s.id === "Shortcuts" ? keysHTML() : `<div class="st-grp">${by[s.id].join("")}</div>`}</section>`
+    ).join("")}</div>
     </div>`;
     for (let r of Object.values(LAB.rows)) {
       let el2 = dlg.querySelector(`[data-row="${r.id}"]`);
       el2 && r.bind(el2);
     }
     let nb = dlg.querySelector(".st-body");
-    if (nb.scrollTop = top, keep) {
-      let q = `[data-x="${keep}"][aria-checked="true"],[data-x="${keep}"],[data-key="${keep}"],[data-sec="${keep}"],[data-xs="${keep}"]`;
+    if (nb.scrollTop = top, nb.addEventListener("scroll", spy, { passive: !0 }), keep) {
+      let q = `[data-x="${keep}"][aria-checked="true"],[data-x="${keep}"],[data-key="${keep}"],[data-sec="${keep}"],[data-xs="${keep}"],[data-reset="${keep}"]`;
       (dlg.querySelector(q) ?? (keep === "sound" ? dlg.querySelector("[data-sound]") : keep ? dlg.querySelector("#" + CSS.escape(keep)) : null) ?? dlg.querySelector(".st-x"))?.focus({ preventScroll: !0 });
     }
-    dlg.querySelector('.st-ti[aria-current="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    mark2();
   }
-  var REDUCED = matchMedia("(prefers-reduced-motion: reduce)"), closing = 0;
+  var jumping = 0;
+  function mark2() {
+    dlg.querySelectorAll(".st-ti").forEach((b) => b.setAttribute("aria-current", String(b.dataset.sec === sec)));
+    let on2 = dlg.querySelector('.st-ti[aria-current="true"]'), toc = on2?.parentElement;
+    on2 && toc && toc.scrollWidth > toc.clientWidth && toc.scrollTo({ left: on2.offsetLeft - (toc.clientWidth - on2.offsetWidth) / 2, behavior: REDUCED.matches ? "auto" : "smooth" });
+  }
+  function spy() {
+    if (jumping) return;
+    let b = dlg.querySelector(".st-body");
+    if (!b) return;
+    let all = [...b.querySelectorAll(".st-sec")], line = b.getBoundingClientRect().top + b.clientHeight / 4, cur = all[0];
+    for (let s of all) s.getBoundingClientRect().top <= line && (cur = s);
+    b.scrollTop > 0 && b.scrollTop + b.clientHeight >= b.scrollHeight - 2 && (cur = all[all.length - 1]), cur && cur.dataset.s !== sec && (sec = cur.dataset.s, mark2());
+  }
+  function jump(to, smooth) {
+    let b = dlg.querySelector(".st-body"), s = b?.querySelector(`.st-sec[data-s="${CSS.escape(to)}"]`);
+    if (!b || !s) return;
+    sec = to, mark2(), clearTimeout(jumping);
+    let y = s === b.firstElementChild ? 0 : Math.round(b.scrollTop + s.getBoundingClientRect().top - b.getBoundingClientRect().top - parseFloat(getComputedStyle(b).paddingTop));
+    if (!smooth || REDUCED.matches) {
+      jumping = 0, b.scrollTop = y;
+      return;
+    }
+    jumping = window.setTimeout(() => jumping = 0, 700), b.addEventListener("scrollend", () => (clearTimeout(jumping), jumping = 0), { once: !0 }), b.scrollTo({ top: y, behavior: "smooth" });
+  }
+  var closing = 0;
   function show(to) {
-    listening = "", to === "keys" ? sec = "Shortcuts" : to && to !== "main" && (sec = to), clearTimeout(closing), dlg.classList.remove("out"), dlg.style.transform = "", draw(), dlg.open || (dlg.showModal(), dlg.querySelector(".st-body").scrollTop = 0, requestAnimationFrame(() => dlg.classList.add("on"))), btn.setAttribute("aria-expanded", "true"), (dlg.querySelector('.st-ti[aria-current="true"]') ?? dlg.querySelector("button"))?.focus({ preventScroll: !0 });
+    listening = "", to === "keys" ? sec = "Shortcuts" : to && to !== "main" && (sec = to), clearTimeout(closing), dlg.classList.remove("out"), dlg.style.transform = "";
+    let was = dlg.open;
+    draw(), was || (dlg.showModal(), requestAnimationFrame(() => dlg.classList.add("on"))), (to || !was) && jump(sec, !1), btn.setAttribute("aria-expanded", "true"), (dlg.querySelector('.st-ti[aria-current="true"]') ?? dlg.querySelector("button"))?.focus({ preventScroll: !0 });
   }
   function hide() {
     !dlg.open || dlg.classList.contains("out") || (listening = "", dlg.classList.remove("on"), dlg.classList.add("out"), btn.setAttribute("aria-expanded", "false"), closing = window.setTimeout(() => {
@@ -535,14 +564,16 @@
       return document.getElementById("snd").click(), SND.on && setTimeout(() => sfx("stamp-known"), 60), draw();
     let s = t.closest("[data-sec]");
     if (s)
-      return s.dataset.sec === sec ? void 0 : (sfx("tap"), sec = s.dataset.sec, listening = "", dlg.querySelector(".st-body").scrollTop = 0, draw());
+      return sfx("tap"), jump(s.dataset.sec, !0);
     let k = t.closest("[data-key]");
     if (k)
       return listening = listening === k.dataset.key ? "" : k.dataset.key, sfx("tap"), draw();
     if (t.closest("#st-close")) return sfx("tap"), hide();
-    if (t.closest("#st-reset")) {
-      if (sec === "Shortcuts") KEYS2.reset();
-      else for (let id of LAB.order) LAB.defs[id].group === sec && LAB.set(id, LAB.defs[id].def);
+    let rs = t.closest("[data-reset]");
+    if (rs) {
+      let g = rs.dataset.reset;
+      if (g === "Shortcuts") KEYS2.reset();
+      else for (let id of LAB.order) LAB.defs[id].group === g && LAB.set(id, LAB.defs[id].def);
       return sfx("swish"), draw();
     }
   });
@@ -569,8 +600,8 @@
     let ti = e.target.closest?.(".st-ti");
     if (up && ti && /^Arrow(Up|Down|Left|Right)$/.test(e.key)) {
       e.preventDefault();
-      let all = [...dlg.querySelectorAll(".st-ti")], i = all.indexOf(ti) + (/Up|Left/.test(e.key) ? -1 : 1);
-      sec = all[(i + all.length) % all.length].dataset.sec, sfx("tap"), draw(), dlg.querySelector(`[data-sec="${CSS.escape(sec)}"]`)?.focus();
+      let all = [...dlg.querySelectorAll(".st-ti")], i = all.indexOf(ti) + (/Up|Left/.test(e.key) ? -1 : 1), n = all[(i + all.length) % all.length];
+      sfx("tap"), jump(n.dataset.sec, !0), n.focus();
     }
   });
   BUS.on("lab", () => dlg.open && draw());
@@ -618,6 +649,49 @@
     let b = sub && document.querySelector(`#view-reviews [data-v="${sub}"]`);
     b && b.getAttribute("aria-current") !== "true" && b.click();
   });
+  var PLACES = [], at = -1, moving = !1, noteT = 0;
+  function here() {
+    return VIEW ? VIEW === "reviews" ? { v: VIEW, sub: document.querySelector("#view-reviews .rx")?.dataset.rx || "review" } : VIEW === "cards" ? { v: VIEW, sub: typeof CD < "u" && CD?.cur || "" } : { v: VIEW, sub: "" } : null;
+  }
+  var same = (a, b) => !!a && a.v === b.v && a.sub === b.sub;
+  function note() {
+    clearTimeout(noteT), noteT = window.setTimeout(() => {
+      let p = here();
+      moving || !p || same(PLACES[at], p) || (PLACES[at]?.v === "cards" && p.v === "cards" && !PLACES[at].sub ? PLACES[at] = p : (PLACES.splice(at + 1), PLACES.push(p), PLACES.length > 60 && PLACES.shift(), at = PLACES.length - 1));
+    }, 0);
+  }
+  BUS.on("view", note);
+  BUS.on("place", note);
+  function step(d) {
+    let i = at + d, p = PLACES[i];
+    if (p) {
+      if (!VIEWS.includes(p.v))
+        return PLACES.splice(i, 1), i < at && at--, step(d);
+      at = i, moving = !0;
+      try {
+        sfx("tap");
+      } catch {
+      }
+      try {
+        p.v === "cards" && p.sub && typeof openCard == "function" && !(typeof cardOf == "function" && cardOf(p.sub)?.dropped) ? openCard(p.sub, void 0, { write: !1 }) : p.v !== VIEW && setView(p.v);
+        let rx = window.RX_go;
+        p.v === "reviews" && p.sub && rx && rx(p.sub);
+      } finally {
+        window.setTimeout(() => moving = !1, 0);
+      }
+    }
+  }
+  addEventListener(
+    "keydown",
+    (e) => {
+      let d = KEYS2.is(e, "back") ? -1 : KEYS2.is(e, "forward") ? 1 : 0;
+      if (!d) return;
+      e.preventDefault();
+      let t = e.target;
+      e.repeat || t?.closest?.(TYPING) || document.querySelector("dialog[open]") || step(d);
+    },
+    !0
+  );
 
   // site/src/cbp/habit.ts
   var habit_exports = {};
@@ -664,7 +738,7 @@
     return { days: out, streak, start, low: out[today]?.low ?? !1 };
   }
   function reviewDays(cards, day, today) {
-    let count = /* @__PURE__ */ new Map(), diff = /* @__PURE__ */ new Map(), mark2 = (a, b) => {
+    let count = /* @__PURE__ */ new Map(), diff = /* @__PURE__ */ new Map(), mark3 = (a, b) => {
       b <= a || (diff.set(a, (diff.get(a) ?? 0) + 1), diff.set(b, (diff.get(b) ?? 0) - 1));
     }, list = [...cards], byNote = /* @__PURE__ */ new Map();
     for (let c of list) if (c.nid != null) for (let r of c.revs ?? []) r[1] >= 1 && r[1] <= 4 && (byNote.get(c.nid) ?? byNote.set(c.nid, /* @__PURE__ */ new Set()).get(c.nid)).add(day(r[0]));
@@ -675,7 +749,7 @@
         if (r[1] >= 1 && r[1] <= 4 && r[6] <= 3 && count.set(d, (count.get(d) ?? 0) + 1), !(r[2] > 0)) continue;
         let due = d + r[2], next = revs[i + 1], until = next ? day(next[0]) : c.queue >= 0 ? today : due;
         for (; sib && due < until && sib.has(due); ) due++;
-        mark2(due, Math.min(until, today));
+        mark3(due, Math.min(until, today));
       }
     }
     let open = /* @__PURE__ */ new Set(), ks = [...diff.keys()].sort((a, b) => a - b), run = 0;
@@ -723,15 +797,15 @@
   }
   var BLOCK = /^(DIV|P|LI|UL|OL|H[1-6]|BLOCKQUOTE)$/;
   function read(f) {
-    let out = [], at = /* @__PURE__ */ new Map(), end = /* @__PURE__ */ new Map(), walk2 = (node, fl, sty) => {
+    let out = [], at2 = /* @__PURE__ */ new Map(), end = /* @__PURE__ */ new Map(), walk2 = (node, fl, sty) => {
       for (let n of node.childNodes) {
         if (n.nodeType === 3) {
-          at.set(n, out.length);
+          at2.set(n, out.length);
           let v = n.nodeValue ?? "";
           for (let k = 0; k < v.length; k++) out.push({ c: v[k], f: fl, s: sty });
         } else if (n.nodeType === 1) {
           let el2 = n, t = el2.tagName, last = out[out.length - 1];
-          if (BLOCK.test(t) && out.length && !(last && "br" in last) && out.push({ br: 1 }), at.set(n, out.length), t === "BR") out.push({ br: 1 });
+          if (BLOCK.test(t) && out.length && !(last && "br" in last) && out.push({ br: 1 }), at2.set(n, out.length), t === "BR") out.push({ br: 1 });
           else if (t === "IMG") out.push({ img: { src: el2.getAttribute("src") ?? "", from: el2.dataset.from } });
           else {
             let f2 = fl, s2 = sty, st = el2.style;
@@ -741,7 +815,7 @@
         end.set(n, out.length);
       }
     };
-    return walk2(f, 0, ""), { out, at, end };
+    return walk2(f, 0, ""), { out, at: at2, end };
   }
   function index(f, m, node, off2) {
     if (node.nodeType === 3) return (m.at.get(node) ?? 0) + off2;
@@ -829,14 +903,14 @@
       if (kind === "type" && h.k === "type" && now - h.t < 1e3) return void (h.t = now);
       h.u.push({ html: f.innerHTML, sel: selOf(f) }), h.u.length > 200 && h.u.shift(), h.r = [], h.k = kind, h.t = now;
     }
-    function step(f, from, to) {
+    function step2(f, from, to) {
       let h = hist(f), x = h[from].pop();
       x && (h[to].push({ html: f.innerHTML, sel: selOf(f) }), h.k = "", f.innerHTML = x.html, x.sel && select(f, ...x.sel), changed2(f));
     }
     let pend = null, ed = {
       snap,
-      undo: (f) => step(f, "u", "r"),
-      redo: (f) => step(f, "r", "u"),
+      undo: (f) => step2(f, "u", "r"),
+      redo: (f) => step2(f, "r", "u"),
       forget: (f) => H.delete(f),
       reset: () => pend = null,
       toggle(f, kind) {

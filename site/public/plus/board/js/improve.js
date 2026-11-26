@@ -1,4 +1,4 @@
-/* ---------- To improve list: on Essays, and its open items on Today (#improve-today). Owner: essays agent ----------
+/* ---------- To improve list, on Essays (Today shows one item as the essay's focus, write.js). Owner: essays agent ----------
    improve/<id>: one doc per item, so his edits and Claude's never overwrite each other. `order` sets the place; an
    item without one sits by when it was added (newest on top), so the review's new items land on top and Today shows
    the top six. The right version edits in place like Notion; what he wrote stays as he wrote it. A click on a row
@@ -135,11 +135,11 @@ function IM_remove(id){
 // crossing off, Notion's way: the box ticks, the line draws through, and the row stays where it is (till Monday)
 function IM_cross(id,btn){
   if(IM_TK[id]||!ES.items[id]) return;
-  const r=btn.getBoundingClientRect(), row=btn.closest('.es-row,.imt-li');
+  const r=btn.getBoundingClientRect(), row=btn.closest('.es-row');
   sfx('stamp-known');
   btn.classList.add('on'); btn.setAttribute('aria-checked','true');
   // the line draws through the right version, the way it will stay
-  const t=row&&row.querySelector('.es-w,.imt-t'), x=ES.items[id];
+  const t=row&&row.querySelector('.es-w'), x=ES.items[id];
   // (after the field's own focusout has put its marks back)
   if(t){if(document.activeElement===t)t.blur();setTimeout(()=>{t.innerHTML=`<span class="x-out x-draw">${mix(x.nat||x.mine)}</span>`;},0);}
   if(row) row.classList.add('ticking');
@@ -375,28 +375,8 @@ function IM_jump(id){
   c.classList.remove('flash');void c.offsetWidth;c.classList.add('flash');setTimeout(()=>c.classList.remove('flash'),1900);
 }
 
-/* Today: the list as on Essays (top six open items, with this week's crossed-off ones in their places, struck); a
-   line goes to its sentence (a crossed-off one to where he got it right, if there's one clear place), the box ticks */
-function renderHints(){
-  const el=document.getElementById('improve-today'); if(!el) return;
-  const rows=[]; let n=0;
-  for(const x of IM_list()){if(!(x.nat||x.mine))continue;if(!x.done&&++n>6)break;if(x.done&&rows.length>=9)continue;rows.push(x);}
-  while(rows.length&&rows[rows.length-1].done&&n>6) rows.pop();
-  const li=x=>`<li class="imt-li${x.done?' done':''}${IM_goes(x)?' jump':''}" data-go="${x.id}"><div class="imt-in">${IM_box(x)}<span class="imt-t">${x.done?`<span class="x-out">${mix(x.nat||x.mine)}</span>`:IM_natHTML(x)}</span></div></li>`;
-  const html=rows.length?`<div class="im-head"><h2 class="side-h">To improve</h2></div><ul class="imt" lang="zh-Hant">${rows.map(li).join('')}</ul>`:'';
-  if(el._h!==html){el._h=html;el.innerHTML=html;}
-}
-document.getElementById('improve-today').addEventListener('click',e=>{
-  const b=e.target.closest('[data-tick]'); if(b){IM_cross(b.dataset.tick,b);return;}
-  const u=e.target.closest('[data-undo]'); if(u){IM_untick(u.dataset.undo);return;}
-  const li=e.target.closest('[data-go]'); if(!li) return;
-  const id=li.dataset.go, x=ES.items[id];
-  if(IM_go(id)||!x||x.done) return;
-  sfx('tap');
-  setView('essays');
-  const sd=document.querySelector('.es-side'); if(sd&&!sd.classList.contains('open')){sd.classList.add('open');document.getElementById('es-disc')?.setAttribute('aria-expanded','true');}
-  const f=IM_field(id,'nat'); if(f){f.scrollIntoView({block:'center',behavior:REDUCED()?'auto':'smooth'});f.focus({preventScroll:true});placeCaret(f,null);}
-});
+/* Today shows one item, the essay's focus (write.js); the list itself lives on Essays. Callers still ask for it. */
+function renderHints(){}
 BUS.on('items',()=>{IM_render();renderHints();IM_retired();});
 
 /* an item the marker retired (three essays that got it right, jobs.ts): a small celebration, once per item */
@@ -405,7 +385,7 @@ function IM_retired(){
   const x=fresh.find(x=>lsGet('once:retired:'+x.id)!=='1'); if(!x) return;
   lsSet('once:retired:'+x.id,'1');
   setTimeout(()=>{
-    const el=document.querySelector(`.es-row[data-r="${x.id}"],.imt-li[data-go="${x.id}"]`), r=el&&el.offsetParent?el.getBoundingClientRect():null;
+    const el=document.querySelector(`.es-row[data-r="${x.id}"]`), r=el&&el.offsetParent?el.getBoundingClientRect():null;
     celebrate('crossoff',r?{x:r.left+24,y:r.top+r.height/2}:{x:innerWidth/2,y:innerHeight*.45});
     sfx('stamp-known');toast(x.nat||x.mine);
     IM_retired();

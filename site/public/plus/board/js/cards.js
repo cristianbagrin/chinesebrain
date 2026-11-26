@@ -264,7 +264,7 @@ CD_EL.innerHTML=`<div class="cd-bar">
     </article>
     <aside class="cd-side"></aside>
   </div>
-  <div class="cd-empty" hidden><p class="cd-empty-t">Nothing waiting.</p><p>Type any word above, or the next five come in tonight.</p></div>`;
+  <div class="cd-empty empty" hidden><p class="empty-t">Nothing waiting.</p><p>Type any word above, or the next five come in tonight.</p></div>`;
 document.getElementById('view-cards').appendChild(CD_EL);
 const CD_SH=CD_EL.querySelector('.cd-sheet'), CD_MAIN=CD_EL.querySelector('.cd-main');
 
@@ -462,7 +462,9 @@ function CD_paintAll(){
   CD_EL.querySelector('.cd-headwrap').innerHTML=(wy.why?`<p class="cd-why">With <span class="zh">${esc(wy.parent)}</span>: ${inl(wy.why)}</p>`:'')+p.head;
   CD_EL.querySelector('.cd-left').innerHTML=p.left; CD_EL.querySelector('.cd-colR').innerHTML=p.right;
   thr.innerHTML=threadHTML(d); thr.hidden=!(d.chat||[]).length;
-  CD_SH.dataset.w=w;
+  const moved=CD_SH.dataset.w!==w; CD_SH.dataset.w=w;
+  // a new word on screen: a place for Back and Forward (kit/go.ts)
+  if(moved) BUS.emit('place');
   CD_MAIN.scrollTop=top;
   thr.scrollTop=b&&b.chat&&stick?thr.scrollHeight:ttop;
   if(b&&b.chat&&stick) CD_MAIN.scrollTop=CD_MAIN.scrollHeight;
