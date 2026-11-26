@@ -277,14 +277,14 @@
     return companion(cv, { idle });
   }
 
-  // Today: in #today-buddy when the page has one, else standing in the forest, left of the tree's trunk
+  // Today: standing in the forest, left of the tree's trunk (#today-buddy, under the heatmap, only when there's no forest)
   function mountToday() {
-    const slot = document.getElementById('today-buddy'), forest = document.getElementById('companion');
-    const host = slot || forest;
+    const forest = document.getElementById('companion'), slot = forest ? null : document.getElementById('today-buddy');
+    const host = forest || slot;
     if (!host) return;
     if (N.today && N.today.canvas.parentNode === host) return;
     if (N.today) N.today.canvas.remove();
-    const c = N.today = make(slot ? 'nd-slot' : 'nd-forest', true);
+    const c = N.today = make(forest ? 'nd-forest' : 'nd-slot', true);
     host.appendChild(c.canvas);
     placeToday();
     c.canvas.addEventListener('pointerdown', () => { if (!c.busy()) c.play('right'); kick(); });
