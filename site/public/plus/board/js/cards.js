@@ -308,7 +308,8 @@ const turnsOf=s=>String(s||'').split(/\s+(?=B\s*[：:])/);
 function sentHTML(list,cls,w){
   return list.map((s,n)=>{
     const key=cls+n+':'+w, on=CD.py.has(key);
-    const zs=turnsOf(s.zh), ps=turnsOf(s.py), es=turnsOf(s.en);
+    // **bold** inside the Chinese is noise: the word is marked there anyway
+    const zs=turnsOf(String(s.zh||'').replace(/\*\*/g,'')), ps=turnsOf(s.py), es=turnsOf(s.en);
     CD.cp[key]=CD_ankiCopy(zs,w);
     return `<div class="cd-sent ${cls}${on?' py':''}" data-k="${esc(key)}" role="button" tabindex="0" aria-expanded="${on}">${zs.map((z,i)=>`<div class="cd-turnl"><p class="cd-szh zh" lang="zh-Hant">${(m=>m?`<i class="cd-sp">${m[1]}</i>${markTarget(zh(z.slice(m[0].length)),w)}`:markTarget(zh(z),w))(/^([AB])\s*[：:]\s*/.exec(z))}</p>${ps[i]?`<p class="cd-spy">${esc(ps[i].replace(/^[AB]\s*[：:]\s*/,''))}</p>`:''}${es[i]?`<p class="cd-sen">${inl(es[i].replace(/^[AB]\s*[：:]\s*/,''))}</p>`:''}</div>`).join('')}</div>`;}).join('');
 }
@@ -444,7 +445,8 @@ function CD_paintAll(){
   CD_SH.setAttribute('aria-label','Card: '+w);
   if(CD_SH.dataset.w!==w) CD_EL.querySelectorAll('.opt.kept').forEach(x=>x.classList.remove('kept'));
   CD_EL.querySelector('.cd-tabs').innerHTML=words.map(x=>{const dx=cardOf(x)||{};return `<button type="button" role="tab" class="cd-tab${dx.text||CD.busy[cardId(x)]?'':' todo'}${CD_past(x)?' past':''}" data-tab="${esc(x)}" aria-selected="${x===w}"><span class="zh" lang="zh-Hant">${esc(x)}</span>${dx.carded?'<i class="cd-tick" aria-label="carded">✓</i>':x===w&&(nu.has(x)||dx.word)?`<i class="cd-tx" data-drop="${esc(x)}" role="button" aria-label="${nu.has(x)?'Have it already':'Drop'} ${esc(x)}">×</i>`:''}</button>`;}).join('');
-  const sel=CD_EL.querySelector('.cd-tab[aria-selected="true"]'); if(sel&&CD.tabT!==w){CD.tabT=w;sel.scrollIntoView({block:'nearest',inline:'nearest'});}
+  const sel=CD_EL.querySelector('.cd-tab[aria-selected="true"]'); if(sel&&CD.tabT!==w){CD.tabT=w;sel.scrollIntoView({block:'nearest',inline:'center'});}
+  CD_tabEdges();
   const img=CD_EL.querySelector('[data-act="img"]'); img.href=imgURL(w);
   const done=CD_EL.querySelector('.cd-done'); done.setAttribute('aria-pressed',String(!!d.carded)); done.textContent=d.carded?'Carded':'Card it'; done.disabled=!d.text;
   CD_EL.querySelector('[data-act="prev"]').disabled=CD.back<0?at<=0&&!CD.hist.some(x=>x!==w):CD.back===0;
@@ -466,6 +468,13 @@ function CD_paintAll(){
   thr.scrollTop=b&&b.chat&&stick?thr.scrollHeight:ttop;
   if(b&&b.chat&&stick) CD_MAIN.scrollTop=CD_MAIN.scrollHeight;
 }
+// the tabs fade out at an end that has more to scroll to, so no tab is ever cut off hard there
+function CD_tabEdges(){
+  const t=CD_EL.querySelector('.cd-tabs'), m=t.scrollWidth-t.clientWidth;
+  t.classList.toggle('fl',t.scrollLeft>2); t.classList.toggle('fr',t.scrollLeft<m-2);
+}
+CD_EL.querySelector('.cd-tabs').addEventListener('scroll',CD_tabEdges,{passive:true});
+addEventListener('resize',()=>{if(CD.open!==null)CD_tabEdges();});
 // a sentence's pinyin shows while he wants it (click or Enter on the sentence); it stays shown through repaints
 CD.py=new Set();
 // the pinyin goes above the characters (RUBY, kit/ruby.ts); the card's own pinyin line stays hidden

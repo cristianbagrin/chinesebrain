@@ -17,8 +17,12 @@ html:has(#view-cards:not([hidden])) .appbar.lift{box-shadow:none}
 .cd-sp{flex:1}
 /* the tabs scroll sideways; padding at both ends (and the same scroll padding) keeps a tab's edge and its ring whole
    when it scrolls into view, at any width */
-.cd-tabs{display:flex;gap:4px;min-width:0;overflow-x:auto;scrollbar-width:none;padding:3px 8px;margin:-3px -8px;scroll-padding-inline:16px;overscroll-behavior-x:contain}
-.cd-tab{flex:none}
+.cd-tabs{display:flex;gap:4px;min-width:0;overflow-x:auto;scrollbar-width:none;padding:3px 8px;margin:-3px -8px;scroll-padding-inline:32px;overscroll-behavior-x:contain}
+.cd-tab{flex:none;scroll-snap-align:center}
+.cd-tabs{scroll-snap-type:x proximity}
+.cd-tabs.fr{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 32px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 32px),transparent)}
+.cd-tabs.fl{-webkit-mask-image:linear-gradient(to left,#000 calc(100% - 32px),transparent);mask-image:linear-gradient(to left,#000 calc(100% - 32px),transparent)}
+.cd-tabs.fl.fr{-webkit-mask-image:linear-gradient(to right,transparent,#000 32px,#000 calc(100% - 32px),transparent);mask-image:linear-gradient(to right,transparent,#000 32px,#000 calc(100% - 32px),transparent)}
 /* a word he went back to with ←: greyed, until he moves on */
 .cd-tab.past .zh{color:var(--ink-4)}
 .cd-tab.past[aria-selected="true"]{background:var(--wash);box-shadow:none}
