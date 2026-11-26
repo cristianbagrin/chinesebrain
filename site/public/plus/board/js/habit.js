@@ -80,17 +80,18 @@ function HB_tip(d,k,s){
   return `<span class="hb-th">${k===essayToday()?'Today':fmtDate(P(k))}</span>${L.join('')}`;
 }
 
-function HB_heat(full,m,W0){
+// cap: at most this many weeks (the latest), so a narrow Today keeps cells big enough to read
+function HB_heat(full,m,W0,cap){
   const tk=essayToday(), T=P(tk), S=W0.days;
   const y=T.getFullYear(), j1=new Date(y,0,1), d31=new Date(y,11,31);
   const first=monday(j1), lastMon=monday(T);
-  const total=days(first,monday(d31))/7+1, W=full?total:days(first,lastMon)/7+1;
+  const total=days(first,monday(d31))/7+1, W=full?total:days(first,lastMon)/7+1, from=cap&&!full?Math.max(0,W-cap):0, n=W-from;
   const cells=[], heads=[];
-  for(let w=0;w<W;w++){
+  for(let w=from;w<W;w++){
     const mon=add(first,7*w);
     for(let i=0;i<7;i++){
       const dt=add(mon,i), k=K(dt);
-      if(dt.getDate()===1&&dt.getFullYear()===y&&(dt<=T||full)) heads.push(`<span style="grid-column:${w+1}"${dt.getMonth()===T.getMonth()?' class="now"':dt>T?' class="later"':''}>${MO[dt.getMonth()]}</span>`);
+      if(dt.getDate()===1&&dt.getFullYear()===y&&(dt<=T||full)) heads.push(`<span style="grid-column:${w-from+1}"${dt.getMonth()===T.getMonth()?' class="now"':dt>T?' class="later"':''}>${MO[dt.getMonth()]}</span>`);
       if(dt<j1||dt>T){cells.push('<i class="hm-c off" aria-hidden="true"></i>');continue;}
       const d=m[k]||HABIT.blank(), s=S[k], st=s?s.st:(d.rv||d.cards||d.test)?'partial':'pre';
       const cls=st==='done'?(s.deep?'deep':'done'):st==='open'?'open':st;
@@ -98,9 +99,11 @@ function HB_heat(full,m,W0){
       cells.push(`<i class="hm-c ${cls}${k===tk?' today':''}${pop?' pop':''}"${tip?` data-tip="${esc(tip)}"`:''}></i>`);
     }
   }
-  // the 1st of January sits mid-week: its label goes on the first column anyway
-  if(!heads.length||!/grid-column:1"/.test(heads[0])) heads.unshift(`<span style="grid-column:1">${MO[0]}</span>`);
-  return `<div class="hm-in" style="--w:${W};--wt:${total}" data-cols="${W}" data-y="${y}">
+  // the first column's month: the 1st of January sits mid-week, and a shortened year starts mid-month; it gets its label
+  // anyway, unless the next month's name is right beside it
+  const c1=+((heads[0]||'').match(/grid-column:(\d+)/)||[])[1];
+  if(!heads.length||c1>3){const d0=add(first,7*from);heads.unshift(`<span style="grid-column:1"${d0.getMonth()===T.getMonth()?' class="now"':''}>${MO[from?d0.getMonth():0]}</span>`);}
+  return `<div class="hm-in" style="--w:${n};--wt:${total}" data-cols="${n}" data-y="${y}">
     <div class="hm-mo" aria-hidden="true">${heads.join('')}</div>
     <div class="hm-wd" aria-hidden="true"><span>M</span><span></span><span>W</span><span></span><span>F</span><span></span><span></span></div>
     <div class="hm-g" role="img" aria-label="Every day this year">${cells.join('')}</div></div>`;
@@ -111,11 +114,19 @@ function HB_state(){
   HB.walk=w;
   return {m,w};
 }
+// Today: as many of the latest weeks as fit with each day at least 13px (× k); the whole year when it fits
+function HB_cap(el){
+  const k=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--k'))||.92, w=el.clientWidth;
+  if(!w) return 0;
+  return Math.max(8,Math.floor((w-(w>560?26*k:0))/(13*k)));
+}
+let HB_capW=0;
+addEventListener('resize',()=>{const el=document.getElementById('habit-today');if(el&&el.clientWidth!==HB_capW){HB_capW=el.clientWidth;HB_soon();}},{passive:true});
 // el gets the tracker; full = Progress (the whole year)
 function HB_render(el,full,st){
   if(!el) return;
   let html='';
-  try{const {m,w}=st||HB_state();html=HB_heat(!!full,m,w);}catch(e){console.error(e);}
+  try{const {m,w}=st||HB_state();html=HB_heat(!!full,m,w,full?0:HB_cap(el));}catch(e){console.error(e);}
   el.innerHTML=`<div class="hm ${full?'hm-full':'hm-today'}">${html}</div>`;
 }
 

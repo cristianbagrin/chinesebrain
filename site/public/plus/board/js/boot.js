@@ -4,7 +4,7 @@ function render(D, source){
   const T=today();
   const tocDays=D.toc?days(T,P(D.toc)):null;
   const toc=document.getElementById('toc');
-  toc.innerHTML=tocDays!==null&&tocDays>=0?`<span class="l">TOCFL in </span><span class="s">TOCFL </span><b>${tocDays}</b><span class="l"> days</span><span class="s"> d</span>`:'';
+  toc.innerHTML=tocDays!==null&&tocDays>=0?`<span class="l">TOCFL in </span><span class="s">TOCFL </span><b>${tocDays}</b><span class="l"> days</span><span class="s">d</span>`:'';
   toc.hidden=!toc.innerHTML;
   const note=document.getElementById('note');
   const upd=D.updated?P(D.updated):null;

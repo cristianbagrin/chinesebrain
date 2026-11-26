@@ -1,29 +1,29 @@
 /* Today: the layout, Next up, the habit heatmap. Owner: C */
 
 /* ---------- layout (2026-11-26) ----------
-   What a day asks of him, in order: the essay (the work), the habit (where the day stands), the test when there is one,
-   the next words, then the year and the forest to look back at. Space separates the blocks: no boxes, no lines.
-   Phone and narrow: one column in reading order: the streak and steps, the test, the essay, the next words, the year,
-   the forest.
-   Middle (960–1179): the test and the essay on the left; the streak and steps, the next words, the forest and the
-   year on the right.
-   Wide (≥1180, the 1280–1440 laptop): the test and the essay on the left; on the right the streak and steps on top,
-   then the next words with the forest beside them (as tall as the list, fun.js), the year under both. nextup.js
+   What a day asks of him: the essay (the work), the habit (where the day stands, and the weeks behind it), the test
+   when there is one, the next words, and the forest to look at. Space separates the blocks: no boxes, no lines.
+   Phone and narrow: one column: the streak and steps, the weeks, the test, the essay, the next words, the forest.
+   Middle (960–1179): the test and the essay on the left; the streak and steps, the weeks, the next words and the
+   forest on the right.
+   Wide (≥1180, the 1280–1440 laptop): the test and the essay on the left; on the right the streak and steps, the
+   weeks under them, then the next words with the forest beside them (as tall as the list, fun.js). nextup.js
    stacks each column on its own (4px rows, a span per block), so no block waits on another column's rows. */
 .today{display:grid;grid-template-columns:minmax(0,1fr);row-gap:var(--s7);align-items:start}
 .today>*{min-width:0}
 #next{position:relative}
 @media (max-width:959px){
-  .today>#habit-steps{margin-bottom:calc(var(--s3) * -1)}
+  .today>#habit-steps{margin-bottom:calc(var(--s5) * -1)}
   .today>#companion{margin-top:calc(var(--s5) * -1)}
 }
 @media (min-width:960px){
   .today{column-gap:clamp(32px,3.4vw,64px);row-gap:0;grid-auto-flow:row dense;grid-template-columns:minmax(0,1fr) clamp(340px,34%,440px)}
   .today>#quiz,.today>#write{grid-column:1}
   .today>#habit-steps,.today>#next,.today>#habit-today,.today>#companion{grid-column:2}
-  /* placement order: the habit first in its column, then Next up, the forest, the year */
-  .today>#habit-steps{order:-1;margin-bottom:var(--s7)}
-  .today>#companion{order:1}.today>#habit-today{order:2}
+  /* placement order in the column: the streak and steps, the weeks, then Next up and the forest */
+  .today>#habit-steps{order:-2;margin-bottom:var(--s5)}
+  .today>#habit-today{order:-1}
+  .today>#companion{order:1}
   .today>#quiz{margin-bottom:var(--s6)}
   .today>#next{margin-bottom:var(--s6)}
   .today>#companion{margin-bottom:var(--s3)}
@@ -35,7 +35,6 @@
   .today{grid-template-columns:minmax(0,1.9fr) minmax(0,1fr) minmax(0,.78fr)}
   .today>#habit-steps,.today>#habit-today{grid-column:2/4}
   .today>#companion{grid-column:3}
-  .today>#habit-today{margin-bottom:var(--s6)}
   .today>#next{margin-bottom:var(--s5)}
   .today>#companion{margin-bottom:var(--s5)}
 }
@@ -126,7 +125,7 @@ li:nth-child(even)>.hc-s .hc-t::after{rotate:1.5deg}
    deeper; rest: the same green as done (a rest is part of the habit, his pick 2026-11-26); partial (something, not
    enough): pale; missed: blank. Today: the gold ring. */
 .hm{container-type:inline-size;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;
-  --hm-lw:calc(22px * var(--k));--hm-max:calc(18px * var(--k));
+  --hm-lw:calc(26px * var(--k));--hm-max:calc(18px * var(--k));
   --hm-0:var(--wash-2);--hm-pre:#EFF0F4;--hm-1:#CFE6D8;--hm-3:#4A9A6D;--hm-4:var(--green-deep)}
 .hm-full{--hm-max:calc(30px * var(--k))}
 .hm-in{--p:min(var(--hm-max),calc((100cqw - var(--hm-lw)) / var(--w)));--gap:max(2px,calc(var(--p) * .2));--c:calc(var(--p) - var(--gap));
@@ -136,9 +135,9 @@ li:nth-child(even)>.hc-s .hc-t::after{rotate:1.5deg}
 .hm-mo span.now{color:var(--ink)}
 .hm-mo span.later{opacity:.6}
 .hm-wd{grid-column:1;display:grid;grid-template-rows:repeat(7,var(--c));row-gap:var(--gap)}
-.hm-wd span{font-size:var(--fs-s);line-height:var(--c);color:var(--ink-3);overflow:visible;white-space:nowrap}
+.hm-wd span{font-size:var(--fs-s);font-weight:500;line-height:var(--c);color:var(--ink-2);overflow:visible;white-space:nowrap}
 /* on a phone the weeks so far are narrow: every other month's name, and no weekday letters (too small to sit apart) */
-@container (max-width:420px){.hm-mo span:nth-child(even):not(.now){visibility:hidden}}
+@container (max-width:420px){.hm-full .hm-mo span:nth-child(even):not(.now){visibility:hidden}}
 @container (max-width:560px){.hm-in{--hm-lw:0px}.hm-wd{display:none}}
 .hm-g{grid-column:2;display:grid;grid-template-rows:repeat(7,var(--c));grid-auto-flow:column;grid-auto-columns:var(--c);gap:var(--gap)}
 .hm-c{display:block;border-radius:28%;background:var(--hm-0);transition:transform .15s var(--ease)}
