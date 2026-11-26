@@ -154,7 +154,7 @@ button.st-row:focus-visible{outline-offset:-2px}
   .st-ti{min-height:36px;padding:0 14px;border-radius:999px}
   .st-ti .st-gl{display:none}
   .st-body{order:3;padding:4px 16px calc(24px + env(safe-area-inset-bottom,0px))}
-  .st-find{margin:0 16px 10px}
+  .st-find{margin:0 16px}
   .st-find input{font-size:var(--fs-m)}
   .st-q-on .st-body{gap:var(--s6)}
   .st-ph{padding:0 8px 4px 6px;touch-action:none}

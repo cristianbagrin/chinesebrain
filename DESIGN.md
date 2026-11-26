@@ -36,8 +36,13 @@ Reasons marked *inferred* weren't said by Chris; check them with him before lean
 - **Shadows: `--sh-1` raised control or panel, `--sh-pop` anything floating over the page, `--sh-dlg` a dialog or
   pane, `--sh-sheet` a phone's bottom sheet, `--sh-btn` a floating ink button. No hand-written shadows.**
   Why (*inferred*): ~30 different shadows made the same role look different on every page.
+  Left on purpose: the test's paper props (`.qnotice`, `.qmenu`, `.qpaper`, drawn objects), the paper sheets
+  (paper.css), the phone Tutor pane's side shadow, Show answer's hover lift and the Cards drag ghost: a token would change
+  how they look.
 - **Every dialog is the Settings window's shell (`dialog.st` in kit.css): `--bg` inside, `--r-l`, `--sh-dlg`,
   `--dim` behind, an svg × top right, Escape and a click outside close it, a bottom sheet on a phone.**
+- **A page reached from Settings opens inside the window (`SETTINGS.page`: Card designs), with "‹ Settings" to go back;
+  it never takes over the app's page.**
 - **Every popover (tips, Next up, the essay focus, the flag picker, trays) is one shell: `--surface`, `--r`,
   `--sh-pop`, padding `--s3 --s4`, a .16s fade.**
 - **Separate groups with space, not lines or boxes.** A hairline only where two different things touch.
