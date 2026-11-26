@@ -65,14 +65,14 @@
     let back = new Set((data?.revs ?? []).map((r) => r[0])), out = [.../* @__PURE__ */ new Set([...a, ...b])].filter((x) => !back.has(x));
     return out.length ? out : void 0;
   };
-  async function putMany(items) {
+  async function putMany(items2) {
     let mod = Date.now();
-    for (let [kind, id, data, drop] of items) {
+    for (let [kind, id, data, drop] of items2) {
       data && (data.mod = mod), place(kind, String(id), data);
       let prev = S.outbox.get(`${kind}:${id}`);
       S.outbox.set(`${kind}:${id}`, { kind, id: String(id), data, mod, drop: dropped(prev?.drop, drop, data) });
     }
-    await tx("rows", "readwrite", (s) => items.forEach(([kind, id, data]) => data == null ? s.delete(`${kind}:${id}`) : s.put(data, `${kind}:${id}`))), await saveOutbox(), emit("many"), soon();
+    await tx("rows", "readwrite", (s) => items2.forEach(([kind, id, data]) => data == null ? s.delete(`${kind}:${id}`) : s.put(data, `${kind}:${id}`))), await saveOutbox(), emit("many"), soon();
   }
   var saveOutbox = () => tx("kv", "readwrite", (s) => s.put([...S.outbox.values()], "outbox")), token = () => {
     try {
@@ -435,6 +435,102 @@
     return (r) => tests.every((t) => t(r));
   }
 
+  // site/src/cbp/review/filter.ts
+  var STATES = ["new", "learning", "young", "mature", "suspended", "buried"], HAN = /\p{Script=Han}/u, toneless = (s) => strip(s).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/v/g, "u").replace(/[^a-z]/g, ""), graded = (c) => c.revs.filter((r) => r[1] >= 1 && r[1] <= 4 && r[6] !== 4 && r[6] !== 5);
+  function stateOf(c) {
+    return c.queue === -1 ? "suspended" : c.queue === -2 || c.queue === -3 ? "buried" : c.type === 0 ? "new" : c.type === 1 || c.type === 3 ? "learning" : c.ivl >= 21 ? "mature" : "young";
+  }
+  function dueOf(c, ck2) {
+    return c.queue === 1 ? ck2.dayOf(c.due * 1e3) - ck2.today : c.queue === 2 || c.queue === 3 ? c.due - ck2.today : null;
+  }
+  function index(cards, noteOf, typeOf2, ck2, w, uses = {}) {
+    let f = new Fsrs(w), out = [];
+    for (let card of cards) {
+      let note = noteOf(card.nid);
+      if (!note) continue;
+      let type = typeOf2(note), word = wordOf(type, note) || sortText(type, note) || strip(note.flds.find((x) => strip(x)) ?? ""), fld = (name) => {
+        let i = type ? fieldIndex(type, name) : -1;
+        return i >= 0 ? note.flds[i] ?? "" : "";
+      }, g = graded(card), lastMs = card.lrt ? card.lrt * 1e3 : g.length ? g[g.length - 1][0] : 0, state = stateOf(card), studied = card.type !== 0, s = studied ? card.s ?? (card.type === 2 || card.type === 3 ? Math.max(0.1, card.ivl || 1) : null) : null, elapsed = lastMs ? Math.max(0, ck2.today - ck2.dayOf(lastMs)) : null, all2 = note.flds.join(" "), latin = [word, fld("Notes"), fld("Meaning"), fld("English"), fld("Back")].map(strip).join(" ");
+      out.push({
+        card,
+        note,
+        type,
+        word,
+        tmpl: type?.templates.find((t) => t.ord === card.ord)?.name ?? "",
+        state,
+        due: state === "suspended" || state === "buried" || state === "new" ? null : dueOf(card, ck2),
+        ivl: card.type === 2 || card.type === 3 ? card.ivl : null,
+        s,
+        d: studied && card.d != null ? card.d : null,
+        r: s != null && elapsed != null ? f.r(elapsed, s) : null,
+        lapses: card.lapses,
+        reps: card.reps,
+        added: ck2.today - ck2.dayOf(card.id),
+        last: g.length ? ck2.today - ck2.dayOf(g[g.length - 1][0]) : null,
+        pic: /<img\b/i.test(all2),
+        audio: /\[sound:/i.test(all2),
+        flag: card.flags & 7,
+        leech: note.tags.some((t) => /^leech$/i.test(t)),
+        uses: word in uses ? uses[word] : null,
+        zh: [word, fld("Chinese"), fld("Mnemonic"), fld("Notes")].map(strip).join(`
+`),
+        py: toneless(fld("Pinyin")),
+        en: latin.toLowerCase()
+      });
+    }
+    return out;
+  }
+  var EMPTY = { q: "", state: [], due: "", dueR: [null, null], card: [], flag: [], leech: !1, pic: "", audio: "", uses: [], ivl: [null, null], s: [null, null], d: [null, null], r: [null, null], lapses: [null, null], added: null, rev: null }, blank = () => JSON.parse(JSON.stringify(EMPTY)), open = (r) => r[0] == null && r[1] == null, inRange = (v, r) => v != null && (r[0] == null || v >= r[0]) && (r[1] == null || v <= r[1]);
+  function active(f) {
+    let n = 0;
+    f.state.length && n++, f.due && n++, f.card.length && n++, (f.flag.length || f.leech) && n++, (f.pic || f.audio) && n++, f.uses.length && n++;
+    for (let r of [f.ivl, f.s, f.d, f.r, f.lapses]) open(r) || n++;
+    return f.added != null && n++, f.rev != null && n++, n;
+  }
+  function textTest(q, ck2) {
+    let toks = q.trim().split(/\s+/).filter(Boolean), anki = toks.filter((t) => /^-|^\w+:/.test(t)), plain2 = toks.filter((t) => !anki.includes(t)), tests = [];
+    if (anki.length) {
+      let t = search(anki.join(" "), ck2.today, ck2.dayOf);
+      tests.push((x) => t(x));
+    }
+    if (plain2.length) {
+      let lat = plain2.filter((t) => !HAN.test(t)), han = plain2.filter((t) => HAN.test(t));
+      for (let h of han) tests.push((x) => x.zh.includes(h));
+      if (lat.length) {
+        let run = toneless(lat.join("")), each = lat.map((t) => [toneless(t), t.toLowerCase()]);
+        tests.push((x) => !!run && x.py.includes(run) || each.every(([p, l]) => !!p && x.py.includes(p) || x.en.includes(l)));
+      }
+    }
+    return (x) => tests.every((t) => t(x));
+  }
+  function apply(items2, f, ck2) {
+    let text = f.q.trim() ? textTest(f.q, ck2) : null, st = f.state.length ? new Set(f.state) : null, cards = f.card.length ? new Set(f.card) : null, flags = f.flag.length ? new Set(f.flag) : null, uses = f.uses.length ? new Set(f.uses) : null, due = f.due === "overdue" ? [null, -1] : f.due === "today" ? [0, 0] : f.due === "week" ? [0, 6] : f.due === "range" ? f.dueR : null;
+    return items2.filter(
+      (x) => (!st || st.has(x.state)) && (!due || inRange(x.due, due)) && (!cards || cards.has(x.tmpl)) && (!flags || flags.has(x.flag)) && (!f.leech || x.leech) && (!f.pic || x.pic === (f.pic === "yes")) && (!f.audio || x.audio === (f.audio === "yes")) && (!uses || x.uses != null && uses.has(x.uses)) && (open(f.ivl) || inRange(x.ivl, f.ivl)) && (open(f.s) || inRange(x.s, f.s)) && (open(f.d) || inRange(x.d, f.d)) && (open(f.r) || inRange(x.r == null ? null : x.r * 100, f.r)) && (open(f.lapses) || inRange(x.lapses, f.lapses)) && (f.added == null || x.added < f.added) && (f.rev == null || (f.rev === "never" ? x.last == null : x.last != null && x.last < f.rev)) && (!text || text(x))
+    );
+  }
+  var ORDER = { new: 0, learning: 1, young: 2, mature: 3, suspended: 4, buried: 5 }, KEY = {
+    added: (x) => x.note.id * 10 + x.card.ord,
+    word: (x) => x.word,
+    card: (x) => x.tmpl,
+    state: (x) => ORDER[x.state],
+    due: (x) => x.due,
+    ivl: (x) => x.ivl,
+    r: (x) => x.r,
+    lapses: (x) => x.lapses,
+    s: (x) => x.s,
+    d: (x) => x.d
+  };
+  function sortBy(items2, by, desc) {
+    let k = KEY[by] ?? KEY.added, coll = new Intl.Collator("zh-Hant");
+    return items2.map((x) => [k(x), x]).sort(([a, x], [b, y]) => {
+      if (a == null || b == null) return a == null && b == null ? y.note.id - x.note.id || x.card.ord - y.card.ord : a == null ? 1 : -1;
+      let o = typeof a == "number" ? a - b : coll.compare(a, b);
+      return (desc ? -o : o) || y.note.id - x.note.id || x.card.ord - y.card.ord;
+    }).map(([, x]) => x);
+  }
+
   // site/src/cbp/review/export.ts
   var US = "", secs = (ms) => Math.floor(ms / 1e3);
   function loadSql() {
@@ -710,9 +806,9 @@ CREATE INDEX ix_notes_csum ON notes (csum);`;
   var H = { undo: [], redo: [] }, clone = (x) => x == null ? x : JSON.parse(JSON.stringify(x)), revIds = (c) => new Set((c?.revs ?? []).map((r) => r[0]));
   async function change(name, rows, card) {
     let cur = (k, id) => k === "card" ? S.cards.get(+id) : k === "note" ? S.notes.get(+id) : k === "conf" ? S.confs.get(+id) : k === "notetype" ? S.types.get(+id) : S.meta.get(String(id)), step = { name, card, rows: rows.map(([k, id, after]) => [k, id, clone(cur(k, id) ?? null), clone(after)]) };
-    H.undo.push(step), H.undo.length > 200 && H.undo.shift(), H.redo = [], await apply(step, "after");
+    H.undo.push(step), H.undo.length > 200 && H.undo.shift(), H.redo = [], await apply2(step, "after");
   }
-  async function apply(step, side) {
+  async function apply2(step, side) {
     let other = side === "after" ? "before" : "after";
     await putMany(
       step.rows.map(([k, id, before, after]) => {
@@ -723,11 +819,11 @@ CREATE INDEX ix_notes_csum ON notes (csum);`;
   }
   async function undo() {
     let s = H.undo.pop();
-    s && (await apply(s, "before"), H.redo.push(s), sfx("unstamp"), afterHistory(s, !0));
+    s && (await apply2(s, "before"), H.redo.push(s), sfx("unstamp"), afterHistory(s, !0));
   }
   async function redo() {
     let s = H.redo.pop();
-    s && (await apply(s, "after"), H.undo.push(s), sfx("tap"), afterHistory(s, !1));
+    s && (await apply2(s, "after"), H.undo.push(s), sfx("tap"), afterHistory(s, !1));
   }
   function afterHistory(s, undone) {
     toast(`${undone ? "Undone" : "Redone"}: ${esc2(s.name)}`), view === "review" ? (undone && s.card && S.cards.has(s.card) ? (RV.cur = S.cards.get(s.card), RV.shown = !1, RV.py = RUBY.shown(), RV.t0 = Date.now(), RV.panel = "") : RV.cur = null, showReview()) : paint();
@@ -739,10 +835,30 @@ CREATE INDEX ix_notes_csum ON notes (csum);`;
   }
   var autoplayed = "", cardCss = (t) => t.css.replace(/@import[^;]+;/g, ""), OVER = `:host{display:block}.card{background:transparent!important;min-height:100%;box-sizing:border-box}hr{border:0;border-top:1px solid #E4E6EC;margin:22px 0}
 a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn))){display:none}
-img{max-width:100%!important;max-height:min(46vh,460px)!important;width:auto!important;height:auto!important;object-fit:contain!important}`;
+img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!important;height:auto!important;object-fit:contain!important}
+.cbp-pics{display:flex!important;justify-content:center;align-items:center;gap:10px;margin-inline:auto;max-width:100%}
+.cbp-pics>img{flex:0 1 auto;min-width:0;margin:0!important;max-width:calc((100% - (var(--n) - 1) * 10px) / var(--n))!important;max-height:min(30vh,320px)!important}`;
+  function sideBySide(root) {
+    let blank2 = (n) => n.nodeType === 3 && !(n.textContent ?? "").trim(), done = /* @__PURE__ */ new Set();
+    for (let img of root.querySelectorAll("img")) {
+      if (done.has(img) || img.parentElement?.classList.contains("cbp-pics")) continue;
+      let run = [img];
+      for (let n = img.nextSibling; n; n = n.nextSibling)
+        if (!blank2(n))
+          if (n instanceof Element && n.tagName === "IMG") run.push(n);
+          else break;
+      if (run.forEach((x) => done.add(x)), run.length < 2) continue;
+      let box = document.createElement("span");
+      box.className = "cbp-pics", box.style.setProperty("--n", String(run.length)), img.before(box);
+      for (let x of run) {
+        for (; x.previousSibling && x.previousSibling !== box && blank2(x.previousSibling); ) x.previousSibling.remove();
+        box.append(x);
+      }
+    }
+  }
   function draw(host, r, side) {
     let t = r.type, tmpl = t.templates.find((x) => x.ord === r.card.ord) ?? t.templates[0], ctx = { note: r.note, type: t, card: r.card, deck: S.decks.get(r.card.did)?.name }, q = render(tmpl.qfmt, ctx), html = side === "q" ? q : render(tmpl.afmt, ctx, q), root = host.shadowRoot ?? host.attachShadow({ mode: "open" });
-    return root.innerHTML = `<style>${cardCss(t)}${OVER}${RUBY.CSS}</style><div class="card card${r.card.ord + 1}">${html}</div>`, root;
+    return root.innerHTML = `<style>${cardCss(t)}${OVER}${RUBY.CSS}</style><div class="card card${r.card.ord + 1}">${html}</div>`, sideBySide(root), root;
   }
   var view = "review";
   function go(v) {
@@ -758,7 +874,7 @@ img{max-width:100%!important;max-height:min(46vh,460px)!important;width:auto!imp
   VIEW_EL.querySelectorAll("[data-v]").forEach(
     (b) => b.onclick = () => {
       let v = b.dataset.v;
-      sfx("tap"), v === "browse" && resetBrowse(), go(v);
+      sfx("tap"), go(v);
     }
   );
   var sitting = !1, RV = { cur: null, shown: !1, py: !1, t0: 0, sinceNew: 0, panel: "", merge: null, deeperFor: 0, flags: !1 };
@@ -774,7 +890,8 @@ img{max-width:100%!important;max-height:min(46vh,460px)!important;width:auto!imp
   };
   function showReview() {
     if (RV.panel === "deeper") return showDeeper();
-    (!RV.cur || !S.cards.has(RV.cur.id) || RV.cur !== S.cards.get(RV.cur.id) || RV.cur.queue < 0) && (RV.cur = pick(), RV.shown = !1, RV.py = RUBY.shown(), RV.t0 = Date.now());
+    let back = RV.cur && S.cards.get(RV.cur.id);
+    RV.cur && back && back !== RV.cur && back.queue >= 0 && back.reps === RV.cur.reps && back.due === RV.cur.due && (RV.cur = back), (!RV.cur || !S.cards.has(RV.cur.id) || RV.cur !== S.cards.get(RV.cur.id) || RV.cur.queue < 0) && (RV.cur = pick(), RV.shown = !1, RV.py = RUBY.shown(), RV.t0 = Date.now());
     let c = RV.cur, t = today(), n = c ? Math.max(1, left()) : 0, prog = `<div class="rx-prog" aria-hidden="true"><i style="width:${n ? Math.round(t.done / (t.done + n) * 100) : 100}%"></i></div>`;
     if (paintDot(), !c) {
       let nextLearn = live().filter((x) => x.queue === 1).sort((a, b) => a.due - b.due)[0], anyNew = live().some((x) => x.queue === 0);
@@ -792,17 +909,23 @@ img{max-width:100%!important;max-height:min(46vh,460px)!important;width:auto!imp
     app.innerHTML = `${prog}<section class="rw${flag ? " fl" + flag : ""}">
     ${RV.merge ? mergeBanner() : ""}
     <div class="rw-card"><div class="host${RV.py ? " py" : ""}"></div></div>
-    <div class="rw-bar">${RV.shown ? `<div class="rw-g">${["Again", "Hard", "Good", "Easy"].map((x, i) => `<button type="button" class="rw-a rw-a${i + 1}" data-g="${i + 1}">${x}</button>`).join("")}</div>` : '<button type="button" class="rw-show" data-a="show">Show answer</button>'}</div>
+    <div class="rw-foot"><div class="rw-bar">${RV.shown ? `<div class="rw-g">${["Again", "Hard", "Good", "Easy"].map((x, i) => `<button type="button" class="rw-a rw-a${i + 1}" data-g="${i + 1}">${x}</button>`).join("")}</div>` : '<button type="button" class="rw-show" data-a="show">Show answer</button>'}</div>
     <div class="rw-more rx-opt">
       ${TOUCH ? '<button type="button" class="btn-q" data-a="py">Pinyin</button>' : ""}<button type="button" class="btn-q rw-snd" data-a="play" aria-label="Play" hidden>${SPEAKER}</button>
       <button type="button" class="btn-q" data-a="edit">Edit</button><button type="button" class="btn-q rw-flagb" data-a="flag" aria-haspopup="dialog" aria-expanded="${RV.flags}">Flag</button><button type="button" class="btn-q" data-a="suspend">Suspend</button>
     </div>
-    ${RV.flags ? flagPicker(c) : ""}
-  </section>`;
+    ${RV.flags ? flagPicker(c) : ""}</div>
+  </section>`, watchFoot();
     let host = $(".host", app), root = draw(host, r, RV.shown ? "a" : "q"), loud = !!root.querySelector("[data-sound]");
     $(".rw-snd", app).hidden = !loud, host.classList.toggle("loud", loud), loud && (host.onclick = (e) => !e.composedPath().some((x) => x instanceof HTMLElement && x.matches("a,button,input,[contenteditable]")) && !String(getSelection() ?? "") && playAll(root));
     let side = `${c.id}:${RV.shown ? "a" : "q"}`;
     side !== autoplayed && (autoplayed = side, SOUND.autoplay() && playAll(root)), RV.py && RUBY.set(root.querySelector(".card"), !0), sitting || (sitting = !0, BUS.emit("reviews:start")), bindReview();
+  }
+  var footRO = typeof ResizeObserver == "function" ? new ResizeObserver((es) => es.forEach((e) => e.target.isConnected && VIEW_EL.style.setProperty("--rw-foot", `${Math.ceil(e.target.offsetHeight)}px`))) : null;
+  function watchFoot() {
+    footRO?.disconnect();
+    let f = $(".rw-foot", app);
+    f && footRO?.observe(f);
   }
   function bindReview() {
     app.querySelectorAll("[data-a]").forEach((b) => b.onclick = () => act(b.dataset.a)), app.querySelectorAll("[data-g]").forEach((b) => b.onclick = () => grade(Number(b.dataset.g))), app.querySelectorAll("[data-f]").forEach((b) => b.onclick = () => flagIt(Number(b.dataset.f))), app.querySelectorAll("[data-m]").forEach((b) => b.onclick = () => mergeAct(b.dataset.m));
@@ -850,7 +973,7 @@ img{max-width:100%!important;max-height:min(46vh,460px)!important;width:auto!imp
       if (a === "play") return playAll($(".host", app)?.shadowRoot);
       if (a === "edit") return editDialog(S.notes.get(c.nid));
       if (a === "flag")
-        return RV.flags = !RV.flags, showReview();
+        return RV.flags = !RV.flags, paintFlags();
       a === "suspend" && (await change("Suspend", [["card", c.id, { ...c, queue: -1 }]], c.id), sfx("drop"), acted = !0, RV.cur = null, showReview(), toast(`Suspended <span class="zh">${esc2(wordOfCard(c))}</span>`, !0));
     }
   }
@@ -862,6 +985,11 @@ img{max-width:100%!important;max-height:min(46vh,460px)!important;width:auto!imp
     <button type="button" class="fl-b fl-g${f === 3 ? " on" : ""}" data-f="3"><i></i>Green<kbd>G</kbd></button>
     ${f ? '<button type="button" class="fl-b fl-0" data-f="0"><i></i>None<kbd>N</kbd></button>' : ""}
   </div>`;
+  }
+  function paintFlags() {
+    let foot = $(".rw-foot", app), c = RV.cur;
+    if (!foot || !c) return showReview();
+    foot.querySelector(".rw-flags")?.remove(), $(".rw-flagb", app)?.setAttribute("aria-expanded", String(RV.flags)), RV.flags && (foot.insertAdjacentHTML("beforeend", flagPicker(c)), foot.querySelectorAll("[data-f]").forEach((b) => b.onclick = () => flagIt(Number(b.dataset.f))));
   }
   async function flagIt(f, cards) {
     let list = cards ?? (RV.cur ? [RV.cur] : []);
@@ -916,9 +1044,9 @@ img{max-width:100%!important;max-height:min(46vh,460px)!important;width:auto!imp
   function endDeeper() {
     clearInterval(deeperTimer), RV.panel = "", showReview();
   }
-  var HAN = /\p{Script=Han}/u;
+  var HAN2 = /\p{Script=Han}/u;
   function nearNotes(note) {
-    let w = wordOfNote(note), chars = new Set([...w].filter((x) => HAN.test(x))), out = /* @__PURE__ */ new Map();
+    let w = wordOfNote(note), chars = new Set([...w].filter((x) => HAN2.test(x))), out = /* @__PURE__ */ new Map();
     for (let n of S.notes.values()) {
       if (n.id === note.id) continue;
       let o = wordOfNote(n);
@@ -930,7 +1058,7 @@ img{max-width:100%!important;max-height:min(46vh,460px)!important;width:auto!imp
   function related(c) {
     let note = S.notes.get(c.nid);
     if (!note) return null;
-    let w = wordOfNote(note), chars = new Set([...w].filter((x) => HAN.test(x)));
+    let w = wordOfNote(note), chars = new Set([...w].filter((x) => HAN2.test(x)));
     if (!chars.size) return null;
     let no = mergeNo(), k = ck(), best = null;
     for (let o of live()) {
@@ -1002,7 +1130,12 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
   var pasteNote = /* @__PURE__ */ new WeakMap();
   function editor(host, note0, onClose) {
     let t = typeOf(note0), start2 = clone(note0), note = note0;
-    host.innerHTML = `<div class="ed">${t.fields.slice().sort((a, b) => a.ord - b.ord).map((f) => `<label class="ef"><span>${esc2(f.name)}</span><div class="fv${/chinese|word|sentence|mnemonic/i.test(f.name) ? " zh" : ""}" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" data-o="${f.ord}">${note.flds[f.ord] ?? ""}</div></label>`).join("")}
+    host.innerHTML = `<div class="ed">${t.fields.slice().sort((a, b) => a.ord - b.ord).map(
+      (f) => (
+        // the audio field is a sound, not text: Play, or Make when there is none (V and Shift+V do the same)
+        /^audio$/i.test(f.name) ? `<div class="ef"><span>${esc2(f.name)}</span><div class="ef-snd"></div><div class="fv" hidden data-o="${f.ord}">${note.flds[f.ord] ?? ""}</div></div>` : `<label class="ef"><span>${esc2(f.name)}</span><div class="fv${/chinese|word|sentence|mnemonic/i.test(f.name) ? " zh" : ""}" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" data-o="${f.ord}">${note.flds[f.ord] ?? ""}</div></label>`
+      )
+    ).join("")}
     <div class="ed-end"><button type="button" class="ed-del" data-e="del">Delete note</button></div></div>`;
     let saveT, read = () => {
       let flds = [...note.flds];
@@ -1017,8 +1150,13 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
     }), $('[data-e="del"]', host).onclick = async () => {
       clearTimeout(saveT), await deleteNote(note.id), onClose?.();
     };
-    let ai = t.fields.find((f) => /^audio$/i.test(f.name))?.ord ?? -1, si = t.fields.find((f) => /^chinese$/i.test(f.name))?.ord ?? 0, voicing = !1;
-    return ED = {
+    let ai = t.fields.find((f) => /^audio$/i.test(f.name))?.ord ?? -1, si = t.fields.find((f) => /^chinese$/i.test(f.name))?.ord ?? 0, voicing = !1, sndRow = host.querySelector(".ef-snd"), paintSnd = () => {
+      if (!sndRow) return;
+      let fa = host.querySelector(`.fv[data-o="${ai}"]`), has = /\[sound:[^\]]+\]/.test(fa?.textContent ?? "");
+      sndRow.innerHTML = has ? `<button type="button" class="btn-q ed-snd" data-v="play">${SPEAKER}Play</button><button type="button" class="btn-q" data-v="again">Make again</button>` : '<button type="button" class="btn-q" data-v="make">Make</button>', sndRow.querySelectorAll("[data-v]").forEach((b) => b.onclick = () => void me.voice(b.dataset.v === "again"));
+    };
+    paintSnd();
+    let me = {
       host,
       voice: async (again) => {
         if (voicing) return;
@@ -1033,14 +1171,15 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
         fa.classList.add("busy"), voicing = !0;
         try {
           let { url } = await api("voice", { text });
-          fa.textContent = `[sound:${url}]`, save(), sfx("save"), SOUND.play(url);
+          fa.textContent = `[sound:${url}]`, paintSnd(), save(), sfx("save"), SOUND.play(url);
         } catch (e) {
           toast(esc2(e.message || "The voice didn\u2019t come through."));
         } finally {
           voicing = !1, fa.classList.remove("busy");
         }
       }
-    }, async () => {
+    };
+    return ED = me, async () => {
       if (ED?.host === host && (ED = null), clearTimeout(saveT), !S.notes.has(note.id)) return;
       let now = read();
       JSON.stringify(now.flds) !== JSON.stringify(start2.flds) && (await put("note", now.id, now), H.undo.push({ name: "Edit", rows: [["note", now.id, start2, clone(S.notes.get(now.id))]] }), H.redo = []);
@@ -1079,50 +1218,104 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
     let w = wordOfNote(n);
     await change(`Delete ${w}`, [["note", nid, null], ...cardsOf(nid).map((c) => ["card", c.id, null])]), sfx("drop"), quiet || toast(`Deleted <span class="zh">${esc2(w)}</span>`, !0);
   }
-  var BR = { q: "", flag: 0, sort: "added", desc: !0, sel: /* @__PURE__ */ new Set(), last: 0, focus: 0, limit: 300, close: null };
-  function resetBrowse() {
-    Object.assign(BR, { q: "", flag: 0, sort: "added", desc: !0, sel: /* @__PURE__ */ new Set(), last: 0, limit: 300 });
+  var BR_V = 1, BR = { f: blank(), sort: "added", desc: !0, tray: "", sel: /* @__PURE__ */ new Set(), last: 0, limit: 300, close: null, face: "a", note: !1 };
+  try {
+    let j = JSON.parse(localStorage.getItem("cbp-browse") || "null");
+    j?.v === BR_V && Object.assign(BR, { f: { ...blank(), ...j.f, q: "" }, sort: j.sort ?? "added", desc: j.desc ?? !0 });
+  } catch {
   }
-  var ADDED = (r) => r.note.id * 10 + r.card.ord, COLS = [
-    ["sort", "Word", (r) => wordOfNote(r.note)],
-    ["card", "Card", (r) => r.type?.templates.find((t) => t.ord === r.card.ord)?.name ?? ""],
-    ["due", "Due", (r, k) => r.card.queue === -1 ? 1e9 : r.card.type === 0 ? 1e8 + r.card.due : r.card.queue === 1 ? k.dayOf(r.card.due * 1e3) : r.card.due],
-    ["ivl", "Interval", (r) => r.card.type === 0 ? -1 : r.card.ivl]
-  ];
+  function saveBR() {
+    try {
+      localStorage.setItem("cbp-browse", JSON.stringify({ v: BR_V, f: { ...BR.f, q: "" }, sort: BR.sort, desc: BR.desc }));
+    } catch {
+    }
+  }
+  var IX = null, IXday = -1, usesMap = () => {
+    try {
+      return typeof STATE < "u" && STATE?.uses || {};
+    } catch {
+      return {};
+    }
+  };
+  function items() {
+    let k = ck();
+    return (!IX || IXday !== k.today) && (IX = index(S.cards.values(), (id) => S.notes.get(id), typeOf, k, conf().w, usesMap()), IXday = k.today), IX;
+  }
+  onChange((what) => what !== "sync" && (IX = null));
+  BUS.on("data", () => {
+    IX = null, VIEW === "reviews" && view === "browse" && paintBrowse();
+  });
+  var STATE_NAME = { new: "New", learning: "Learning", young: "Young", mature: "Mature", suspended: "Suspended", buried: "Buried" }, DUE_NAME = { overdue: "Overdue", today: "Today", week: "7 days" }, DOTS = (n) => `<span class="dots" aria-label="${n} of 3">${"\u25CF".repeat(n)}${"\u25CB".repeat(3 - n)}</span>`, fmtN = (n) => n.toLocaleString("en-US"), fmtRange = (r, unit = "") => r[0] != null && r[1] != null ? r[0] === r[1] ? `${r[0]}${unit}` : `${r[0]}\u2013${r[1]}${unit}` : r[0] != null ? `${r[0]}${unit}+` : `\u2264 ${r[1]}${unit}`, isOpen = (r) => r[0] == null && r[1] == null, MEM = [
+    ["ivl", "Interval", "d"],
+    ["s", "Stability", "d"],
+    ["d", "Difficulty", ""],
+    ["r", "Recall", "%"],
+    ["lapses", "Lapses", ""]
+  ], DAYS = [
+    [1, "Today"],
+    [7, "7 days"],
+    [30, "30 days"]
+  ], tmplNames = () => [...new Set(items().map((x) => x.tmpl).filter(Boolean))], FACETS = [
+    { id: "state", name: "State", on: () => !!BR.f.state.length, text: () => BR.f.state.map((s) => STATE_NAME[s]).join(", "), clear: () => BR.f.state = [] },
+    { id: "due", name: "Due", on: () => !!BR.f.due && (BR.f.due !== "range" || !isOpen(BR.f.dueR)), text: () => BR.f.due === "range" ? `Due in ${fmtRange(BR.f.dueR, "d")}` : DUE_NAME[BR.f.due], clear: () => (BR.f.due = "", BR.f.dueR = [null, null]) },
+    { id: "card", name: "Card", on: () => !!BR.f.card.length, text: () => BR.f.card.join(", "), clear: () => BR.f.card = [] },
+    { id: "flag", name: "Flag", on: () => !!BR.f.flag.length || BR.f.leech, text: () => [...BR.f.flag.map((f) => f === 1 ? "Red" : f === 3 ? "Green" : "No flag"), ...BR.f.leech ? ["Leech"] : []].join(", "), clear: () => (BR.f.flag = [], BR.f.leech = !1) },
+    { id: "media", name: "Media", on: () => !!(BR.f.pic || BR.f.audio), text: () => [BR.f.pic && (BR.f.pic === "yes" ? "Picture" : "No picture"), BR.f.audio && (BR.f.audio === "yes" ? "Audio" : "No audio")].filter(Boolean).join(", "), clear: () => (BR.f.pic = "", BR.f.audio = "") },
+    { id: "uses", name: "Uses", on: () => !!BR.f.uses.length, text: () => BR.f.uses.map((n) => `${n}/3`).join(", "), clear: () => BR.f.uses = [], show: () => !!Object.keys(usesMap()).length },
+    {
+      id: "mem",
+      name: "Memory",
+      on: () => MEM.some(([k]) => !isOpen(BR.f[k])),
+      text: () => MEM.filter(([k]) => !isOpen(BR.f[k])).map(([k, n, u]) => `${n} ${fmtRange(BR.f[k], u)}`).join(", "),
+      clear: () => MEM.forEach(([k]) => BR.f[k] = [null, null])
+    },
+    {
+      id: "dates",
+      name: "Dates",
+      on: () => BR.f.added != null || BR.f.rev != null,
+      text: () => [BR.f.added != null && (BR.f.added === 1 ? "Added today" : `Added ${BR.f.added} days`), BR.f.rev != null && (BR.f.rev === "never" ? "Never reviewed" : BR.f.rev === 1 ? "Reviewed today" : `Reviewed ${BR.f.rev} days`)].filter(Boolean).join(", "),
+      clear: () => (BR.f.added = null, BR.f.rev = null)
+    }
+  ], SEARCH = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
   function showBrowse() {
     app.innerHTML = `<section class="br">
-    <div class="br-top"><input class="br-q" type="search" placeholder="Search" aria-label="Search" value="${esc2(BR.q)}" spellcheck="false" enterkeyhint="search" lang="zh-Hant">
-      <div class="br-f" role="radiogroup" aria-label="Flag">${[[0, "All"], [1, "Red"], [3, "Green"]].map(([f, l]) => `<button type="button" role="radio" data-fl="${f}" aria-checked="${BR.flag === f}">${f ? `<i class="fd fd${f}"></i>` : ""}${l}</button>`).join("")}</div></div>
+    <div class="br-top"><label class="br-s">${SEARCH}<input class="br-q" type="search" placeholder="Word, sentence or pinyin" aria-label="Search" value="${esc2(BR.f.q)}" spellcheck="false" autocomplete="off" enterkeyhint="search" lang="zh-Hant"></label><p class="br-n" aria-live="polite" data-js-text></p></div>
+    <div class="br-chips" role="toolbar" aria-label="Filters"></div>
+    <div class="br-tray" hidden></div>
     <div class="br-bulk" hidden></div>
     <div class="br-main"><div class="br-tbl" role="grid" aria-label="Cards"></div><aside class="br-side" hidden></aside></div></section>`;
-    let q = $(".br-q", app), t;
+    let q = $(".br-q", app), raf = 0;
     q.oninput = () => {
-      clearTimeout(t), t = setTimeout(() => (BR.q = q.value, BR.limit = 300, paintBrowse()), 180);
-    }, app.querySelectorAll("[data-fl]").forEach(
-      (b) => b.onclick = () => {
-        BR.flag = Number(b.dataset.fl), app.querySelectorAll("[data-fl]").forEach((x) => x.setAttribute("aria-checked", String(x === b))), BR.limit = 300, sfx("tap"), paintBrowse();
-      }
-    ), paintBrowse();
+      BR.f.q = q.value, BR.limit = 300, cancelAnimationFrame(raf), raf = requestAnimationFrame(() => paintBrowse());
+    }, paintBrowse();
   }
   function results() {
-    let k = ck(), test = search(BR.q, k.today, k.dayOf), rows = live().map(rowOf).filter((r) => !!r && (!BR.flag || (r.card.flags & 7) === BR.flag) && test(r)), by = BR.sort === "added" ? ADDED : COLS.find((c) => c[0] === BR.sort)[2];
-    return rows.sort((a, b) => {
-      let x = by(a, k), y = by(b, k), o = typeof x == "number" ? x - y : String(x).localeCompare(String(y), "zh-Hant");
-      return BR.desc ? -o : o;
-    }), rows;
+    return sortBy(apply(items(), BR.f, ck()), BR.sort, BR.desc);
   }
+  var COLS = [
+    ["word", "Word"],
+    ["card", "Card"],
+    ["state", "State"],
+    ["due", "Due"],
+    ["ivl", "Interval"],
+    ["r", "Recall"],
+    ["lapses", "Lapses"]
+  ], pct = (r) => r == null ? "" : `${Math.round(r * 100)}%`;
   function paintBrowse() {
     if (view !== "browse" || !$(".br", app)) return;
-    let k = ck(), rows = results(), shown = rows.slice(0, BR.limit), tbl = $(".br-tbl", app);
+    let k = ck(), all2 = items(), rows = results(), shown = rows.slice(0, BR.limit);
+    $(".br-n", app).innerHTML = rows.length === all2.length ? `${fmtN(all2.length)} cards` : `<b>${fmtN(rows.length)}</b> of ${fmtN(all2.length)}`, paintChips(), paintTrayCounts();
+    let tbl = $(".br-tbl", app);
     tbl.innerHTML = `<div class="tr th" role="row">${COLS.map(([key, name]) => `<button type="button" role="columnheader" class="td c-${key}${BR.sort === key ? BR.desc ? " desc" : " asc" : ""}" data-sort="${key}" aria-sort="${BR.sort === key ? BR.desc ? "descending" : "ascending" : "none"}">${name}</button>`).join("")}</div>
     ${shown.map(
-      (r) => `<div class="tr${BR.sel.has(r.card.id) ? " sel" : ""}${r.card.queue === -1 ? " susp" : ""}" data-c="${r.card.id}" role="row" aria-selected="${BR.sel.has(r.card.id)}"><span class="td c-sort zh">${r.card.flags & 7 ? `<i class="fd fd${r.card.flags & 7}"></i>` : ""}${esc2(wordOfNote(r.note))}</span><span class="td c-card">${esc2(r.type?.templates.find((t) => t.ord === r.card.ord)?.name ?? "")}</span><span class="td c-due">${dueText(r.card, k)}</span><span class="td c-ivl">${r.card.ivl && r.card.type ? label(r.card.ivl) : ""}</span></div>`
+      (x) => `<div class="tr${BR.sel.has(x.card.id) ? " sel" : ""} st-${x.state}" data-c="${x.card.id}" role="row" aria-selected="${BR.sel.has(x.card.id)}"><span class="td c-word zh">${x.flag ? `<i class="fd fd${x.flag}"></i>` : ""}${esc2(x.word)}</span><span class="td c-card">${esc2(x.tmpl)}</span><span class="td c-state"><i class="sdot"></i>${STATE_NAME[x.state]}</span><span class="td c-due">${x.due == null ? "" : dueText(x.card, k)}</span><span class="td c-ivl">${x.ivl ? label(x.ivl) : ""}</span><span class="td c-r">${pct(x.r)}</span><span class="td c-lapses">${x.lapses || ""}</span></div>`
     ).join("")}
-    ${rows.length > shown.length ? '<button type="button" class="btn-q br-more">Show all</button>' : ""}${rows.length ? "" : '<p class="br-none">Nothing matches.</p>'}`, tbl.querySelectorAll("[data-sort]").forEach(
+    ${rows.length > shown.length ? `<button type="button" class="btn-q br-more">Show all ${fmtN(rows.length)}</button>` : ""}${rows.length ? "" : `<div class="br-none"><p>Nothing matches.</p>${active(BR.f) || BR.f.q ? '<button type="button" class="btn-q" data-clear="1">Clear filters</button>' : ""}</div>`}`, tbl.querySelectorAll("[data-sort]").forEach(
       (b) => b.onclick = () => {
-        BR.desc = BR.sort === b.dataset.sort ? !BR.desc : !1, BR.sort = b.dataset.sort, paintBrowse();
+        let s = b.dataset.sort;
+        BR.desc = BR.sort === s ? !BR.desc : !["word", "card", "due", "state"].includes(s), BR.sort = s, saveBR(), paintBrowse();
       }
-    ), $(".br-more", tbl)?.addEventListener("click", () => (BR.limit = 1e9, paintBrowse())), tbl.querySelectorAll(".tr[data-c]").forEach(
+    ), $("[data-clear]", tbl)?.addEventListener("click", clearFilters), $(".br-more", tbl)?.addEventListener("click", () => (BR.limit = 1e9, paintBrowse())), tbl.querySelectorAll(".tr[data-c]").forEach(
       (tr) => tr.onclick = (e) => {
         let id = Number(tr.dataset.c);
         if (e.shiftKey && BR.last) {
@@ -1132,6 +1325,75 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
         BR.last = id, paintSel();
       }
     ), paintSel();
+  }
+  function clearFilters() {
+    let q = BR.f.q;
+    BR.f = blank(), BR.f.q = q && !active(BR.f) ? q : "", BR.tray = "", BR.limit = 300;
+    let inp = $(".br-q", app);
+    inp && (inp.value = BR.f.q), saveBR(), sfx("unstamp"), paintTray(), paintBrowse();
+  }
+  function paintChips() {
+    let el = $(".br-chips", app);
+    if (!el) return;
+    let on = active(BR.f);
+    el.innerHTML = FACETS.filter((f) => !f.show || f.show() || f.on()).map((f) => {
+      let a = f.on();
+      return `<span class="fc${a ? " on" : ""}${BR.tray === f.id ? " open" : ""}"><button type="button" class="fc-b" data-fc="${f.id}" aria-expanded="${BR.tray === f.id}">${a ? esc2(f.text()) : f.name}</button>${a ? `<button type="button" class="fc-x" data-fx="${f.id}" aria-label="Clear ${f.name}">\xD7</button>` : ""}</span>`;
+    }).join("") + (on ? '<button type="button" class="fc-clear" data-clear="1">Clear</button>' : ""), el.querySelectorAll("[data-fc]").forEach(
+      (b) => b.onclick = () => {
+        BR.tray = BR.tray === b.dataset.fc ? "" : b.dataset.fc, sfx("tap"), paintChips(), paintTray();
+      }
+    ), el.querySelectorAll("[data-fx]").forEach(
+      (b) => b.onclick = () => {
+        FACETS.find((f) => f.id === b.dataset.fx).clear(), BR.tray === b.dataset.fx && (BR.tray = ""), changed(!0);
+      }
+    ), $("[data-clear]", el)?.addEventListener("click", clearFilters);
+  }
+  function changed(tray = !1) {
+    BR.limit = 300, saveBR(), sfx("tap"), tray && paintTray(), paintBrowse();
+  }
+  var opt = (k, v, text, on) => `<button type="button" class="tc${on ? " on" : ""}" data-k="${k}" data-v="${v}" aria-pressed="${on}">${text}<span class="tn" data-js-text></span></button>`, rangeRow = (k, name, r, unit) => `<div class="trr"><span class="trl">${name}</span><input class="tri" data-r="${k}" data-i="0" inputmode="decimal" placeholder="from" aria-label="${name} from" value="${r[0] ?? ""}"><span class="trd">\u2013</span><input class="tri" data-r="${k}" data-i="1" inputmode="decimal" placeholder="to" aria-label="${name} to" value="${r[1] ?? ""}"><span class="tru">${unit === "d" ? "days" : unit}</span></div>`;
+  function paintTray() {
+    let el = $(".br-tray", app);
+    if (!el) return;
+    if (el.hidden = !BR.tray, !BR.tray) return void (el.innerHTML = "");
+    let f = BR.f, h = "";
+    BR.tray === "state" ? h = `<div class="trw">${STATES.map((s) => opt("state", s, `<i class="sdot sd-${s}"></i>${STATE_NAME[s]}`, f.state.includes(s))).join("")}</div>` : BR.tray === "due" ? h = `<div class="trw">${["overdue", "today", "week"].map((d) => opt("due", d, DUE_NAME[d], f.due === d)).join("")}</div>${rangeRow("dueR", "In", f.due === "range" ? f.dueR : [null, null], "d")}` : BR.tray === "card" ? h = `<div class="trw">${tmplNames().map((t) => opt("card", esc2(t), esc2(t), f.card.includes(t))).join("")}</div>` : BR.tray === "flag" ? h = `<div class="trw">${opt("flag", 1, '<i class="fd fd1"></i>Red', f.flag.includes(1))}${opt("flag", 3, '<i class="fd fd3"></i>Green', f.flag.includes(3))}${opt("flag", 0, "No flag", f.flag.includes(0))}${opt("leech", 1, "Leech", f.leech)}</div>` : BR.tray === "media" ? h = `<div class="trw"><span class="trl">Picture</span>${opt("pic", "yes", "With", f.pic === "yes")}${opt("pic", "no", "Without", f.pic === "no")}</div><div class="trw"><span class="trl">Audio</span>${opt("audio", "yes", "With", f.audio === "yes")}${opt("audio", "no", "Without", f.audio === "no")}</div>` : BR.tray === "uses" ? h = `<div class="trw">${[0, 1, 2].map((n) => opt("uses", n, DOTS(n), f.uses.includes(n))).join("")}</div>` : BR.tray === "mem" ? h = MEM.map(([k, n, u]) => rangeRow(k, n, f[k], u)).join("") : BR.tray === "dates" && (h = `<div class="trw"><span class="trl">Added</span>${DAYS.map(([d, t]) => opt("added", d, t, f.added === d)).join("")}</div><div class="trw"><span class="trl">Reviewed</span>${DAYS.map(([d, t]) => opt("rev", d, t, f.rev === d)).join("")}${opt("rev", "never", "Never", f.rev === "never")}</div>`), el.innerHTML = h, el.querySelectorAll("[data-k]").forEach(
+      (b) => b.onclick = () => {
+        pick1(b.dataset.k, b.dataset.v), changed(!0);
+      }
+    ), el.querySelectorAll("[data-r]").forEach((inp) => {
+      inp.oninput = () => {
+        let k = inp.dataset.r, i = Number(inp.dataset.i), v = inp.value.trim() === "" || isNaN(Number(inp.value)) ? null : Number(inp.value), r = [...BR.f[k]];
+        r[i] = v, BR.f[k] = r, k === "dueR" && (BR.f.due = isOpen(r) ? "" : "range"), BR.limit = 300, saveBR(), paintBrowse(), k === "dueR" && el.querySelectorAll('[data-k="due"]').forEach((b) => (b.classList.toggle("on", !1), b.setAttribute("aria-pressed", "false")));
+      };
+    }), paintTrayCounts();
+  }
+  function pick1(k, v) {
+    let f = BR.f, flip = (list, x) => list.includes(x) ? list.filter((y) => y !== x) : [...list, x];
+    if (k === "state") f.state = flip(f.state, v);
+    else if (k === "card") f.card = flip(f.card, tmplNames().find((t) => esc2(t) === v) ?? v);
+    else if (k === "flag") f.flag = flip(f.flag, Number(v));
+    else if (k === "leech") f.leech = !f.leech;
+    else if (k === "uses") f.uses = flip(f.uses, Number(v));
+    else if (k === "due") f.due = f.due === v ? "" : v, f.dueR = [null, null];
+    else if (k === "pic" || k === "audio") f[k] = f[k] === v ? "" : v;
+    else if (k === "added") f.added = f.added === Number(v) ? null : Number(v);
+    else if (k === "rev") {
+      let x = v === "never" ? "never" : Number(v);
+      f.rev = f.rev === x ? null : x;
+    }
+  }
+  function paintTrayCounts() {
+    let el = $(".br-tray", app);
+    if (!el || el.hidden) return;
+    let k = ck(), all2 = items();
+    el.querySelectorAll("[data-k]").forEach((b) => {
+      let kind = b.dataset.k, v = b.dataset.v, f = { ...BR.f };
+      kind === "state" ? f.state = [v] : kind === "card" ? f.card = [tmplNames().find((t) => esc2(t) === v) ?? v] : kind === "flag" ? (f.flag = [Number(v)], f.leech = !1) : kind === "leech" ? (f.flag = [], f.leech = !0) : kind === "uses" ? f.uses = [Number(v)] : kind === "due" ? (f.due = v, f.dueR = [null, null]) : kind === "pic" || kind === "audio" ? f[kind] = v : kind === "added" ? f.added = Number(v) : kind === "rev" && (f.rev = v === "never" ? "never" : Number(v));
+      let n = apply(all2, f, k).length;
+      b.querySelector(".tn").textContent = fmtN(n), b.classList.toggle("none", !n);
+    });
   }
   async function paintSel() {
     let sel = [...BR.sel].map((id) => S.cards.get(id)).filter((c) => !!c && S.notes.has(c.nid));
@@ -1151,12 +1413,45 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
     }
     if (side.dataset.c === String(focus.id) && !side.hidden) return;
     await BR.close?.(), BR.close = null, side.dataset.c = String(focus.id), side.hidden = !1, app.querySelector(".br-main").classList.add("open");
-    let note = S.notes.get(focus.nid), word = wordOfNote(note), f = focus.flags & 7, tm = typeOf(note)?.templates.find((t) => t.ord === focus.ord)?.name ?? "";
-    side.innerHTML = `<div class="sd-top"><span class="sd-w zh">${esc2(word)}</span><button type="button" class="dlg-x" aria-label="Close">\xD7</button></div>
-    <div class="sd-card"><span class="sd-tm">${esc2(tm)}</span><span class="sd-due">${dueText(focus)}</span>
-      <span class="sd-act"><button type="button" class="btn-q" data-s="susp">${focus.queue === -1 ? "Unsuspend" : "Suspend"}</button><button type="button" class="btn-q${f === 1 ? " on" : ""}" data-s="red"><i class="fd fd1"></i>Red</button><button type="button" class="btn-q${f === 3 ? " on" : ""}" data-s="green"><i class="fd fd3"></i>Green</button></span></div>
+    let x = items().find((i) => i.card.id === focus.id) ?? index([focus], (id) => S.notes.get(id), typeOf, ck(), conf().w, usesMap())[0], note = x.note, f = x.flag, day = (n) => n == null ? "" : n === 0 ? "Today" : n === 1 ? "Yesterday" : fmtDay(Date.now() - n * 864e5), facts = [
+      ["Due", x.due == null ? "" : dueText(x.card)],
+      ["Interval", x.ivl ? label(x.ivl) : ""],
+      ["Recall", pct(x.r)],
+      ["Stability", x.s == null ? "" : label(Math.max(1, Math.round(x.s)))],
+      ["Difficulty", x.d == null ? "" : `${Math.round(x.d * 10) / 10} / 10`],
+      ["Lapses", x.reps ? String(x.lapses) : ""],
+      ["Reviews", x.reps ? String(x.reps) : ""],
+      ["Last", day(x.last)],
+      ["Added", day(x.added)],
+      ["Uses", x.uses == null ? "" : DOTS(x.uses)]
+    ].filter(([, v]) => v);
+    side.innerHTML = `<div class="sd-top"><span class="sd-w zh">${esc2(x.word)}</span><button type="button" class="dlg-x" aria-label="Close">\xD7</button></div>
+    <p class="sd-sub"><span class="sd-st st-${x.state}"><i class="sdot"></i>${STATE_NAME[x.state]}</span><span>${esc2(x.tmpl)}</span></p>
+    <div class="sd-face"><div class="sd-seg" role="radiogroup" aria-label="Side"><button type="button" role="radio" data-face="q" aria-checked="${BR.face === "q"}">Front</button><button type="button" role="radio" data-face="a" aria-checked="${BR.face === "a"}">Back</button></div><div class="host sd-host"></div></div>
+    <dl class="sd-facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>
+    <div class="sd-act"><button type="button" class="btn-q" data-s="susp">${focus.queue === -1 ? "Unsuspend" : "Suspend"}</button><button type="button" class="btn-q${f === 1 ? " on" : ""}" data-s="red"><i class="fd fd1"></i>Red</button><button type="button" class="btn-q${f === 3 ? " on" : ""}" data-s="green"><i class="fd fd3"></i>Green</button></div>
     ${f === 3 ? greenHelp(note) : ""}${f === 1 ? '<div class="sd-help"><button type="button" class="btn-q" data-s="deeper">Five minutes on it</button></div>' : ""}
-    <div class="sd-ed"></div>`, BR.close = editor($(".sd-ed", side), note, () => closeSide()), $(".dlg-x", side).onclick = () => closeSide(), side.querySelectorAll("[data-s]").forEach(
+    <button type="button" class="sd-note" aria-expanded="${BR.note}"><span>Note</span><i aria-hidden="true"></i></button>
+    <div class="sd-ed"${BR.note ? "" : " hidden"}></div>`;
+    let face = () => {
+      let host = $(".sd-host", side), root = draw(host, { card: x.card, note: S.notes.get(note.id) ?? note, type: typeOf(note) }, BR.face), loud = !!root.querySelector("[data-sound]");
+      host.classList.toggle("loud", loud), host.onclick = loud ? () => playAll(root) : null;
+    };
+    face(), side.querySelectorAll("[data-face]").forEach(
+      (b) => b.onclick = () => {
+        BR.face = b.dataset.face, side.querySelectorAll("[data-face]").forEach((y) => y.setAttribute("aria-checked", String(y === b))), face();
+      }
+    );
+    let ed = $(".sd-ed", side), openNote = () => {
+      BR.close || (BR.close = editor(ed, S.notes.get(note.id) ?? note, () => closeSide()));
+    };
+    BR.note && openNote(), $(".sd-note", side).onclick = async (e) => {
+      if (BR.note = !BR.note, e.currentTarget.setAttribute("aria-expanded", String(BR.note)), ed.hidden = !BR.note, sfx("tap"), BR.note) openNote();
+      else {
+        let close = BR.close;
+        BR.close = null, await close?.(), ed.innerHTML = "", face();
+      }
+    }, $(".dlg-x", side).onclick = () => closeSide(), side.querySelectorAll("[data-s]").forEach(
       (b) => b.onclick = async () => {
         let s = b.dataset.s, c = S.cards.get(focus.id);
         if (s === "susp" && await change(c.queue === -1 ? "Unsuspend" : "Suspend", [["card", c.id, { ...c, queue: c.queue === -1 ? unsuspended(c) : -1 }]]), s === "red" || s === "green") return flagIt(s === "red" ? 1 : 3, [c]).then(reopen);
@@ -1346,7 +1641,7 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
       if (!typing && (KEYS.is(e, "undo") || KEYS.is(e, "redo")))
         return eat(), document.querySelector("dialog[open]") ? void 0 : KEYS.is(e, "redo") ? redo() : undo();
       if (e.key === "Escape")
-        return RV.flags ? (e.stopImmediatePropagation(), RV.flags = !1, showReview()) : view === "browse" && BR.sel.size && !document.querySelector("dialog[open]") ? (e.stopImmediatePropagation(), BR.sel = /* @__PURE__ */ new Set(), closeSide(), paintSel()) : void 0;
+        return RV.flags ? (e.stopImmediatePropagation(), RV.flags = !1, paintFlags()) : view === "browse" && BR.tray && !document.querySelector("dialog[open]") ? (e.stopImmediatePropagation(), BR.tray = "", paintChips(), paintTray()) : view === "browse" && BR.sel.size && !document.querySelector("dialog[open]") ? (e.stopImmediatePropagation(), BR.sel = /* @__PURE__ */ new Set(), closeSide(), paintSel()) : void 0;
       if (!typing && ED?.host.isConnected && (KEYS.is(e, "rv.voice") || KEYS.is(e, "rv.revoice"))) return eat(), e.repeat ? void 0 : ED.voice(KEYS.is(e, "rv.revoice"));
       if (typing || document.querySelector("dialog[open]") || view !== "review") return;
       if (RV.flags) {

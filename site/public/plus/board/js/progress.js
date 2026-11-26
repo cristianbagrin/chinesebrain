@@ -15,7 +15,6 @@ document.getElementById('view-progress').innerHTML=`<div class="pr">
     <div class="pr-chart" id="pr-chart" tabindex="0" role="group" aria-label="Words known and new cards, month by month; arrow keys move between months"></div>
     <p class="pr-note" id="pr-note"></p>
   </section>
-  <section class="pr-uses" id="pr-uses" aria-label="Words on the way to known" hidden></section>
   <section class="pr-days" aria-label="Habit"><div id="pr-habit"></div></section>
   <section class="pr-forest" aria-label="Forest"><div id="pr-forest"></div></section>
 </div>`;
@@ -293,21 +292,10 @@ function PR_alerts(){
   el.querySelector('button').onclick=()=>{lsSet(key,'seen');el.hidden=true;};
 }
 
-// the words he is learning, by how many of the three situations he has used each one right in (a test day, an essay,
-// a tutor chat): at three it counts as known (engine.ts situations)
-function PR_uses(){
-  const el=document.getElementById('pr-uses'), U=STATE.uses||{}, by=[[],[],[]];
-  for(const [w,n] of Object.entries(U)) if(n<3) by[n].push(w);
-  el.hidden=!Object.keys(U).length; if(el.hidden) return;
-  const row=(n,ws)=>ws.length?`<div class="pu-row"><span class="pu-n" aria-label="${n} of 3 situations">${'●'.repeat(n)}${'○'.repeat(3-n)}</span><span class="pu-ws">${ws.slice(0,40).map(w=>`<span class="zh">${esc(w)}</span>`).join(' ')}${ws.length>40?` <span class="pu-more">+${ws.length-40}</span>`:''}</span></div>`:'';
-  el.innerHTML=`<p class="side-h">On the way to known</p>${row(2,by[2])}${row(1,by[1])}${row(0,by[0])}`;
-}
-
 function PR_render(){
   if(!STATE) return;
   if(VIEW!=='progress') return;
   PR_alerts();
-  PR_uses();
   PR_chart();
   PR_head(null);
   PR_note();
