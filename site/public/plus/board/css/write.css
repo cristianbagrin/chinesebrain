@@ -8,9 +8,9 @@
 .saved{font-size:var(--fs-s);font-weight:400;color:var(--ink-4);opacity:0;transition:opacity .6s}
 .saved.on{opacity:1;transition:none}
 .saved.err{opacity:1;color:var(--red)}
-.work{margin:0;padding:0;list-style:none;display:grid;gap:4px;counter-reset:w}
-.work li{display:grid;grid-template-columns:18px minmax(0,1fr);gap:6px;counter-increment:w;cursor:pointer;border-radius:6px;transition:background .15s;font-family:var(--zh);font-weight:400;font-size:var(--fs-l);line-height:1.6;color:var(--ink);overflow-wrap:anywhere}
-.work li::before{content:counter(w);font:500 13px/32px var(--ui);color:var(--ink-4);text-align:right}
+.work{margin:0;padding:0;list-style:none;display:grid;gap:var(--s3);counter-reset:w}
+.work li{display:grid;grid-template-columns:18px minmax(0,1fr);gap:6px;counter-increment:w;cursor:pointer;border-radius:6px;transition:background .15s;font-family:var(--zh);font-weight:400;font-size:var(--fs-l);line-height:1.5;color:var(--ink);overflow-wrap:anywhere}
+.work li::before{content:counter(w);font:500 13px/calc(var(--fs-l) * 1.5) var(--ui);color:var(--ink-4);text-align:right}
 .work li:hover{background:var(--wash)}
 .work .es-en{font-size:.9em}
 u.d{text-decoration:underline 2px var(--red);text-underline-offset:5px;text-decoration-skip-ink:none}
@@ -31,7 +31,7 @@ u.d{text-decoration:underline 2px var(--red);text-underline-offset:5px;text-deco
 .w-fn u.d{text-decoration-color:var(--red)}
 .w-fo{position:absolute;z-index:5;top:calc(100% + 6px);left:calc(30px - var(--s4));width:max-content;max-width:min(320px,calc(100vw - 40px));margin:0;padding:var(--s3) var(--s4);background:var(--surface);border-radius:var(--r);box-shadow:0 0 0 1px var(--hair),0 12px 30px -10px rgba(21,23,28,.2);display:grid;gap:4px;animation:tipin .18s var(--ease)}
 .w-fo s{font-family:var(--zh);font-size:var(--fs-zh);color:var(--ink-3)}
-.w-fw{font-size:var(--fs-m);line-height:1.5;color:var(--ink-2)}
+.w-fw{font-size:var(--fs-m);line-height:var(--lh);color:var(--ink-2)}
 
 /* his writing: the pen, a touch bigger and thicker, in ink, one line per rule */
 #write .sheet{min-height:calc(var(--paper-row) * 6);padding:0;background:none;font-family:var(--pen);font-size:var(--wr-fs);line-height:var(--paper-row);

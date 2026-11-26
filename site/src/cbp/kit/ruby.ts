@@ -68,7 +68,7 @@ export const RUBY = {
   html: async (text: string) => frag(await load(), text),
   shown: () => LAB.get('pinyin') === 'on',
   ready: load,
-  CSS: '.rb-on.rb-on{line-height:2.3}.rbw{white-space:nowrap}ruby{ruby-position:over;ruby-align:center;margin:0 .08em}rt{font-family:Inter,system-ui,sans-serif;font-size:max(.55em,14px);font-weight:450;letter-spacing:0;color:#757B87;-webkit-text-stroke:0;line-height:1.1}',
+  CSS: '.rb-on.rb-on{line-height:2.1}.rbw{white-space:nowrap}ruby{ruby-position:over;ruby-align:center;margin:0 .08em}rt{font-family:Inter,system-ui,sans-serif;font-size:max(.45em,13px);font-weight:450;letter-spacing:0;color:#757B87;opacity:.8;-webkit-text-stroke:0;line-height:1.1}',
 };
 
 // Cards: a word's or a sentence's reading as plain text ("fànshòu"), from the same code, for the study card's head

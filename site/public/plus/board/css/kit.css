@@ -76,8 +76,10 @@ button.st-row:hover{background:var(--bg)}
 
 /* ---------- pinyin above the characters (kit/ruby.ts) ---------- */
 ruby{ruby-position:over;ruby-align:center;margin:0 .08em}
-rt{font-family:var(--ui);font-size:max(.55em,14px);font-weight:450;letter-spacing:0;color:var(--ink-3);-webkit-text-stroke:0;line-height:1.1}
-.rb-on.rb-on{line-height:2.3}
+/* small and faint, so it sits out of the way even while on (2026-11-26): ~45% of the characters, never under 13px; ink-3
+   at 80% (about 3.3:1 on the page) */
+rt{font-family:var(--ui);font-size:max(.45em,13px);font-weight:450;letter-spacing:0;color:var(--ink-3);opacity:.8;-webkit-text-stroke:0;line-height:1.1}
+.rb-on.rb-on{line-height:2.1}
 .rbw{white-space:nowrap}
 .st-row.st-sub{min-height:0;padding:0 0 6px;justify-content:flex-end;margin:-8px 0 0}
 /* Habit: a dropdown choice (the nudge's time), and the nudge's own row */

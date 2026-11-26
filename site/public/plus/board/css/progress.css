@@ -45,18 +45,18 @@
 .pr-cb{fill:var(--green-soft);opacity:.6}
 .pr-cb.now{fill:var(--green);opacity:.55}
 .pr-cv{font-size:var(--fs-xs);fill:var(--green-deep);opacity:.8;font-variant-numeric:tabular-nums}
-.pr-note{display:flex;flex-wrap:wrap;gap:var(--s1) var(--s5);margin:var(--s2) 0 0;min-height:1.4em;font-size:var(--fs-s);line-height:1.4;color:var(--ink-3);text-wrap:pretty}
+.pr-note{display:flex;flex-wrap:wrap;gap:var(--s1) var(--s5);margin:var(--s2) 0 0;min-height:1.4em;font-size:var(--fs-s);line-height:var(--lh-snug);color:var(--ink-3);text-wrap:pretty}
 .pr-note b{font-weight:550;color:var(--ink-2)}
 .pr-note .r{color:var(--red)}
 .pr-gtip{max-width:calc(320px * var(--k))}
-.pr-gw{color:var(--ink-2);font-size:var(--fs-s);line-height:1.4}
+.pr-gw{color:var(--ink-2);font-size:var(--fs-s);line-height:var(--lh-snug)}
 .pr-gw b{font-weight:550;color:var(--ink)}
 
 .pr-forest{margin-top:var(--s7)}
 
 /* the monthly job's checks and proposals, until he marks them seen */
 .pr-alerts{position:relative;padding:var(--s3) var(--s4);border-radius:var(--r);background:var(--wash)}
-.pr-alerts ul{margin:0;padding-left:1.1em;display:grid;gap:var(--s1);font-size:var(--fs-m);color:var(--ink-2)}
+.pr-alerts ul{margin:0;padding-left:1.1em;display:grid;gap:var(--para);font-size:var(--fs-m);line-height:var(--lh);color:var(--ink-2)}
 .pr-alerts .pr-prop{list-style:none;margin-left:-1.1em;color:var(--ink)}
 .pr-x-btn{position:absolute;top:var(--s2);right:var(--s2);border:0;background:none;color:var(--ink-3);font-size:var(--fs-l);cursor:pointer;line-height:1}
 .pr-x-btn:hover{color:var(--ink)}

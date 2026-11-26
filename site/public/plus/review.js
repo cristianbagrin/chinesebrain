@@ -9,12 +9,12 @@
    and V plays it (made then if it isn't yet).
    A word can have several cards (notes/<card id>, then notes/<card id>.2, .3…): their numbers show above the fields
    once the first is added, + starts another. Add: a press adds and moves on to the next word, a hold (or
-   Shift+Cmd+Enter) adds and stays, with the next card for the same word ready.
+   Cmd+Enter) adds and stays, with the next card for the same word ready.
    Pictures to choose from sit in one strip under the fields: drawings in his flashcard style, then photos from
    Wikimedia Commons (straight from Commons, so they show fast); a click puts one in Picture (again takes it out), a drag
    puts it anywhere. "More images" finds more photos, "More drawings" draws two more. A picture in a field is picked with a
    click (Backspace takes it out) and dragged to move it.
-   Add (the button, Cmd+Enter in a field, or the board's Enter) keeps every picture on the site, saves db
+   Add (the button, Shift+Cmd+Enter, or the board's Enter) keeps every picture on the site, saves db
    `notes/<card id>` and cards the word. Unsaved fields survive a reload (localStorage, per word). Until reviews move
    here (Stage 4), the Mac's nightly hands new notes to Anki (scripts/cbp-push.py --anki). */
 (() => {
@@ -819,8 +819,8 @@
     if (d && d.text && !d.carded && state(w) && !(await save(w))) return;
     cardIt();
   };
-  /** Add (a press, Cmd+Enter): the card is saved, the word carded, and the next word comes up. Add and stay (a hold,
-   *  Shift+Cmd+Enter): the same, then the next card for this word, ready to fill. */
+  /** Add (a press, Shift+Cmd+Enter): the card is saved, the word carded, and the next word comes up. Add and stay (a hold,
+   *  Cmd+Enter): the same, then the next card for this word, ready to fill. */
   async function add(stay) {
     const w = CD.cur;
     if (!w || RV.saving || !state(w)) return;
@@ -943,7 +943,7 @@
     if (KEYS.is(e, 'cd.addstay') || KEYS.is(e, 'cd.add')) {
       e.preventDefault();
       e.stopPropagation();
-      add(KEYS.is(e, 'cd.addstay'));
+      if (!e.repeat) add(KEYS.is(e, 'cd.addstay'));
     }
   });
   // a picture in a field: a click picks it (a ring shows it), Backspace takes it out, a drag moves it
@@ -1166,6 +1166,11 @@
     if (KEYS.is(e, 'cd.voice')) {
       e.preventDefault();
       speak();
+    }
+    // Tutor: the add keys work off the fields too, while Add is on screen (in a field, the fields' own keydown has them)
+    else if (CD.open !== null && $('.rv-add')?.offsetParent && (KEYS.is(e, 'cd.addstay') || KEYS.is(e, 'cd.add'))) {
+      e.preventDefault();
+      if (!e.repeat) add(KEYS.is(e, 'cd.addstay'));
     }
   });
 

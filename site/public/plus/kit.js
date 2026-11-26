@@ -275,7 +275,7 @@
     html: async (text) => frag(await load(), text),
     shown: () => LAB.get("pinyin") === "on",
     ready: load,
-    CSS: ".rb-on.rb-on{line-height:2.3}.rbw{white-space:nowrap}ruby{ruby-position:over;ruby-align:center;margin:0 .08em}rt{font-family:Inter,system-ui,sans-serif;font-size:max(.55em,14px);font-weight:450;letter-spacing:0;color:#757B87;-webkit-text-stroke:0;line-height:1.1}"
+    CSS: ".rb-on.rb-on{line-height:2.1}.rbw{white-space:nowrap}ruby{ruby-position:over;ruby-align:center;margin:0 .08em}rt{font-family:Inter,system-ui,sans-serif;font-size:max(.45em,13px);font-weight:450;letter-spacing:0;color:#757B87;opacity:.8;-webkit-text-stroke:0;line-height:1.1}"
   };
   Object.assign(RUBY, { text: async (t) => sentence(await load(), t) });
 
@@ -286,7 +286,12 @@
       ["settings", "Settings", "mod+,"],
       ["shortcuts", "Shortcuts", "f12"],
       ["undo", "Undo", "mod+z"],
-      ["redo", "Redo", "mod+shift+z mod+y"]
+      ["redo", "Redo", "mod+shift+z mod+y"],
+      // from any page (a field being typed in, or a page's own key, wins: go.ts)
+      ["go.today", "Today", "t"],
+      ["go.cards", "Cards", "c"],
+      ["go.reviews", "Reviews", "r"],
+      ["go.browse", "Browse", "b"]
     ]),
     ...D("Reviews", void 0, [
       ["rv.show", "Show answer", "space enter"],
@@ -294,7 +299,7 @@
       ["rv.hard", "Hard", "2"],
       ["rv.good", "Good", "3"],
       ["rv.easy", "Easy", "4"],
-      ["rv.play", "Play", "v r"],
+      ["rv.play", "Play", "v"],
       ["rv.pinyin", "Pinyin", "p"],
       ["rv.edit", "Edit", "e"],
       ["rv.flag", "Flag", "f"],
@@ -317,13 +322,13 @@
       ["cd.images", "Pictures on the web", "i"]
     ]),
     ...D("Cards", "field", [
-      ["cd.add", "Add", "mod+enter"],
+      ["cd.add", "Add and move on", "mod+shift+enter"],
       ["cd.mark", "Highlight", "mod+shift+h"]
     ]),
     // Cards: add and stay, Gemini, rich text in the card's fields
     ...D("Cards", void 0, [["cd.gemini", "Gemini", "g"]]),
     ...D("Cards", "field", [
-      ["cd.addstay", "Add and stay", "mod+shift+enter"],
+      ["cd.addstay", "Add and stay", "mod+enter"],
       ["cd.bold", "Bold", "mod+b"],
       ["cd.italic", "Italic", "mod+i"],
       ["cd.underline", "Underline", "mod+u"]
@@ -333,7 +338,8 @@
       ["cd.copy", "Copy the sentence", "space"],
       ["cd.pinyin", "Pinyin over the sentence", "shift+enter"]
     ]),
-    ...D("Today", void 0, [
+    // a test's choices take their letters while it's on screen, so they may share them with the Go-to keys (go.ts)
+    ...D("Today", "test", [
       ["test.a", "Choice A", "a"],
       ["test.b", "Choice B", "b"],
       ["test.c", "Choice C", "c"],
@@ -517,6 +523,30 @@
   document.addEventListener("pointerdown", (e) => !box.hidden && !box.contains(e.target) && !btn.contains(e.target) && open(!1), !0);
   BUS.on("lab", () => !box.hidden && page === "main" && draw());
   var SETTINGS = { open: (to) => open(!0, to), close: () => open(!1), redraw: () => !box.hidden && draw() };
+
+  // site/src/cbp/kit/go.ts
+  var TO = [
+    ["go.today", "today"],
+    ["go.cards", "cards"],
+    ["go.reviews", "reviews", "review"],
+    ["go.browse", "reviews", "browse"]
+  ], TYPING = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
+  addEventListener("keydown", (e) => {
+    if (e.defaultPrevented || e.isComposing || e.repeat || e.target?.closest?.(TYPING) || document.querySelector("dialog[open]")) return;
+    let hit = TO.find(([id]) => KEYS.is(e, id));
+    if (!hit || !VIEWS.includes(hit[1])) return;
+    e.preventDefault();
+    let [, view, sub] = hit;
+    if (view !== VIEW) {
+      try {
+        sfx("tap");
+      } catch {
+      }
+      setView(view);
+    }
+    let b = sub && document.querySelector(`#view-reviews [data-v="${sub}"]`);
+    b && b.getAttribute("aria-current") !== "true" && b.click();
+  });
 
   // site/src/cbp/habit.ts
   var habit_exports = {};

@@ -684,9 +684,12 @@ function NU_try(q){
 
 // a sentence showing its pinyin keeps it through repaints (the pinyin is drawn into the text, so it's put back)
 {const paint=CD_paintAll;CD_paintAll=function(...a){paint.apply(this,a);CD_EL.querySelectorAll('.cd-sent.py .cd-szh').forEach(p=>RUBY.on(p));CD_pyHead();};}
+BUS.on('lab',id=>id==='pinyin'&&CD_pyHead());
 // the word's reading in the card's head comes from code (pinyin.ts through RUBY.text), the same every time; Claude
 // writes no pinyin (2026-11-26)
 function CD_pyHead(){
+  // Settings › Pinyin shown: the pinyin above the big word too (then the reading under it would only say it twice)
+  const hw=CD_EL.querySelector('.cd-w'); if(hw) RUBY.set(hw,RUBY.shown()).catch(()=>{});
   const el=CD_EL.querySelector('.cd-py[data-w]'); if(!el) return;
   const w=el.dataset.w; if(CD.pyw[w]){el.textContent=CD.pyw[w];return;}
   if(!RUBY.text||!CD_HAN.test(w)) return;
