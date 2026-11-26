@@ -15,6 +15,12 @@ import './go.ts';
 // Habit: the habit's rules (day done, rest day, never miss twice, reviews a day), shared with the server
 import * as HABIT from '../habit.ts';
 // (end Habit)
+// EssRev: the one rich-text editor for a card's fields (Cards' Add and Reviews' Edit), editor.ts
+import { EDITOR } from './editor.ts';
+// and which words he knows (known.ts), so pinyin shows only over new ones
+import { KNOWN } from './known.ts';
+Object.assign(window, { EDITOR, KNOWN });
+// (end EssRev)
 
 Object.assign(window, { SOUND, HOLD, RUBY, KEYS, SETTINGS });
 // Habit

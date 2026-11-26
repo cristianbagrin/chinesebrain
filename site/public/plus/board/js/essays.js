@@ -4,8 +4,9 @@
    words (`mine`) from where the last one ended; one whose words he has since changed drops.
    Each day is a sheet of paper (paper.css, B's); a day the weekly review has read carries the red stamp. Reading is the default: the
    essay reads as the corrected text, only the changed characters marked with one light, slightly messy highlighter
-   (every kind of correction alike; well done is plain text). The tip opens only with the pointer on highlighted
-   characters (one hit test, ES_hit). Editing is a double-click on the text (or Enter on it) and happens on the
+   (every kind of correction alike; well done is plain text). The tip opens when the pointer rests on highlighted
+   characters (one hit test, ES_hit) or on any word of his, and stays while the pointer travels to it (Chinese Brain's
+   way, src/content/popup.ts); a tap opens it on a phone. Pinyin shows only over words he doesn't know yet (KNOWN). Editing is a double-click on the text (or Enter on it) and happens on the
    page itself, with the same type: his own words come back with the corrected spots faintly marked; Esc, Cmd+Enter or a click
    away ends it, and the whole edit is one Cmd+Z step. ---------- */
 document.getElementById('view-essays').innerHTML=`<div class="es">
@@ -242,7 +243,7 @@ function ES_hit(x,y,tol=0){
   }
   return null;
 }
-function ES_closeTip(){clearTimeout(ES.timer);clearTimeout(ES.wordT);document.getElementById('es-tip')?.remove();ES_D.querySelectorAll('.es-look').forEach(x=>x.remove());document.querySelectorAll('.es-c.on').forEach(c=>c.classList.remove('on'));ES.tip=null;ES.pinned=false;ES.anchor=null;}
+function ES_closeTip(){clearTimeout(ES.timer);clearTimeout(ES.wordT);ES_cancelHide();ES.span=null;document.getElementById('es-tip')?.remove();ES_D.querySelectorAll('.es-look').forEach(x=>x.remove());document.querySelectorAll('.es-c.on').forEach(c=>c.classList.remove('on'));ES.tip=null;ES.pinned=false;ES.anchor=null;}
 const ES_addLabel=on=>on?ES_ICON_ON+'On my list':'Add to my list';
 
 /* the meaning of a word, by code: /api/plus/look (site/src/cbp/look.ts, the dictionary), kept for the visit */
@@ -254,18 +255,29 @@ function ES_look(t,at){
   return ES_LOOK.get(k);
 }
 const ES_HAN=/[㐀-䶿一-鿿豈-﫿]/;
-// the right way with pinyin over the words that changed (RUBY), the changed characters marked
+// pinyin only over words he doesn't know yet (KNOWN, plus/kit.js, over the card kit's list: board/cardkit, known-words.txt's
+// K words). Until the kit has loaded every word counts as new, so pinyin is never missing where it's needed.
+const ES_kit=()=>typeof cardKit==='function'?cardKit().catch(()=>null):Promise.resolve(null);
+const ES_new=w=>typeof KNOWN==='undefined'||KNOWN.needsPinyin(w,KNOWN.of(typeof CD!=='undefined'?CD.kit:null));
+// the right way with pinyin over the words that changed and are new to him (RUBY), the changed characters marked.
+// The highlighter goes on the characters only (a <u class="d"> inside the <ruby>), never over the pinyin above them.
 async function ES_fixHTML(s){
   const ch=[]; diffSegs(s.t==='word'?'':s.mine,s.nat).forEach(([t,c])=>[...t].forEach(()=>ch.push(c)));
+  await ES_kit();
   const box=document.createElement('span'); box.innerHTML=await RUBY.html(s.nat);
+  const hl=c=>{const u=document.createElement('u');u.className='d';u.textContent=c;return u;};
   let k=0;
   const walk=n=>{for(const c of [...n.childNodes]){
-    if(c.nodeType===3){const f=document.createDocumentFragment();[...c.nodeValue].forEach(x=>{if(ch[k++]){const u=document.createElement('u');u.className='d';u.textContent=x;f.appendChild(u);}else f.appendChild(document.createTextNode(x));});c.replaceWith(f);}
-    else if(c.nodeName==='RUBY'){if(ch[k])c.classList.add('d');k++;}
+    if(c.nodeType===3){const f=document.createDocumentFragment();[...c.nodeValue].forEach(x=>f.appendChild(ch[k++]?hl(x):document.createTextNode(x)));c.replaceWith(f);}
+    else if(c.nodeName==='RUBY'){if(ch[k])c.dataset.d='1';k++;}
     else if(c.nodeName!=='RT') walk(c);
   }};
   walk(box);
-  box.querySelectorAll('.rbw').forEach(w=>{if(!w.querySelector('ruby.d'))w.replaceWith(document.createTextNode([...w.querySelectorAll('ruby')].map(r=>r.firstChild.nodeValue).join('')));});
+  box.querySelectorAll('.rbw').forEach(w=>{
+    const rs=[...w.querySelectorAll('ruby')], word=rs.map(r=>r.firstChild.nodeValue).join('');
+    if(rs.some(r=>r.dataset.d)&&ES_new(word)) rs.forEach(r=>{if(r.dataset.d){r.firstChild.replaceWith(hl(r.firstChild.nodeValue));delete r.dataset.d;}});
+    else{const f=document.createDocumentFragment();rs.forEach(r=>f.appendChild(r.dataset.d?hl(r.firstChild.nodeValue):document.createTextNode(r.firstChild.nodeValue)));w.replaceWith(f);}
+  });
   return box.innerHTML;
 }
 // the meanings of the words that changed (a word mark: of the Chinese it gives)
@@ -293,7 +305,7 @@ function ES_wordTip(w){
 // the tip sits over (or under) the line it opened on, inside the column and the screen
 function ES_place(){
   const tip=document.getElementById('es-tip'), A=ES.anchor; if(!tip||!A) return;
-  const h=ES_D.getBoundingClientRect(), r=A.r;
+  const h=ES_D.getBoundingClientRect(), r=ES_anchorRects()[A.ri]||A.r;
   const vw=document.documentElement.clientWidth, minL=Math.max(0,8-h.left), maxL=Math.min(h.width,vw-8-h.left)-tip.offsetWidth;
   const left=Math.max(minL,Math.min(A.x-h.left-28,maxL));
   const barBottom=BAR.getBoundingClientRect().bottom;
@@ -303,12 +315,17 @@ function ES_place(){
   tip.style.left=left+'px';
   tip.style.setProperty('--ox',Math.max(14,A.x-h.left-left)+'px');
 }
-function ES_showTip(id,html,r,px,onClick){
+function ES_showTip(id,html,r,px,onClick,pin=true,bands=[r]){
   ES_closeTip();
-  ES.tip=id;ES.pinned=true;
+  ES.tip=id;ES.pinned=!!pin;
   const tip=document.createElement('div');
   tip.className='es-tip';tip.id='es-tip';tip.innerHTML=html;ES_D.appendChild(tip);
-  ES.anchor={r,x:px!=null?Math.min(Math.max(px,r.left),r.right):r.left+Math.min(24,r.width/2)};
+  const h=ES_D.getBoundingClientRect();
+  // the words it belongs to, kept relative to the diary so they stay right after a scroll (the hover's corridor uses them)
+  ES.anchor={r,x:px!=null?Math.min(Math.max(px,r.left),r.right):r.left+Math.min(24,r.width/2),
+    rel:bands.map(q=>({l:q.left-h.left,t:q.top-h.top,w:q.right-q.left,h:q.bottom-q.top})),ri:Math.max(0,bands.indexOf(r))};
+  tip.addEventListener('mouseenter',()=>{ES_HOV.on=true;ES_cancelHide();});
+  tip.addEventListener('mouseleave',()=>{ES_HOV.on=false;if(!ES.pinned)ES_hideSoon();});
   ES_place();
   tip.addEventListener('click',e=>{
     e.stopPropagation();
@@ -333,7 +350,7 @@ function ES_openTip(c,pin,px,py){
     const on=!!IM_listed(s), b=tip.querySelector('#es-add');
     sfx(on?'save':'unstamp');
     b.setAttribute('aria-pressed',on);b.innerHTML=ES_addLabel(on);
-  });
+  },pin,rs);
   c.classList.add('on');
   ES_fixHTML(s).then(h=>ES_fill(tip,'fix',h)).catch(()=>{});
   ES_meanHTML(s).then(h=>ES_fill(tip,'mean',h)).catch(()=>{});
@@ -358,13 +375,18 @@ function ES_bands(box,i,j){
   rs.forEach(q=>{q.width=q.right-q.left;q.height=q.bottom-q.top;});
   return rs;
 }
-/* any word of his: tap (or click) it for its pinyin and meaning, by code, extension or not */
-async function ES_openWord(box,o,px,py){
+/* any word of his: rest the pointer on it (or tap it) for its pinyin and meaning, by code, extension or not */
+// the character under the point (a caret falls on either side of it), or -1
+function ES_charAt(box,o,px,py){
+  const e=ES.essays.find(x=>x.day===+box.dataset.day); if(!e||o==null) return -1;
+  const text=norm(e.text);
+  const under=k=>{if(k<0||k>=text.length||!ES_HAN.test(text[k]))return false;const b=ES_bands(box,k,k+1)[0];return !!b&&px>=b.left-2&&px<=b.right+2&&py>=b.top-4&&py<=b.bottom+4;};
+  return under(o)?o:under(o-1)?o-1:-1;
+}
+async function ES_openWord(box,o,px,py,pin=true){
   const e=ES.essays.find(x=>x.day===+box.dataset.day); if(!e) return;
   const text=norm(e.text);
-  // the character under the point (a caret falls on either side of it)
-  const under=k=>{if(k<0||k>=text.length||!ES_HAN.test(text[k]))return false;const b=ES_bands(box,k,k+1)[0];return !!b&&px>=b.left-2&&px<=b.right+2&&py>=b.top-4&&py<=b.bottom+4;};
-  const at=under(o)?o:under(o-1)?o-1:-1;
+  const at=ES_charAt(box,o,px,py);
   if(at<0){ES_closeTip();return;}
   let a=at,z=at+1;
   while(a>0&&at-a<24&&text[a-1]!=='\n')a--;
@@ -373,20 +395,102 @@ async function ES_openWord(box,o,px,py){
   const show=(w,i,j)=>{
     const rs=ES_bands(box,i,j); if(!rs.length) return null;
     const r=rs.reduce((b,q)=>Math.abs((q.top+q.bottom)/2-py)<Math.abs((b.top+b.bottom)/2-py)?q:b,rs[0]);
-    const tip=ES_showTip(id,ES_wordTip(w),r,px);
+    const tip=ES_showTip(id,ES_wordTip(w),r,px,null,pin,rs);
     const h=ES_D.getBoundingClientRect();
     rs.forEach(q=>{const d=document.createElement('i');d.className='es-look';d.setAttribute('aria-hidden','true');
       d.style.cssText=`left:${q.left-h.left-2}px;top:${q.top-h.top}px;width:${q.width+4}px;height:${q.height}px`;ES_D.appendChild(d);});
-    RUBY.html(w.w).then(x=>ES_fill(tip,'py',x)).catch(()=>{});
+    if(w.g) ES_kit().then(()=>ES_new(w.w)?RUBY.html(w.w):null).then(x=>x&&ES_fill(tip,'py',x)).catch(()=>{});
+    ES.span={day:e.day,i,j};
     return tip;
   };
   let tip=show({w:text[at],g:''},at,at+1);
   const ws=await ES_look(text.slice(a,z),at-a), w=ws[0];
   if(!w||ES.tip!==id) return;
+  const keep=ES.pinned;
   ES_D.querySelectorAll('.es-look').forEach(x=>x.remove());
   tip=show(w,a+w.i,a+w.i+w.w.length);
-  if(tip) ES.tip=id;
+  if(tip){ES.tip=id;ES.pinned=keep;}
 }
+
+/* hover, with a mouse: Chinese Brain's popup (src/content/popup.ts). The tip opens once the pointer rests a moment on a
+   highlighted mark or a word; it stays while the pointer is on its words, on the tip, or on its way between them: the
+   corridor from the words' edge to the tip's facing edge, and the "safe triangle" from the last point on the words to
+   the tip's two near corners. Leaving any of those, it goes after a short grace. A click pins it (until a click away). */
+const ES_HOV={x:-1,y:-1,exit:null,on:false,hiding:false,soft:0,intent:0,raf:0,ev:null};
+const ES_INTENT=110, ES_GRACE=140;
+function ES_inTri(p,a,b,c,pad){
+  const side=(u,v,w,q)=>{const len=Math.hypot(v.x-u.x,v.y-u.y)||1,sq=(v.x-u.x)*(q.y-u.y)-(v.y-u.y)*(q.x-u.x),sw=(v.x-u.x)*(w.y-u.y)-(v.y-u.y)*(w.x-u.x);return sq*Math.sign(sw||1)>=-pad*len;};
+  return side(a,b,c,p)&&side(b,c,a,p)&&side(c,a,b,p);
+}
+function ES_inTrap(p,from,to,lo0,hi0,lo1,hi1,q,pad){
+  const len=Math.abs(to-from), t=(p-from)*(to>=from?1:-1);
+  if(t<=0||t>len+pad) return false;
+  const f=len?Math.min(1,t/len):0;
+  return q>=lo0+(lo1-lo0)*f-pad&&q<=hi0+(hi1-hi0)*f+pad;
+}
+// the open tip's words, on screen now
+function ES_anchorRects(){
+  const A=ES.anchor; if(!A||!A.rel) return [];
+  const h=ES_D.getBoundingClientRect();
+  return A.rel.map(q=>({left:q.l+h.left,top:q.t+h.top,right:q.l+q.w+h.left,bottom:q.t+q.h+h.top}));
+}
+const ES_onAnchor=(x,y)=>ES_anchorRects().some(a=>x>=a.left-2&&x<=a.right+2&&y>=a.top-2&&y<=a.bottom+2);
+function ES_inBridge(x,y){
+  const tip=document.getElementById('es-tip'), rs=ES_anchorRects(); if(!tip||!rs.length||x<0) return false;
+  if(ES_onAnchor(x,y)) return false;
+  const c=tip.getBoundingClientRect(), pad=8, e=ES_HOV.exit;
+  // the band nearest the tip is the one the pointer leaves from
+  const a=rs.reduce((b,q)=>Math.min(Math.abs(q.top-c.bottom),Math.abs(q.bottom-c.top))<Math.min(Math.abs(b.top-c.bottom),Math.abs(b.bottom-c.top))?q:b,rs[0]);
+  let near=null,lane=false;
+  if(c.top>=a.bottom-2){lane=ES_inTrap(y,a.bottom,c.top,a.left,a.right,c.left,c.right,x,pad);near=[{x:c.left,y:c.top},{x:c.right,y:c.top}];}
+  else if(c.bottom<=a.top+2){lane=ES_inTrap(y,a.top,c.bottom,a.left,a.right,c.left,c.right,x,pad);near=[{x:c.left,y:c.bottom},{x:c.right,y:c.bottom}];}
+  // the triangle only counts past the words' edge, so the words beside them on their line still open their own tips
+  const past=c.top>=a.bottom-2?y>a.bottom:c.bottom<=a.top+2?y<a.top:true;
+  return lane||(past&&!!near&&!!e&&ES_inTri({x,y},e,near[0],near[1],pad));
+}
+function ES_cancelHide(){clearTimeout(ES_HOV.soft);ES_HOV.hiding=false;}
+function ES_hideSoon(ms=ES_GRACE){
+  if(!ES.tip||ES.pinned||ES_HOV.hiding) return;
+  ES_HOV.hiding=true;
+  const check=()=>{
+    if(!ES.tip||ES.pinned||ES_HOV.on){ES_HOV.hiding=false;return;}
+    if(ES_inBridge(ES_HOV.x,ES_HOV.y)||ES_onAnchor(ES_HOV.x,ES_HOV.y)){ES_HOV.soft=setTimeout(check,50);return;}
+    ES_HOV.hiding=false;ES_closeTip();
+  };
+  ES_HOV.soft=setTimeout(check,ms);
+}
+// what's under the pointer: a mark, or a word of his (null for neither)
+function ES_under(ev){
+  const x=ev.clientX,y=ev.clientY, c=ES_hit(x,y);
+  if(c) return {key:c.dataset.k,open:()=>ES_openTip(c,false,x,y)};
+  const box=ev.target.closest&&ev.target.closest('.es-text');
+  if(!box||ev.target.closest('.es-c')||+box.dataset.day===ES.editDay) return null;
+  const o=ES_caretOffset(ev,box), at=ES_charAt(box,o,x,y); if(at<0) return null;
+  const day=+box.dataset.day, S=ES.span;
+  if(S&&S.day===day&&at>=S.i&&at<S.j&&String(ES.tip).startsWith('w:')) return {key:ES.tip,open:()=>{}};
+  return {key:'w:'+day+':'+at,open:()=>ES_openWord(box,o,x,y,false)};
+}
+function ES_hover(ev){
+  const x=ev.clientX,y=ev.clientY;
+  if(ES.pinned||ES.editDay!=null||String(getSelection()||'').trim()) return;
+  // on the open tip's words: it stays, and this is where the safe triangle starts
+  if(ES.tip&&ES_onAnchor(x,y)){ES_HOV.exit={x,y};ES_cancelHide();clearTimeout(ES_HOV.intent);return;}
+  const t=ES_under(ev);
+  if(t&&t.key===ES.tip){ES_cancelHide();clearTimeout(ES_HOV.intent);return;}
+  // on the way to the tip: nothing else opens, however slowly he moves
+  if(ES.tip&&ES_inBridge(x,y)){clearTimeout(ES_HOV.intent);return;}
+  clearTimeout(ES_HOV.intent);
+  if(!t){if(ES.tip)ES_hideSoon();return;}
+  ES_HOV.intent=setTimeout(()=>{ES_HOV.exit={x,y};t.open();},ES_INTENT);
+}
+document.addEventListener('pointermove',e=>{if(e.pointerType==='mouse'){ES_HOV.x=e.clientX;ES_HOV.y=e.clientY;}},{capture:true,passive:true});
+ES_D.addEventListener('pointermove',e=>{
+  if(e.pointerType!=='mouse'||e.buttons||e.target.closest('#es-tip')) return;
+  // once a frame at most: the hit tests read the layout
+  ES_HOV.ev=e; if(ES_HOV.raf) return;
+  ES_HOV.raf=requestAnimationFrame(()=>{ES_HOV.raf=0;const ev=ES_HOV.ev;if(ev&&VIEW==='essays')ES_hover(ev);});
+},{passive:true});
+ES_D.addEventListener('pointerleave',e=>{if(e.pointerType!=='mouse')return;clearTimeout(ES_HOV.intent);if(ES.tip&&!ES.pinned&&!ES_HOV.on)ES_hideSoon();});
 
 /* editing a past day, in place: the same box, the same type; it saves as he types */
 function ES_caretOffset(ev,box){
@@ -453,7 +557,8 @@ ES_D.addEventListener('click',e=>{
   const c=e.clientX||e.clientY?ES_hit(e.clientX,e.clientY,ES_FINE?0:8):e.target.closest('.es-c[data-k]');
   if(c){
     e.stopPropagation();
-    if(ES.tip===c.dataset.k){ES_closeTip();return;}
+    // a click on the words of the tip the hover opened pins it; on a pinned one it closes it
+    if(ES.tip===c.dataset.k){if(!ES.pinned){ES.pinned=true;return;}ES_closeTip();return;}
     ES_openTip(c,true,e.clientX||null,e.clientY||null);
     return;
   }
@@ -463,6 +568,8 @@ ES_D.addEventListener('click',e=>{
     if(o!=null){
       clearTimeout(ES.wordT);
       if(e.detail>1) return;
+      const at=ES_charAt(box,o,x,y), S=ES.span;
+      if(at>=0&&S&&S.day===+box.dataset.day&&at>=S.i&&at<S.j&&!ES.pinned){ES.pinned=true;return;}
       ES.wordT=setTimeout(()=>ES_openWord(box,o,x,y),ES_FINE?260:0);
       return;
     }
@@ -484,7 +591,7 @@ ES_D.addEventListener('keydown',e=>{
   if(c&&(e.key==='Enter'||e.key===' ')){e.preventDefault();ES_openTip(c,true);return;}
   if(e.target.classList.contains('es-text')&&e.key==='Enter'){e.preventDefault();ES_startEdit(+e.target.dataset.day,null);}
 });
-// a mark opens on a click or tap (or Enter), never on hover (his rule, 2026-11-26)
+// a tap (or Enter) opens a mark too, and pins it; with a mouse, resting on it opens it (his rule, 2026-11-26)
 document.addEventListener('click',e=>{if(ES.tip&&!e.target.closest('#es-tip')&&!e.target.closest('#ess-days'))ES_closeTip();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')ES_closeTip();});
 // the tip follows its words when the page reflows (a phone turning, the window resizing)
