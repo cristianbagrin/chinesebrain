@@ -1,5 +1,5 @@
-/* Settings: one panel for the whole of Plus, under the gear (⌘, or Ctrl+, too; F12 opens it on Shortcuts).
-   Every choice on one line, its label left and its options right; group headings, no lines between.
+/* Settings: one window for the whole of Plus, under the gear (⌘, or Ctrl+, too; F12 opens it on Shortcuts).
+   A window in the middle of the screen (a sheet on a phone): sections on the left, each a group of one-line rows.
      Everyday   Sound, Text size, Pinyin shown, Card audio plays by itself          (this device)
      Reviews    rows the Reviews tab adds with LAB.row (new cards a day, how much to remember, memory model, card
                 designs, Download for Anki); absent without the reviews switch
@@ -14,7 +14,7 @@
      LAB.get('card-model' | 'pinyin-model' | 'idea-model' | 'deeper-model' | 'test-model' | 'grade-model' | 'essay-model'
              | 'tutor-model')  'haiku' | 'sonnet' | 'opus';   LAB.get('draw-model') 'both' | 'mai' | 'flux';
      LAB.get('card-ahead') 'on' | 'off'
-   SETTINGS.open('keys' | undefined), SETTINGS.close(), SETTINGS.redraw(). */
+   SETTINGS.open('keys' | 'Reviews' | … | undefined: the section last shown), SETTINGS.close(), SETTINGS.redraw(). */
 import { KEYS, type Def } from './keys.ts';
 
 type LabDef = { id: string; label: string; options: [string, string][]; def: string; group: string; v: string; scope?: string };
@@ -103,79 +103,159 @@ KEYS.load(LAB.acct.keys ?? {}, (keys) => {
     });
     LAB.saveAcct();
     if (mine) LAB.push!();
-    if (!document.getElementById('settings')!.hidden) draw();
+    if ((document.getElementById('settings') as HTMLDialogElement | null)?.open) draw();
   } catch {}
 })();
 
-// ---------- the panel ----------
-const btn = document.getElementById('settingsbtn')!, box = document.getElementById('settings')!;
+// ---------- the window ----------
+/* A window in the middle of the screen (a sheet from the bottom on a phone): the sections on the left (a strip across
+   the top on a phone), one section at a time on the right, each a rounded group of one-line rows. A native modal
+   <dialog>: the page behind is inert, Tab stays inside, Escape or a click outside closes it. The pattern for every
+   dialog in Plus: `dialog.st` and its tokens in kit.css. */
+type Sec = { id: string; label: string; icon: string };
+const SECS: Sec[] = [
+  { id: 'Everyday', label: 'Everyday', icon: '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/>' },
+  { id: 'Reviews', label: 'Reviews', icon: '<rect x="4" y="5" width="13" height="15" rx="2"/><path d="M8 2.8h10a2 2 0 0 1 2 2V17"/>' },
+  { id: 'Habit', label: 'Habit', icon: '<path d="M4 12.5 9 17.5 20 6.5"/>' },
+  { id: 'AI', label: 'AI', icon: '<path d="M12 3.5c.6 4.4 4.1 7.9 8.5 8.5-4.4.6-7.9 4.1-8.5 8.5-.6-4.4-4.1-7.9-8.5-8.5 4.4-.6 7.9-4.1 8.5-8.5z"/>' },
+  { id: 'Shortcuts', label: 'Shortcuts', icon: '<rect x="3" y="6" width="18" height="12" rx="3"/><path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8"/>' },
+];
+const glyph = (d: string) => `<svg class="st-gl" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+const X = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+
+const btn = document.getElementById('settingsbtn')!;
+// the page's old panel holder becomes the window
+const dlg = document.createElement('dialog');
+dlg.id = 'settings';
+dlg.className = 'st';
+dlg.setAttribute('aria-labelledby', 'st-title');
+(document.getElementById('settings') ?? document.body.lastElementChild!).replaceWith(dlg);
+if (!dlg.isConnected) document.body.append(dlg);
 btn.innerHTML =
   '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>';
-let page: 'main' | 'keys' = 'main', listening = '';
+
+let sec = 'Everyday', listening = '';
 const isSwitch = (d: LabDef) => d.options.length === 2 && d.options[0][0] === 'on' && d.options[1][0] === 'off';
 const sw = (attr: string, on: boolean, label: string) => `<div class="st-row"><span class="st-l">${esc(label)}</span><button type="button" role="switch" class="st-tg" aria-checked="${on}" aria-label="${esc(label)}" ${attr}><i></i></button></div>`;
 function row(d: LabDef) {
   if (isSwitch(d)) return sw(`data-x="${d.id}" data-v="${d.v === 'on' ? 'off' : 'on'}"`, d.v === 'on', d.label);
-  // Habit: a choice with many options (the nudge's time) is a dropdown
-  if (d.options.length > 6) return `<div class="st-row"><label class="st-l" for="st-${d.id}">${esc(d.label)}</label><select class="st-sel" id="st-${d.id}" data-xs="${d.id}">${d.options.map(([v, l]) => `<option value="${esc(v)}"${d.v === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></div>`;
-  // (end Habit)
+  // many options (the nudge's time, a model): a compact menu
+  if (d.options.length > 3) return `<div class="st-row"><label class="st-l" for="st-${d.id}">${esc(d.label)}</label><span class="st-selw"><select class="st-sel" id="st-${d.id}" data-xs="${d.id}">${d.options.map(([v, l]) => `<option value="${esc(v)}"${d.v === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></span></div>`;
   const big = d.id === 'text-size';
   return `<div class="st-row"><span class="st-l">${esc(d.label)}</span><span class="st-o${big ? ' st-sz' : ''}" role="radiogroup" aria-label="${esc(d.label)}">${d.options
     .map(([v, l]) => `<button type="button" role="radio" aria-checked="${d.v === v}" data-x="${d.id}" data-v="${esc(v)}"${big ? ` aria-label="${esc(l)}"` : ''}>${big ? `<span class="sz-${esc(v)}">Aa <span class="zh">中文</span></span>` : esc(l)}</button>`)
     .join('')}</span></div>`;
 }
-function mainHTML() {
+/** Every section's rows, as HTML, from LAB (choices and the rows other files draw). Empty sections are left out. */
+function rowsBy() {
   const ids = [...ORDER.filter((id) => LAB.defs[id]), ...LAB.order.filter((id) => !ORDER.includes(id))];
   const by: Record<string, string[]> = {};
   for (const id of ids) (by[LAB.defs[id].group] ??= []).push(row(LAB.defs[id]));
-  for (const r of Object.values(LAB.rows)) (by[r.group] ??= []).push(`<div class="st-cust" data-row="${r.id}">${r.html()}</div>`);
-  by.Everyday?.unshift(sw('data-sound', SND.on, 'Sound'));
-  const groups = [...GROUPS, ...Object.keys(by).filter((g) => !GROUPS.includes(g))];
-  return `<div class="st-top"><b>Settings</b><button class="btn-q" type="button" id="st-reset">Reset</button><button class="st-x" type="button" id="st-close" aria-label="Close">×</button></div>
-    ${groups.filter((g) => by[g]).map((g) => `<section class="st-g"><h3>${esc(g)}</h3>${by[g].join('')}</section>`).join('')}
-    <section class="st-g"><h3>Shortcuts</h3><button type="button" class="st-row st-go" data-page="keys"><span class="st-l">All shortcuts</span><span class="st-k">${esc(KEYS.label('shortcuts'))}</span></button></section>`;
+  for (const r of Object.values(LAB.rows)) {
+    const h = r.html();
+    if (h) (by[r.group] ??= []).push(`<div class="st-cust" data-row="${r.id}">${h}</div>`);
+  }
+  (by.Everyday ??= []).unshift(sw('data-sound', SND.on, 'Sound'));
+  return by;
 }
+function sections(by: Record<string, string[]>): Sec[] {
+  const extra = Object.keys(by).filter((g) => !SECS.some((s) => s.id === g)).map((g) => ({ id: g, label: g, icon: SECS[0].icon }));
+  return [...SECS.filter((s) => s.id === 'Shortcuts' || by[s.id]), ...extra].sort((a, b) => (a.id === 'Shortcuts' ? 1 : b.id === 'Shortcuts' ? -1 : 0));
+}
+/** Choices of a section that differ from their defaults (Reset shows only then). */
+const changed = (s: string) => (s === 'Shortcuts' ? KEYS.defs.some((d) => KEYS.changed(d.id)) : LAB.order.some((id) => LAB.defs[id].group === s && LAB.get(id) !== LAB.defs[id].def));
 function keysHTML() {
   const groups: Record<string, Def[]> = {};
   for (const d of KEYS.defs) (groups[d.group] ??= []).push(d);
-  return `<div class="st-top"><button type="button" class="btn-q st-back" data-page="main">‹ Settings</button><b></b><button class="btn-q" type="button" id="st-kreset">Reset</button><button class="st-x" type="button" id="st-close" aria-label="Close">×</button></div>
-    ${Object.entries(groups)
-      .map(
-        ([g, ds]) =>
-          `<section class="st-g"><h3>${esc(g)}</h3>${ds
-            .map((d) => `<div class="st-row"><span class="st-l">${esc(d.label)}</span><button type="button" class="st-key${listening === d.id ? ' on' : ''}${KEYS.changed(d.id) ? ' mine' : ''}" data-key="${d.id}">${listening === d.id ? 'Press a key' : KEYS.keys(d.id).map((k) => `<kbd>${esc(KEYS.pretty(k))}</kbd>`).join('') || '—'}</button></div>`)
-            .join('')}</section>`,
-      )
-      .join('')}`;
+  return Object.entries(groups)
+    .map(
+      ([g, ds]) =>
+        `<h4 class="st-cap">${esc(g)}</h4><div class="st-grp">${ds
+          .map((d) => `<div class="st-row"><span class="st-l">${esc(d.label)}</span><button type="button" class="st-key${listening === d.id ? ' on' : ''}${KEYS.changed(d.id) ? ' mine' : ''}" data-key="${d.id}" aria-label="${esc(d.label)}">${listening === d.id ? 'Press a key' : KEYS.keys(d.id).map((k) => `<kbd>${esc(KEYS.pretty(k))}</kbd>`).join('') || '—'}</button></div>`)
+          .join('')}</div>`,
+    )
+    .join('');
 }
 function draw() {
   const a = document.activeElement as HTMLElement | null;
-  const keep = a && box.contains(a) ? a.dataset.x ?? a.dataset.key ?? (a.dataset.sound != null ? 'sound' : a.dataset.page ?? '') : '';
-  const top = box.scrollTop;
-  box.innerHTML = `<div class="st-in" role="dialog" aria-label="Settings">${page === 'main' ? mainHTML() : keysHTML()}</div>`;
-  if (page === 'main') for (const r of Object.values(LAB.rows)) r.bind(box.querySelector<HTMLElement>(`[data-row="${r.id}"]`)!);
-  box.scrollTop = top;
-  if (keep) (box.querySelector<HTMLElement>(`[data-x="${keep}"][aria-checked="true"],[data-x="${keep}"],[data-key="${keep}"],[data-page="${keep}"]`) ?? (keep === 'sound' ? box.querySelector<HTMLElement>('[data-sound]') : null))?.focus({ preventScroll: true });
-}
-function open(on: boolean, to?: 'main' | 'keys') {
-  listening = '';
-  if (on) page = to ?? (box.hidden ? 'main' : page);
-  box.hidden = !on;
-  btn.setAttribute('aria-expanded', String(on));
-  if (on) {
-    draw();
-    box.scrollTop = 0;
-    (box.querySelector<HTMLElement>('[aria-checked="true"],.st-key') ?? box.querySelector<HTMLElement>('button'))?.focus({ preventScroll: true });
+  const keep = a && dlg.contains(a) ? a.dataset.x ?? a.dataset.key ?? a.dataset.sec ?? a.dataset.xs ?? (a.dataset.sound != null ? 'sound' : a.id) : '';
+  const body = dlg.querySelector('.st-body');
+  const top = body?.scrollTop ?? 0;
+  const by = rowsBy();
+  const list = sections(by);
+  if (!list.some((s) => s.id === sec)) sec = list[0].id;
+  const cur = list.find((s) => s.id === sec)!;
+  dlg.innerHTML = `<div class="st-grab" aria-hidden="true"></div>
+    <nav class="st-side" aria-label="Sections"><h2 id="st-title">Settings</h2><div class="st-toc">${list
+      .map((s) => `<button type="button" class="st-ti" data-sec="${esc(s.id)}" aria-current="${s.id === sec}">${glyph(s.icon)}<span>${esc(s.label)}</span></button>`)
+      .join('')}</div></nav>
+    <div class="st-main">
+      <div class="st-head"><h3>${esc(cur.label)}</h3>${changed(sec) ? '<button type="button" class="st-reset" id="st-reset">Reset</button>' : ''}<button type="button" class="st-x" id="st-close" aria-label="Close">${X}</button></div>
+      <div class="st-body">${sec === 'Shortcuts' ? keysHTML() : `<div class="st-grp">${by[sec].join('')}</div>`}</div>
+    </div>`;
+  for (const r of Object.values(LAB.rows)) {
+    const el = dlg.querySelector<HTMLElement>(`[data-row="${r.id}"]`);
+    if (el) r.bind(el);
   }
+  const nb = dlg.querySelector('.st-body')!;
+  nb.scrollTop = top;
+  if (keep) {
+    const q = `[data-x="${keep}"][aria-checked="true"],[data-x="${keep}"],[data-key="${keep}"],[data-sec="${keep}"],[data-xs="${keep}"]`;
+    (dlg.querySelector<HTMLElement>(q) ?? (keep === 'sound' ? dlg.querySelector<HTMLElement>('[data-sound]') : keep ? dlg.querySelector<HTMLElement>('#' + CSS.escape(keep)) : null) ?? dlg.querySelector<HTMLElement>('.st-x'))?.focus({ preventScroll: true });
+  }
+  // the phone's strip of sections keeps the current one in view
+  dlg.querySelector('.st-ti[aria-current="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
+// opening and closing: a short fade and lift in the middle; on a phone the sheet slides up (and follows his finger down)
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)');
+let closing = 0;
+function show(to?: string) {
+  listening = '';
+  if (to === 'keys') sec = 'Shortcuts';
+  else if (to && to !== 'main') sec = to;
+  clearTimeout(closing);
+  dlg.classList.remove('out');
+  dlg.style.transform = '';
+  draw();
+  if (!dlg.open) {
+    dlg.showModal();
+    dlg.querySelector('.st-body')!.scrollTop = 0;
+    requestAnimationFrame(() => dlg.classList.add('on'));
+  }
+  btn.setAttribute('aria-expanded', 'true');
+  (dlg.querySelector<HTMLElement>('.st-ti[aria-current="true"]') ?? dlg.querySelector<HTMLElement>('button'))?.focus({ preventScroll: true });
+}
+function hide() {
+  if (!dlg.open || dlg.classList.contains('out')) return;
+  listening = '';
+  dlg.classList.remove('on');
+  dlg.classList.add('out');
+  btn.setAttribute('aria-expanded', 'false');
+  closing = window.setTimeout(() => {
+    dlg.classList.remove('out');
+    dlg.style.transform = '';
+    dlg.close();
+    btn.focus({ preventScroll: true });
+  }, REDUCED.matches ? 120 : 200);
 }
 btn.onclick = (e) => {
   e.stopPropagation();
   sfx('tap');
-  open(box.hidden);
+  dlg.open && !dlg.classList.contains('out') ? hide() : show();
 };
-box.addEventListener('click', (e) => {
-  e.stopPropagation();
+// Escape (the dialog's cancel) closes it the same way as the ×
+dlg.addEventListener('cancel', (e) => {
+  e.preventDefault();
+  hide();
+});
+dlg.addEventListener('click', (e) => {
   const t = e.target as HTMLElement;
+  // a click on the dim page around the window
+  if (t === dlg) {
+    const r = dlg.getBoundingClientRect();
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return hide();
+  }
   const b = t.closest<HTMLElement>('[data-x]');
   if (b) {
     LAB.set(b.dataset.x!, b.dataset.v!);
@@ -188,12 +268,13 @@ box.addEventListener('click', (e) => {
     if (SND.on) setTimeout(() => sfx('stamp-known'), 60);
     return draw();
   }
-  const pg = t.closest<HTMLElement>('[data-page]');
-  if (pg) {
+  const s = t.closest<HTMLElement>('[data-sec]');
+  if (s) {
+    if (s.dataset.sec === sec) return;
     sfx('tap');
-    page = pg.dataset.page as 'main' | 'keys';
+    sec = s.dataset.sec!;
     listening = '';
-    box.scrollTop = 0;
+    dlg.querySelector('.st-body')!.scrollTop = 0;
     return draw();
   }
   const k = t.closest<HTMLElement>('[data-key]');
@@ -202,31 +283,27 @@ box.addEventListener('click', (e) => {
     sfx('tap');
     return draw();
   }
-  if (t.id === 'st-close') return sfx('tap'), open(false), btn.focus();
-  if (t.id === 'st-reset') {
-    for (const id of LAB.order) LAB.set(id, LAB.defs[id].def);
-    sfx('swish');
-    return draw();
-  }
-  if (t.id === 'st-kreset') {
-    KEYS.reset();
+  if (t.closest('#st-close')) return sfx('tap'), hide();
+  if (t.closest('#st-reset')) {
+    if (sec === 'Shortcuts') KEYS.reset();
+    else for (const id of LAB.order) if (LAB.defs[id].group === sec) LAB.set(id, LAB.defs[id].def);
     sfx('swish');
     return draw();
   }
 });
-// Habit: a dropdown's choice
-box.addEventListener('change', (e) => {
+// a menu's choice
+dlg.addEventListener('change', (e) => {
   const s = (e.target as HTMLElement).closest<HTMLSelectElement>('select[data-xs]');
   if (!s) return;
   LAB.set(s.dataset.xs!, s.value);
   sfx('tap');
+  draw();
 });
-// (end Habit)
 // a new key for an action: the next key he presses (Esc leaves it as it was)
 addEventListener(
   'keydown',
   (e) => {
-    if (!listening || box.hidden) return;
+    if (!listening || !dlg.open) return;
     if (KEYS.isModifier(e)) return;
     e.preventDefault();
     e.stopImmediatePropagation();
@@ -241,20 +318,63 @@ addEventListener(
   true,
 );
 document.addEventListener('keydown', (e) => {
+  const up = dlg.open && !dlg.classList.contains('out');
   if (KEYS.is(e, 'shortcuts')) {
     e.preventDefault();
     sfx('tap');
-    return open(box.hidden || page !== 'keys', 'keys');
+    return up && sec === 'Shortcuts' ? hide() : show('keys');
   }
   if (KEYS.is(e, 'settings')) {
     e.preventDefault();
     sfx('tap');
-    return open(box.hidden, 'main'), box.hidden && btn.focus();
+    return up ? hide() : show();
   }
-  if (e.key === 'Escape' && !box.hidden) open(false), btn.focus();
+  // the sections, with the arrow keys, while one of them has the focus
+  const ti = (e.target as HTMLElement).closest?.('.st-ti');
+  if (up && ti && /^Arrow(Up|Down|Left|Right)$/.test(e.key)) {
+    e.preventDefault();
+    const all = [...dlg.querySelectorAll<HTMLElement>('.st-ti')];
+    const i = all.indexOf(ti as HTMLElement) + (/Up|Left/.test(e.key) ? -1 : 1);
+    const n = all[(i + all.length) % all.length];
+    sec = n.dataset.sec!;
+    sfx('tap');
+    draw();
+    dlg.querySelector<HTMLElement>(`[data-sec="${CSS.escape(sec)}"]`)?.focus();
+  }
 });
-// a click anywhere outside the panel (and not on the gear) closes it
-document.addEventListener('pointerdown', (e) => !box.hidden && !box.contains(e.target as Node) && !btn.contains(e.target as Node) && open(false), true);
-BUS.on('lab', () => !box.hidden && page === 'main' && draw());
+BUS.on('lab', () => dlg.open && draw());
 
-export const SETTINGS = { open: (to?: 'main' | 'keys') => open(true, to), close: () => open(false), redraw: () => !box.hidden && draw() };
+// ---------- the phone's sheet: drag it down by its top to send it away ----------
+const PHONE = matchMedia('(max-width: 640px)');
+dlg.addEventListener('pointerdown', (e) => {
+  if (!PHONE.matches || e.button !== 0 || !(e.target as HTMLElement).closest('.st-grab,.st-head') || (e.target as HTMLElement).closest('button')) return;
+  const y0 = e.clientY, h = dlg.offsetHeight;
+  let dy = 0, last = { y: y0, t: e.timeStamp }, v = 0;
+  try {
+    dlg.setPointerCapture(e.pointerId);
+  } catch {}
+  dlg.classList.add('drag');
+  const move = (m: PointerEvent) => {
+    const d = m.clientY - y0;
+    // 1:1 down; up past the top only a little (rubber band)
+    dy = d > 0 ? d : -Math.sqrt(-d) * 2;
+    dlg.style.transform = `translateY(${dy}px)`;
+    const dt = m.timeStamp - last.t;
+    if (dt > 0) v = (m.clientY - last.y) / dt;
+    last = { y: m.clientY, t: m.timeStamp };
+  };
+  const up = () => {
+    dlg.removeEventListener('pointermove', move);
+    dlg.classList.remove('drag');
+    // away on distance (a third of the sheet) or on a flick down
+    if (dy > h / 3 || v > 0.5) {
+      dlg.style.transform = '';
+      hide();
+    } else dlg.style.transform = '';
+  };
+  dlg.addEventListener('pointermove', move);
+  dlg.addEventListener('pointerup', up, { once: true });
+  dlg.addEventListener('pointercancel', up, { once: true });
+});
+
+export const SETTINGS = { open: (to?: string) => show(to), close: () => hide(), redraw: () => dlg.open && draw() };

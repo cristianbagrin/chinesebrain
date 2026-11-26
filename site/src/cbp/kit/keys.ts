@@ -23,6 +23,8 @@ export const DEFS: Def[] = [
     ['go.cards', 'Cards', 'c'],
     ['go.reviews', 'Reviews', 'r'],
     ['go.browse', 'Browse', 'b'],
+    // Tutor: the pane from the right, open or away (tutor/main.ts)
+    ['tutor', 'Tutor', 'a'],
   ]),
   ...D('Reviews', undefined, [
     ['rv.show', 'Show answer', 'space enter'],
