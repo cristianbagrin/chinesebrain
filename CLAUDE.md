@@ -40,7 +40,7 @@
 - **Chinese Brain Plus** (`/plus`, plan: life/chinese/online-plan): Chris's whole Chinese system, and the only place it lives (the
   Mac's `life/chinese` files were archived on 2026-11-23). The engine is `site/src/cbp/engine.ts` (words.py ported; `scripts/cbp-parity.ts`
   compared them), its data the CBP D1 (`files` incl. `chinese.md`, the system's rules; `docs`, `meta`, `history`; `site/src/cbp/plus.ts`).
-  Jobs run on one half-hourly Cron Trigger (`scheduled` in worker.js runs the evening nudge, `push.ts`, every time and the
+  Jobs run on one half-hourly Cron Trigger (`scheduled` in worker.js runs the evening nudge, `push.ts`, in the device's time zone, every time and the
   night jobs only at 10 pm and 5 am Taipei; the free plan allows 5 triggers per account); nothing polls, and only work that needs
   judging calls Claude. 10 pm: the nightly (`site/src/cbp/nightly.ts`): his Chinese Brain marks in from his account
   (`Account.brainSince`) and CBP's K/L changes back out (`writeBack`, `Account.brainGet/brainPut`, newer change wins per word),
