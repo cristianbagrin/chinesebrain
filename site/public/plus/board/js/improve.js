@@ -397,7 +397,30 @@ document.getElementById('improve-today').addEventListener('click',e=>{
   const sd=document.querySelector('.es-side'); if(sd&&!sd.classList.contains('open')){sd.classList.add('open');document.getElementById('es-disc')?.setAttribute('aria-expanded','true');}
   const f=IM_field(id,'nat'); if(f){f.scrollIntoView({block:'center',behavior:REDUCED()?'auto':'smooth'});f.focus({preventScroll:true});placeCaret(f,null);}
 });
-BUS.on('items',()=>{IM_render();renderHints();});
+BUS.on('items',()=>{IM_render();renderHints();IM_retired();});
+
+/* an item the marker retired (three essays that got it right, jobs.ts): a small celebration, once per item */
+function IM_retired(){
+  const fresh=Object.values(ES.items).filter(x=>x&&x.retired&&x.done&&!x.removed&&Date.now()-Date.parse(x.doneAt||0)<4*864e5);
+  const x=fresh.find(x=>lsGet('once:retired:'+x.id)!=='1'); if(!x) return;
+  lsSet('once:retired:'+x.id,'1');
+  setTimeout(()=>{
+    const el=document.querySelector(`.es-row[data-r="${x.id}"],.imt-li[data-go="${x.id}"]`), r=el&&el.offsetParent?el.getBoundingClientRect():null;
+    celebrate('crossoff',r?{x:r.left+24,y:r.top+r.height/2}:{x:innerWidth/2,y:innerHeight*.45});
+    sfx('stamp-known');toast(x.nat||x.mine);
+    IM_retired();
+  },600);
+}
+
+/* fix cards (a mistake marked again: his sentence, corrected, with a blank; jobs.ts writes them to board/data fixes)
+   lead Next up until he cards them. cards.js and nextup.js read Next up through NU_pool. */
+if(typeof NU_pool==='function'){
+  const NU_base=NU_pool;
+  NU_pool=function(){
+    const base=NU_base(), fx=((STATE&&STATE.fixes)||[]).filter(r=>Array.isArray(r)&&r[0]&&!cardCarded(r[0])&&!base.some(b=>b[0]===r[0]));
+    return [...fx,...base];
+  };
+}
 BUS.on('essays',()=>{IM_render();renderHints();});
 BUS.on('reviews',()=>IM_render());
 IM_render();renderHints();

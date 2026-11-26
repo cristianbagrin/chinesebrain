@@ -13,7 +13,10 @@
 import * as E from './engine.ts';
 import * as ai from './ai.ts';
 import * as MD from './md.ts';
-import { plan as marksPlan, essayToday, norm } from './essays.ts';
+import { essayToday, norm, validate, planJson, patterns, fixCards, focusOn, cardId } from './essays.ts';
+import { glossary, reading } from './look.ts';
+import { lexicon } from './cards.ts';
+import * as PY from './pinyin.ts';
 import { loadFiles, listDocs, getDoc, change, today as taipeiToday } from './plus.ts';
 import { putDoc, media, type Env } from './nightly.ts';
 import { modelFor } from './settings.ts';
@@ -39,24 +42,28 @@ const part = (md: string, a: string, b: string) => {
 const pad = (d: number) => `d${String(d).padStart(3, '0')}`;
 
 // ---------- every hour: one essay, its marks and its bookkeeping ----------
-function essayPrompt(md: string, e: Record<string, unknown>, open: string, tracked: string, problems: string[]) {
+// The marks come back as JSON that code checks and repairs (essays.ts validate) before anything is saved; pinyin and
+// meanings for the words he lacked come from the dictionary (look.ts), not from the answer.
+function essayPrompt(md: string, e: Record<string, unknown>, open: string, tracked: string, problems: string[], o: { patterns: string[]; focus: string }) {
   return `You correct Chris's daily Chinese essay (Traditional characters, Taiwanese Chinese, high A2) and do its bookkeeping. He reads your marks inside his own text the next day. Keep it light: a few marks that matter, never homework.
 
 Reply with only this JSON:
-{"marks": string, "log": [{"target": string, "result": "pass" | "partial" | "fail", "sentence": string}], "known": [string], "missing": [{"word": string, "pinyin": string, "gloss": string, "lane": "Life" | "Taiwan"}], "watch": [{"line": string, "add": string}]}
+{"marks": [{"t": "fix" | "better" | "good" | "word", "mine": string, "nat": string, "why": string, "pattern": string, "list": boolean}], "uses": [{"id": string, "s": string, "ok": boolean}], "log": [{"target": string, "result": "pass" | "partial" | "fail", "sentence": string}], "known": [string], "missing": [{"word": string, "gloss": string, "lane": "Life" | "Taiwan"}], "watch": [{"line": string, "add": string}]}
 
-marks: lines in exactly this format, the first being DAY ${e.day}:
-fix | his exact words | the right way | a short note, only if it adds what the right way doesn't show
-better | his exact words | how a Taiwanese person would say it
-good | his exact words (something he did well; one or two)
-word | English he dropped in | the Chinese for it
-fix! or better! also puts it on his To improve list: at most two a day, sentence structure or natural phrasing that will keep coming back, his Leaks first; never a missing word, never one already on his list.
-done | <list item id> | his words in this essay that now get that open list item right
-Rules for marks: his words copied exactly, in essay order, enough of them to land in one place only; marks never overlap. The right way: Taiwan usage, Traditional characters, Chinese punctuation, no longer than it needs to be, his tone kept. A typing slip inside a corrected phrase gets fixed with it; a sound-alike slip on its own isn't marked. English in an essay means he found no way to say it: a word mark, never a fix. Notes in plain English, one line; a frame (兩碗 + noun) beats a grammar rule.
+marks, in essay order:
+- t: fix = a mistake; better = right, but not how a Taiwanese person says it; good = something he did well (one or two; nat, why, pattern empty); word = English he dropped in (mine = the English, nat = the Chinese).
+- mine: his exact words, copied character for character, enough of them to land in one place only; marks never overlap.
+- nat: the right way. Taiwan usage, Traditional characters, Chinese punctuation, no longer than it needs to be, his tone kept.
+- why: ALWAYS, for fix, better and word: one short line of plain English that says why (a frame like 兩碗 + noun beats a grammar rule). Never empty, never a restatement of nat.
+- pattern: for fix and better, the pattern's short name in plain words (like "一…就: as soon as"). When it is the same mistake as one of his earlier patterns below, use that name exactly.
+- list: true puts a fix or better on his To improve list: at most two a day, sentence structure or natural phrasing that will keep coming back, his Leaks first; never a missing word, never one already on his list.
+A typing slip inside a corrected phrase gets fixed with it; a sound-alike slip on its own isn't marked. English in an essay means he found no way to say it: a word mark, never a fix.
+
+uses: for each open To improve item (below) this essay uses or should have used: id = the item's id, s = his words in this essay, ok = true only if he got it right.${o.focus ? ` Today his writing page showed him this one to practice: ${o.focus}. Always give it a row if he tried it.` : ''}
 
 log: one row per tracked item this essay uses or misses where he could have gone wrong (a use where he couldn't have gone wrong, or a synonym in its place, is no row). target = the item's name exactly as in the tracked list below. Several uses of one item make one row: pass if every use is clean, partial if only some are. A slip that fits two items counts once, under the more specific one. sentence = his sentence.
 known: words he used correctly in this essay (the exact characters), everyday words only; the code keeps only those his word list doesn't already have.
-missing: words he reached for and didn't have (the Chinese for each English word he dropped in, an invented compound, a long detour), each with its Taiwan pinyin and a short gloss; lane Taiwan for slang, particles, idioms.
+missing: words he reached for and didn't have (the Chinese for each English word he dropped in, an invented compound, a long detour), each with a short gloss for this sense; lane Taiwan for slang, particles, idioms.
 watch: a new miss of a smaller pattern (not one of his numbered Leaks): line = the first words of the Watch list line it belongs to, exactly as written below, or "" for a new pattern; add = his words → the fix (${String(e.date).slice(5)}); for a new pattern, start add with the pattern in plain words and a colon, like the lines below.
 
 His Leaks, Watch list, Taiwan usage notes and what he knows:
@@ -64,6 +71,9 @@ ${part(md, '### Leaks', '### Context')}
 
 Tracked items (name · right form):
 ${tracked}
+
+His earlier patterns:
+${o.patterns.join('\n') || '(none yet)'}
 
 His open To improve list (id · day · his words → the right way):
 ${open || '(empty)'}
@@ -98,23 +108,48 @@ export async function essay(env: Env) {
   const open = Object.entries(improve).filter(([, x]) => !x.done && !x.removed).map(([id, x]) => `${id} · DAY ${x.day ?? '-'} · ${x.mine ?? ''} → ${x.nat ?? ''}`).join('\n');
   const items = [...E.schedule(E.readLog(files)).values()];
   const tracked = items.filter((x) => x.active || x.form).map((x) => `${x.name} · ${x.form || '?'}`).join('\n');
-  const byId = Object.fromEntries(essays.map((x) => [x.id, x.data]));
   const reviews = await docs(env, 'reviews');
+  const text = norm(e.text);
+  const fx = focusOn(improve, date);
+  const ctx = { patterns: patterns(reviews, day), focus: fx ? `${fx.id} · ${fx.mine ?? ''} → ${fx.nat ?? ''}` : '' };
   let errs: string[] = [];
   for (let tries = 0; tries < 3; tries++) {
     let out;
     try {
-      out = json((await ai.text(env, await modelFor(env, 'essay-model'), essayPrompt(md, e, open, tracked, errs), { effort: 'medium', job: 'essay' })).text);
+      out = json((await ai.text(env, await modelFor(env, 'essay-model'), essayPrompt(md, e, open, tracked, errs, ctx), { effort: 'medium', job: 'essay' })).text);
     } catch (x) {
       if (x instanceof ai.Quota) throw x;
       errs = [String((x as Error).message)];
       continue;
     }
-    const p = marksPlan(String(out.marks ?? ''), byId as never, reviews, improve, taipeiToday());
-    errs = p.errs;
-    if (errs.length) continue;
-    for (const w of p.writes) await putDoc(env, w.col, w.id, w.data, w.op);
-    const said = [`DAY ${day}: ${p.writes.filter((w) => w.col === 'reviews').map((w) => (w.data.marks as unknown[]).length)[0]} marks`];
+    // code checks every mark; what it can't repair drops. Only an answer whose marks all failed is asked again.
+    const v = validate(text, out.marks);
+    const asked = Array.isArray(out.marks) ? out.marks.length : 0;
+    if (asked && !v.marks.length && tries < 2) {
+      errs = [`none of the marks could be used (${v.dropped.slice(0, 3).join('; ')}); copy his words exactly and give every fix a why`];
+      continue;
+    }
+    const today = taipeiToday();
+    for (const w of planJson(e, v.marks, out.uses, reviews, improve, today)) await putDoc(env, w.col, w.id, w.data, w.op);
+    const said = [`DAY ${day}: ${v.marks.length} marks${v.dropped.length ? ` (${v.dropped.length} dropped: ${v.dropped.join('; ').slice(0, 300)})` : ''}`];
+    const [lex, gl] = await Promise.all([lexicon(env as never), glossary(env as never)]).catch(() => [null, null] as const);
+    // a mistake marked again: a card from his own sentence, corrected, at the top of Next up (essays.ts fixCards)
+    if (lex && gl) {
+      const made: [string, string, string, string][] = [];
+      for (const c of fixCards(text, day, v.marks, reviews)) {
+        const id = cardId(c.word);
+        if (await getDoc(env as never, 'cards', id)) continue;
+        const card = [`word: ${c.word}`, `pinyin: ${reading(lex, gl, c.word).py}`, `meaning: ${c.why}`, `mine: ${c.sentence} | ${PY.sentence(lex, c.sentence)} | `].join('\n');
+        await putDoc(env, 'cards', id, { word: c.word, text: card, src: 'fix', parent: null, chat: [], carded: null, filed: null, knows: {}, made: new Date().toISOString(), model: 'code', making: null, err: null, fix: { day, p: c.p, mine: c.mine, nat: c.nat } });
+        made.push([c.word, reading(lex, gl, c.word).py, c.why, 'life']);
+      }
+      if (made.length) {
+        const board = ((await getDoc(env as never, 'board', 'data')) ?? {}) as Record<string, unknown>;
+        const had = (Array.isArray(board.fixes) ? board.fixes : []) as [string, string, string, string][];
+        await putDoc(env, 'board', 'data', { fixes: [...made, ...had.filter((r) => !made.some((m) => m[0] === r[0]))].slice(0, 5) }, 'update');
+        said.push(`fix cards: ${made.map((m) => m[0]).join(', ')}`);
+      }
+    }
     const names = new Set(items.map((x) => x.name));
     said.push(await change(env as never, (f) => {
       const out2: string[] = [];
@@ -136,8 +171,12 @@ export async function essay(env: Env) {
       }
       E.kwSave(f, l);
       if (rows.length) out2.push(E.logRows(f, rows));
-      const miss = (Array.isArray(out.missing) ? out.missing : []).filter((m: Record<string, unknown>) => /[㐀-鿿]/.test(String(m.word)))
-        .map((m: Record<string, unknown>) => [m.lane === 'Taiwan' ? 'Taiwan' : 'Life', `${m.word} · ${m.pinyin ?? ''} · ${String(m.gloss ?? '').replace(/·/g, ',')} · essay`] as [string, string]);
+      // the pinyin (and a meaning the answer left out) by code, from the dictionary
+      const miss = (Array.isArray(out.missing) ? out.missing : []).filter((m: Record<string, unknown>) => /^[㐀-鿿]{1,8}$/.test(String(m.word ?? '').trim()))
+        .map((m: Record<string, unknown>) => {
+          const w = String(m.word).trim(), r = lex && gl ? reading(lex, gl, w) : { py: '', g: '' };
+          return [m.lane === 'Taiwan' ? 'Taiwan' : 'Life', `${w} · ${r.py} · ${(String(m.gloss ?? '').trim() || r.g).replace(/·/g, ',')} · essay`] as [string, string];
+        });
       if (miss.length) out2.push(E.addWords(f, miss, taipeiToday()).split('\n').join(' · '));
       let m2 = f.get(E.MEMORY) ?? '';
       for (const w of Array.isArray(out.watch) ? out.watch : []) m2 = MD.watch(m2, String(w.line ?? ''), String(w.add ?? ''));
@@ -148,7 +187,7 @@ export async function essay(env: Env) {
       // the queue and the known words changed: Next up follows
       return out2.join(' · ');
     }));
-    await putDoc(env, 'board', 'data', E.boardPayload(await loadFiles(env as never), taipeiToday()) as never, 'update');
+    await putDoc(env, 'board', 'data', E.boardPayload(await loadFiles(env as never), today) as never, 'update');
     return report(env, 'essay', said.filter(Boolean));
   }
   // three refusals: an empty review, so the next essay isn't held up

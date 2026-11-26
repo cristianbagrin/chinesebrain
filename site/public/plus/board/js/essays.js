@@ -224,8 +224,9 @@ function ES_goPlace(p){
   setTimeout(()=>ES_D.querySelectorAll('.es-spot').forEach(x=>x.remove()),2200);
 }
 
-/* the tip, Brain's card: what he wrote (struck) unless My version shows it already, a note that adds something,
-   and the list button */
+/* the tip, one look for every mark: what he wrote → the right way (pinyin over the words that changed), why, what the
+   new words mean (the dictionary, by code), and one button: a correction can go on his list, a new word becomes a card.
+   A tap on any other word of his gives its pinyin and meaning the same way. */
 const ES_FINE=matchMedia('(hover:hover) and (pointer:fine)').matches;
 /* the one hit test, for hover, click and tap alike: the mark whose highlighted characters are under the point. Only
    the glyphs count: not the line's leading, never his struck words (My version).
@@ -241,54 +242,150 @@ function ES_hit(x,y,tol=0){
   }
   return null;
 }
-// the only way from the highlight to the tip: the strip between the line it opened on and the tip itself
-function ES_bridge(x,y){
-  const tip=document.getElementById('es-tip'),L=ES.tipLine;if(!tip||!L) return false;
-  const t=tip.getBoundingClientRect(),top=Math.min(L.t,t.top),bot=Math.max(L.b,t.bottom);
-  if(x>=t.left&&x<=t.right&&y>=t.top&&y<=t.bottom) return true;
-  return x>=Math.max(t.left,L.l-6)&&x<=Math.min(t.right,L.r+6)&&y>=top&&y<=bot;
-}
-function ES_closeTip(){clearTimeout(ES.timer);document.getElementById('es-tip')?.remove();document.querySelectorAll('.es-c.on').forEach(c=>c.classList.remove('on'));ES.tip=null;ES.pinned=false;}
+function ES_closeTip(){clearTimeout(ES.timer);clearTimeout(ES.wordT);document.getElementById('es-tip')?.remove();ES_D.querySelectorAll('.es-look').forEach(x=>x.remove());document.querySelectorAll('.es-c.on').forEach(c=>c.classList.remove('on'));ES.tip=null;ES.pinned=false;ES.anchor=null;}
 const ES_addLabel=on=>on?ES_ICON_ON+'On my list':'Add to my list';
-function ES_tipHTML(s){
-  const on=!!IM_listed(s);
-  const was=ES_D.classList.contains('es-hide-mine')?`<p class="es-tw"><s class="x-out">${mix(s.mine.trim())}</s></p>`:'';
-  return `${was}${s.note?`<p class="es-tn">${zh(s.note)}</p>`:''}<button class="es-add" id="es-add" type="button" aria-pressed="${on}">${ES_addLabel(on)}</button>`;
+
+/* the meaning of a word, by code: /api/plus/look (site/src/cbp/look.ts, the dictionary), kept for the visit */
+const ES_LOOK=new Map();
+function ES_look(t,at){
+  const k=t+'\u0001'+(at??'');
+  if(!ES_LOOK.has(k)) ES_LOOK.set(k,fetch('/api/plus/look?'+new URLSearchParams(at==null?{t}:{t,at:String(at)}),{headers:{Authorization:'Bearer '+(lsGet('cb-token')||'')}})
+    .then(r=>r.ok?r.json():{words:[]}).then(j=>Array.isArray(j.words)?j.words:[]).catch(()=>{ES_LOOK.delete(k);return [];}));
+  return ES_LOOK.get(k);
 }
-function ES_openTip(c,pin,px,py){
-  clearTimeout(ES.timer);
-  const s=ES.seg[c.dataset.k]; if(!s) return;
-  if(ES.tip===s.id){ES.pinned=ES.pinned||pin;return;}
+const ES_HAN=/[㐀-䶿一-鿿豈-﫿]/;
+// the right way with pinyin over the words that changed (RUBY), the changed characters marked
+async function ES_fixHTML(s){
+  const ch=[]; diffSegs(s.t==='word'?'':s.mine,s.nat).forEach(([t,c])=>[...t].forEach(()=>ch.push(c)));
+  const box=document.createElement('span'); box.innerHTML=await RUBY.html(s.nat);
+  let k=0;
+  const walk=n=>{for(const c of [...n.childNodes]){
+    if(c.nodeType===3){const f=document.createDocumentFragment();[...c.nodeValue].forEach(x=>{if(ch[k++]){const u=document.createElement('u');u.className='d';u.textContent=x;f.appendChild(u);}else f.appendChild(document.createTextNode(x));});c.replaceWith(f);}
+    else if(c.nodeName==='RUBY'){if(ch[k])c.classList.add('d');k++;}
+    else if(c.nodeName!=='RT') walk(c);
+  }};
+  walk(box);
+  box.querySelectorAll('.rbw').forEach(w=>{if(!w.querySelector('ruby.d'))w.querySelectorAll('rt').forEach(r=>r.remove());});
+  return box.innerHTML;
+}
+// the meanings of the words that changed (a word mark: of the Chinese it gives)
+async function ES_meanHTML(s){
+  const ch=[]; diffSegs(s.t==='word'?'':s.mine,s.nat).forEach(([t,c])=>[...t].forEach(()=>ch.push(c)));
+  const ws=(await ES_look(s.nat.slice(0,60))).filter(w=>w.g&&[...w.w].some((_,i)=>ch[w.i+i])).slice(0,2);
+  if(!ws.length) return '';
+  if(ws.length===1&&ws[0].w===s.nat.trim()) return esc(ws[0].g);
+  return ws.map(w=>`<span class="zh" lang="zh-Hant">${esc(w.w)}</span> ${esc(w.g)}`).join('<br>');
+}
+function ES_markTip(s){
+  const word=s.t==='word', on=!!IM_listed(s);
+  const was=word?`<span class="es-tm en">${esc(s.mine.trim())}</span>`:`<s class="x-out es-tm" lang="zh-Hant">${mix(s.mine.trim())}</s>`;
+  return `<p class="es-tx">${was}<span class="es-ta" aria-hidden="true">→</span></p>`
+    +`<p class="es-tf" lang="zh-Hant" data-fill="fix">${ES_hlHTML(s)}</p>`
+    +(s.note?`<p class="es-tn">${zh(s.note)}</p>`:'')
+    +`<p class="es-tg" data-fill="mean" hidden></p>`
+    +(word?`<button class="es-add" type="button" data-card="${esc(s.nat.trim())}">Make a card</button>`
+      :`<button class="es-add" id="es-add" type="button" aria-pressed="${on}">${ES_addLabel(on)}</button>`);
+}
+function ES_wordTip(w){
+  return `<p class="es-tf es-tw1" lang="zh-Hant" data-fill="py">${esc(w.w)}</p><p class="es-tg" data-fill="mean"${w.g?'':' hidden'}>${esc(w.g||'')}</p>`
+    +`<button class="es-add" type="button" data-card="${esc(w.w)}">Make a card</button>`;
+}
+// the tip sits over (or under) the line it opened on, inside the column and the screen
+function ES_place(){
+  const tip=document.getElementById('es-tip'), A=ES.anchor; if(!tip||!A) return;
+  const h=ES_D.getBoundingClientRect(), r=A.r;
+  const vw=document.documentElement.clientWidth, minL=Math.max(0,8-h.left), maxL=Math.min(h.width,vw-8-h.left)-tip.offsetWidth;
+  const left=Math.max(minL,Math.min(A.x-h.left-28,maxL));
+  const barBottom=BAR.getBoundingClientRect().bottom;
+  tip.classList.remove('below');
+  if(r.top-tip.offsetHeight-12>=barBottom) tip.style.top=(r.top-h.top-tip.offsetHeight-12)+'px';
+  else{tip.classList.add('below');tip.style.top=(r.bottom-h.top+12)+'px';}
+  tip.style.left=left+'px';
+  tip.style.setProperty('--ox',Math.max(14,A.x-h.left-left)+'px');
+}
+function ES_showTip(id,html,r,px,onClick){
   ES_closeTip();
-  ES.tip=s.id;ES.pinned=pin;c.classList.add('on');
+  ES.tip=id;ES.pinned=true;
   const tip=document.createElement('div');
-  tip.className='es-tip';tip.id='es-tip';tip.innerHTML=ES_tipHTML(s);ES_D.appendChild(tip);
-  const rs=[...c.querySelector('.es-n').getClientRects()], h=ES_D.getBoundingClientRect();
+  tip.className='es-tip';tip.id='es-tip';tip.innerHTML=html;ES_D.appendChild(tip);
+  ES.anchor={r,x:px!=null?Math.min(Math.max(px,r.left),r.right):r.left+Math.min(24,r.width/2)};
+  ES_place();
+  tip.addEventListener('click',e=>{
+    e.stopPropagation();
+    const c=e.target.closest('[data-card]');
+    if(c){sfx('tap');const w=c.dataset.card;ES_closeTip();openCard(w,'essay');return;}
+    if(onClick) onClick(e,tip);
+  });
+  return tip;
+}
+const ES_fill=(tip,k,html)=>{const el=tip.isConnected&&tip.querySelector(`[data-fill="${k}"]`);if(!el||!html)return;el.innerHTML=html;el.hidden=false;ES_place();};
+function ES_openTip(c,pin,px,py){
+  const s=ES.seg[c.dataset.k]; if(!s) return;
+  if(ES.tip===s.id) return;
+  const rs=[...c.querySelector('.es-n').getClientRects()];
   if(!rs.length){ES_closeTip();return;}
   // the line of the mark the pointer is on (a mark can wrap), else its first line
   let r=rs[0];
   if(py!=null) r=rs.reduce((b,q)=>Math.abs((q.top+q.bottom)/2-py)<Math.abs((b.top+b.bottom)/2-py)?q:b,rs[0]);
-  const ax=px!=null?Math.min(Math.max(px,r.left),r.right):r.left+Math.min(24,r.width/2);
-  const left=Math.max(0,Math.min(ax-h.left-28,h.width-tip.offsetWidth));
-  // above, unless the app bar would cover it
-  const barBottom=BAR.getBoundingClientRect().bottom;
-  if(r.top-tip.offsetHeight-12>=barBottom) tip.style.top=(r.top-h.top-tip.offsetHeight-12)+'px';
-  else{tip.classList.add('below');tip.style.top=(r.bottom-h.top+12)+'px';}
-  tip.style.left=left+'px';
-  tip.style.setProperty('--ox',Math.max(14,ax-h.left-left)+'px');
-  // the bridge to the tip starts from the highlighted characters on that line, not the whole correction
-  const hl=[...c.querySelectorAll('.es-n u.d')].flatMap(u=>[...u.getClientRects()]).filter(q=>Math.abs((q.top+q.bottom)/2-(r.top+r.bottom)/2)<r.height/2);
-  ES.tipLine=hl.length?{l:Math.min(...hl.map(q=>q.left)),r:Math.max(...hl.map(q=>q.right)),t:r.top,b:r.bottom}:{l:r.left,r:r.right,t:r.top,b:r.bottom};
-  tip.onmouseenter=()=>clearTimeout(ES.timer);
-  tip.onmouseleave=e=>{if(!ES.pinned&&!ES_bridge(e.clientX,e.clientY)&&!ES_hit(e.clientX,e.clientY))ES_closeTip();};
-  tip.addEventListener('click',e=>{
-    e.stopPropagation();
+  const tip=ES_showTip(s.id,ES_markTip(s),r,px,e=>{
     if(!e.target.closest('#es-add')) return;
     IM_toggle(s);
     const on=!!IM_listed(s), b=tip.querySelector('#es-add');
     sfx(on?'save':'unstamp');
     b.setAttribute('aria-pressed',on);b.innerHTML=ES_addLabel(on);
   });
+  c.classList.add('on');
+  ES_fixHTML(s).then(h=>ES_fill(tip,'fix',h)).catch(()=>{});
+  ES_meanHTML(s).then(h=>ES_fill(tip,'mean',h)).catch(()=>{});
+}
+// the bands of the screen a run of his text takes, one per line (text nodes only)
+function ES_bands(box,i,j){
+  const a=ES_point(box,i,false), b=ES_point(box,j,true); if(!a||!b) return [];
+  const r=document.createRange(); try{r.setStart(a.node,a.off);r.setEnd(b.node,b.off);}catch(e){return [];}
+  const rs=[]; const root=r.commonAncestorContainer.nodeType===3?r.commonAncestorContainer.parentNode:r.commonAncestorContainer;
+  const w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+  for(let t=w.nextNode();t;t=w.nextNode()){
+    if(!r.intersectsNode(t)) continue;
+    const q=document.createRange(); q.selectNodeContents(t);
+    if(t===a.node) q.setStart(t,a.off); if(t===b.node) q.setEnd(t,b.off);
+    for(const c of q.getClientRects()){
+      if(c.width<1) continue;
+      const l=rs.find(x=>Math.abs((x.top+x.bottom)/2-(c.top+c.bottom)/2)<c.height/2);
+      if(l){l.left=Math.min(l.left,c.left);l.right=Math.max(l.right,c.right);l.top=Math.min(l.top,c.top);l.bottom=Math.max(l.bottom,c.bottom);}
+      else rs.push({left:c.left,right:c.right,top:c.top,bottom:c.bottom});
+    }
+  }
+  rs.forEach(q=>{q.width=q.right-q.left;q.height=q.bottom-q.top;});
+  return rs;
+}
+/* any word of his: tap (or click) it for its pinyin and meaning, by code, extension or not */
+async function ES_openWord(box,o,px,py){
+  const e=ES.essays.find(x=>x.day===+box.dataset.day); if(!e) return;
+  const text=norm(e.text);
+  // the character under the point (a caret falls on either side of it)
+  const under=k=>{if(k<0||k>=text.length||!ES_HAN.test(text[k]))return false;const b=ES_bands(box,k,k+1)[0];return !!b&&px>=b.left-2&&px<=b.right+2&&py>=b.top-4&&py<=b.bottom+4;};
+  const at=under(o)?o:under(o-1)?o-1:-1;
+  if(at<0){ES_closeTip();return;}
+  let a=at,z=at+1;
+  while(a>0&&at-a<24&&text[a-1]!=='\n')a--;
+  while(z<text.length&&z-at<24&&text[z]!=='\n')z++;
+  const id='w:'+e.day+':'+at; if(ES.tip===id) return;
+  const show=(w,i,j)=>{
+    const rs=ES_bands(box,i,j); if(!rs.length) return null;
+    const r=rs.reduce((b,q)=>Math.abs((q.top+q.bottom)/2-py)<Math.abs((b.top+b.bottom)/2-py)?q:b,rs[0]);
+    const tip=ES_showTip(id,ES_wordTip(w),r,px);
+    const h=ES_D.getBoundingClientRect();
+    rs.forEach(q=>{const d=document.createElement('i');d.className='es-look';d.setAttribute('aria-hidden','true');
+      d.style.cssText=`left:${q.left-h.left-2}px;top:${q.top-h.top}px;width:${q.width+4}px;height:${q.height}px`;ES_D.appendChild(d);});
+    RUBY.html(w.w).then(x=>ES_fill(tip,'py',x)).catch(()=>{});
+    return tip;
+  };
+  let tip=show({w:text[at],g:''},at,at+1);
+  const ws=await ES_look(text.slice(a,z),at-a), w=ws[0];
+  if(!w||ES.tip!==id) return;
+  ES_D.querySelectorAll('.es-look').forEach(x=>x.remove());
+  tip=show(w,a+w.i,a+w.i+w.w.length);
+  if(tip) ES.tip=id;
 }
 
 /* editing a past day, in place: the same box, the same type; it saves as he types */
@@ -356,13 +453,24 @@ ES_D.addEventListener('click',e=>{
   const c=e.clientX||e.clientY?ES_hit(e.clientX,e.clientY,ES_FINE?0:8):e.target.closest('.es-c[data-k]');
   if(c){
     e.stopPropagation();
-    if(ES.tip===c.dataset.k&&ES.pinned){ES_closeTip();return;}
+    if(ES.tip===c.dataset.k){ES_closeTip();return;}
     ES_openTip(c,true,e.clientX||null,e.clientY||null);
     return;
+  }
+  // a word of his own text: its pinyin and meaning. With a mouse it waits a moment, so a double-click still edits.
+  if(box&&(e.clientX||e.clientY)&&!e.target.closest('.es-c')&&!String(getSelection()||'').trim()){
+    const o=ES_caretOffset(e,box), x=e.clientX, y=e.clientY;
+    if(o!=null){
+      clearTimeout(ES.wordT);
+      if(e.detail>1) return;
+      ES.wordT=setTimeout(()=>ES_openWord(box,o,x,y),ES_FINE?260:0);
+      return;
+    }
   }
   if(ES.tip) ES_closeTip();
 });
 ES_D.addEventListener('dblclick',e=>{
+  clearTimeout(ES.wordT);
   const box=e.target.closest('.es-text'); if(!box||+box.dataset.day===ES.editDay) return;
   ES_startEdit(+box.dataset.day,ES_caretOffset(e,box));
 });
@@ -379,6 +487,8 @@ ES_D.addEventListener('keydown',e=>{
 // a mark opens on a click or tap (or Enter), never on hover (his rule, 2026-11-26)
 document.addEventListener('click',e=>{if(ES.tip&&!e.target.closest('#es-tip')&&!e.target.closest('#ess-days'))ES_closeTip();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')ES_closeTip();});
+// the tip follows its words when the page reflows (a phone turning, the window resizing)
+addEventListener('resize',()=>{if(ES.tip)ES_closeTip();});
 // his own text inline is off by default (the essay reads clean); the choice stays on this device
 const ES_MINE=document.getElementById('mine');
 function ES_showMine(on){ES_MINE.setAttribute('aria-checked',String(on));ES_D.classList.toggle('es-hide-mine',!on);}

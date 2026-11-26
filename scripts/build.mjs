@@ -96,6 +96,16 @@ writeFileSync('site/public/brain/demo.json', demoData(readFileSync('site/public/
   const one = (c) => (lines.get(c)?.[0] ?? '').toLowerCase();
   for (const [w, [py, z]] of lines) if (!z && [...w].length > 1 && [...w].map(one).join(' ') === py.toLowerCase()) lines.delete(w);
   writeFileSync('site/public/plus/pinyin.txt', [...lines].map(([w, [py, z]]) => `${w}\t${py}\t${z}`).join('\n') + '\n');
+  // Essays: the meaning of a word he taps in an essay (site/src/cbp/look.ts): the first senses of the same entry,
+  // short, for the same words (classifier and variant lines left out)
+  const gl = [];
+  for (const w of lines.keys()) {
+    const senses = d.get(w)[0].defs.map((s) => s.replace(/\s+/g, ' ').trim()).filter((s) => s && !/^(CL:|variant of|old variant|see |used in )/i.test(s));
+    let g = '';
+    for (const s of senses.slice(0, 3)) if (!g || g.length + s.length < 70) g += (g ? '; ' : '') + s;
+    if (g) gl.push(`${w}\t${g.length > 90 ? g.slice(0, 88).replace(/[ ;,]+\S*$/, '') + '…' : g}`);
+  }
+  writeFileSync('site/public/plus/gloss.txt', gl.join('\n') + '\n');
 }
 
 // Chinese Brain Plus's review page (/plus/review): his Anki collection, offline.
