@@ -760,7 +760,9 @@ CREATE INDEX ix_notes_csum ON notes (csum);`;
   </header>
   <div class="rx-body"></div>
 </div>`;
-  var app = $(".rx-body", VIEW_EL), col = () => S.meta.get("col"), ck = () => clock(col().day0, col().rollover), conf = () => S.confs.get(col().conf) ?? [...S.confs.values()][0], typeOf = (n) => S.types.get(n.mid), rowOf = (c) => {
+  var app = $(".rx-body", VIEW_EL);
+  app.tabIndex = -1;
+  var col = () => S.meta.get("col"), ck = () => clock(col().day0, col().rollover), conf = () => S.confs.get(col().conf) ?? [...S.confs.values()][0], typeOf = (n) => S.types.get(n.mid), rowOf = (c) => {
     let note = S.notes.get(c.nid);
     return note ? { card: c, note, type: typeOf(note) } : null;
   }, cardsOf = (nid) => [...S.cards.values()].filter((c) => c.nid === nid).sort((a, b) => a.ord - b.ord), live = () => [...S.cards.values()].filter((c) => S.notes.has(c.nid)), studyable = () => showable(live(), (id) => S.notes.get(id), typeOf), wordOfNote = (n) => wordOf(typeOf(n), n) || sortText(typeOf(n), n) || strip(n.flds.find((f) => strip(f)) ?? ""), wordOfCard = (c) => {
@@ -862,7 +864,7 @@ img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!imp
   }
   var view = "review";
   function go(v) {
-    view === "browse" && v !== "browse" && closeSide(), view = v, VIEW_EL.querySelectorAll("[data-v]").forEach((b) => b.setAttribute("aria-current", String(b.dataset.v === v))), app.className = "rx-body v-" + v, $(".rx", VIEW_EL).dataset.rx = v, paint();
+    view === "browse" && v !== "browse" && closeSide(), view = v, VIEW_EL.querySelectorAll("[data-v]").forEach((b) => b.setAttribute("aria-current", String(b.dataset.v === v))), app.className = "rx-body v-" + v, $(".rx", VIEW_EL).dataset.rx = v, paint(), v === "review" && VIEW === "reviews" && takeKeys();
     try {
       sessionStorage.setItem("cbp-rx", v);
     } catch {
@@ -925,7 +927,11 @@ img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!imp
   function watchFoot() {
     footRO?.disconnect();
     let f = $(".rw-foot", app);
-    f && footRO?.observe(f);
+    f && (VIEW_EL.style.setProperty("--rw-foot", `${Math.ceil(f.offsetHeight)}px`), footRO?.observe(f));
+  }
+  function takeKeys() {
+    let a = document.activeElement;
+    a && a !== document.body && a.matches('button, a, [role="tab"], [role="button"]') && !a.matches(":focus-visible") && a.blur(), (!document.activeElement || document.activeElement === document.body) && app.focus({ preventScroll: !0 });
   }
   function bindReview() {
     app.querySelectorAll("[data-a]").forEach((b) => b.onclick = () => act(b.dataset.a)), app.querySelectorAll("[data-g]").forEach((b) => b.onclick = () => grade(Number(b.dataset.g))), app.querySelectorAll("[data-f]").forEach((b) => b.onclick = () => flagIt(Number(b.dataset.f))), app.querySelectorAll("[data-m]").forEach((b) => b.onclick = () => mergeAct(b.dataset.m));
@@ -1127,89 +1133,106 @@ img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!imp
 ${a} and ${b} are both easy for him now. This card replaces their two cards: it is about the difference between them, the one thing he could still mix up. word: ${word}. pinyin: both readings. meaning: the difference, in a few words. ex: exactly two sentences, one where only ${a} fits and one where only ${b} fits. know: 2 or 3 points on when a Taiwanese person reaches for which. One char: line per distinct character, no how: lines, no second: line.`;
     };
   }
-  var pasteNote = /* @__PURE__ */ new WeakMap();
+  var ED_ORDER = ["chinese", "word", "mnemonic", "picture", "notes"], edKey = (name) => name.toLowerCase();
+  function edLabel(t, name) {
+    return edKey(name) !== "chinese" ? name : /radical/i.test(t.name) ? "Character" : /phrase/i.test(t.name) ? "Phrase" : "Sentence";
+  }
   function editor(host, note0, onClose) {
-    let t = typeOf(note0), start2 = clone(note0), note = note0;
-    host.innerHTML = `<div class="ed">${t.fields.slice().sort((a, b) => a.ord - b.ord).map(
-      (f) => (
-        // the audio field is a sound, not text: Play, or Make when there is none (V and Shift+V do the same)
-        /^audio$/i.test(f.name) ? `<div class="ef"><span>${esc2(f.name)}</span><div class="ef-snd"></div><div class="fv" hidden data-o="${f.ord}">${note.flds[f.ord] ?? ""}</div></div>` : `<label class="ef"><span>${esc2(f.name)}</span><div class="fv${/chinese|word|sentence|mnemonic/i.test(f.name) ? " zh" : ""}" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" data-o="${f.ord}">${note.flds[f.ord] ?? ""}</div></label>`
-      )
-    ).join("")}
+    let t = typeOf(note0), start2 = clone(note0), note = note0, rank = (name) => {
+      let i = ED_ORDER.indexOf(edKey(name));
+      return i < 0 ? ED_ORDER.length : i;
+    }, fields = t.fields.slice().sort((a, b) => rank(a.name) - rank(b.name) || a.ord - b.ord), ai = t.fields.find((f) => /^audio$/i.test(f.name))?.ord ?? -1, si = t.fields.find((f) => /^chinese$/i.test(f.name))?.ord ?? fields[0]?.ord ?? 0;
+    host.innerHTML = `<div class="ed rv-fields">${fields.map((f) => {
+      let k = edKey(f.name), id = `ed-l-${note.id}-${f.ord}`;
+      if (f.ord === ai) return `<div class="rv-f" hidden data-o="${f.ord}">${note.flds[f.ord] ?? ""}</div>`;
+      let opt2 = k === "pinyin" ? " opt" : "", zh = /chinese|word|mnemonic|pinyin/.test(k) ? " zh" : "";
+      return `<div class="rv-field rv-${esc2(k)}${opt2}"><span class="rv-l" id="${id}">${esc2(edLabel(t, f.name))}</span><div class="rv-f${zh}" data-o="${f.ord}" contenteditable="true" spellcheck="false" lang="${k === "notes" ? "en" : "zh-Hant"}" role="textbox" aria-multiline="true" aria-labelledby="${id}">${note.flds[f.ord] ?? ""}</div>${f.ord === si && ai >= 0 ? `<button type="button" class="rv-say" data-e="say" aria-label="Read it aloud">${SPEAKER}</button>` : ""}</div>`;
+    }).join("")}
     <div class="ed-end"><button type="button" class="ed-del" data-e="del">Delete note</button></div></div>`;
     let saveT, read = () => {
       let flds = [...note.flds];
-      return host.querySelectorAll(".fv").forEach((f) => flds[Number(f.dataset.o)] = clean(f.innerHTML)), { ...note, flds };
+      return host.querySelectorAll(".rv-f[data-o]").forEach((f) => flds[Number(f.dataset.o)] = clean(f.innerHTML)), { ...note, flds };
     }, save = () => {
       clearTimeout(saveT), saveT = setTimeout(async () => {
         note = read(), JSON.stringify(note.flds) !== JSON.stringify(S.notes.get(note.id)?.flds) && await put("note", note.id, note);
       }, 400);
-    };
-    host.querySelectorAll(".fv").forEach((f) => {
-      pasteNote.set(f, note), f.addEventListener("input", save), f.addEventListener("paste", (e) => pasteInto(e, f, save)), f.addEventListener("drop", (e) => dropInto(e, f, save));
-    }), $('[data-e="del"]', host).onclick = async () => {
+    }, fa = () => host.querySelector(`.rv-f[data-o="${ai}"]`), fs = () => host.querySelector(`.rv-f[data-o="${si}"]`), said = (f) => strip((f?.innerHTML ?? "").replace(/<br\s*\/?>|<\/div>/gi, `
+`)).replace(/[ \t]+/g, " ").trim(), audioFor = said(fs()), paintSnd = () => host.querySelector(".rv-say")?.classList.toggle("on", /\[sound:[^\]]+\]/.test(fa()?.textContent ?? "") && said(fs()) === audioFor);
+    EDITOR.attach(host, {
+      field: ".rv-f",
+      changed: () => (save(), paintSnd()),
+      files: (files, f) => (upload(files, f, save), !0),
+      pasted: (f) => void keepPics(f, save)
+    }), host.addEventListener("input", () => (save(), paintSnd())), host.querySelector('[data-e="del"]').onclick = async () => {
       clearTimeout(saveT), await deleteNote(note.id), onClose?.();
     };
-    let ai = t.fields.find((f) => /^audio$/i.test(f.name))?.ord ?? -1, si = t.fields.find((f) => /^chinese$/i.test(f.name))?.ord ?? 0, voicing = !1, sndRow = host.querySelector(".ef-snd"), paintSnd = () => {
-      if (!sndRow) return;
-      let fa = host.querySelector(`.fv[data-o="${ai}"]`), has = /\[sound:[^\]]+\]/.test(fa?.textContent ?? "");
-      sndRow.innerHTML = has ? `<button type="button" class="btn-q ed-snd" data-v="play">${SPEAKER}Play</button><button type="button" class="btn-q" data-v="again">Make again</button>` : '<button type="button" class="btn-q" data-v="make">Make</button>', sndRow.querySelectorAll("[data-v]").forEach((b) => b.onclick = () => void me.voice(b.dataset.v === "again"));
-    };
-    paintSnd();
-    let me = {
+    let voicing = !1, me = {
       host,
+      /** V (not typing) or the button: the sentence read aloud, made now if it has none or the sentence changed (Shift+V makes it again) */
       voice: async (again) => {
-        if (voicing) return;
-        let fa = host.querySelector(`.fv[data-o="${ai}"]`), fs = host.querySelector(`.fv[data-o="${si}"]`);
-        if (!fa || !fs) return;
-        let have = /\[sound:([^\]]+)\]/.exec(fa.textContent ?? "");
-        if (have && !again) return void SOUND.play(have[1]);
-        let text = strip(fs.innerHTML.replace(/<br\s*\/?>|<\/div>/gi, `
-`)).replace(/[ \t]+/g, " ").trim();
+        let a = fa(), s = fs(), b = host.querySelector(".rv-say");
+        if (voicing || !a || !s) return;
+        let text = said(s), have = /\[sound:([^\]]+)\]/.exec(a.textContent ?? "");
+        if (have && !again && text === audioFor) return void SOUND.play(have[1]);
         if (!text) return toast("The sentence is empty.");
         if (!navigator.onLine) return toast("The voice needs signal.");
-        fa.classList.add("busy"), voicing = !0;
+        voicing = !0, b?.classList.add("busy");
         try {
           let { url } = await api("voice", { text });
-          fa.textContent = `[sound:${url}]`, paintSnd(), save(), sfx("save"), SOUND.play(url);
+          a.textContent = `[sound:${url}]`, audioFor = text, save(), sfx("save"), SOUND.play(url);
         } catch (e) {
           toast(esc2(e.message || "The voice didn\u2019t come through."));
         } finally {
-          voicing = !1, fa.classList.remove("busy");
+          voicing = !1, b?.classList.remove("busy"), paintSnd();
         }
       }
     };
-    return ED = me, async () => {
+    return host.querySelector('[data-e="say"]')?.addEventListener("click", () => void me.voice(!1)), paintSnd(), ED = me, async () => {
       if (ED?.host === host && (ED = null), clearTimeout(saveT), !S.notes.has(note.id)) return;
       let now = read();
       JSON.stringify(now.flds) !== JSON.stringify(start2.flds) && (await put("note", now.id, now), H.undo.push({ name: "Edit", rows: [["note", now.id, start2, clone(S.notes.get(now.id))]] }), H.redo = []);
     };
   }
-  var ED = null, clean = (h) => h.replace(/^(<br>)+$/, "").replace(/\s+data-[\w-]+="[^"]*"/g, "");
+  var ED = null, clean = (h) => h.replace(/^(<br>)+$/, "").replace(/\s+data-[\w-]+="[^"]*"/g, "").replace(/ class="rv-sel"/g, "");
   function editDialog(note) {
     let d = document.createElement("dialog");
     d.className = "rx-dlg", d.innerHTML = `<div class="dlg-top"><span class="dlg-w zh">${esc2(wordOfNote(note))}</span><button type="button" class="dlg-x" aria-label="Close">\xD7</button></div><div class="dlg-ed"></div>`, document.body.append(d);
     let done = editor($(".dlg-ed", d), note, () => d.close());
     $(".dlg-x", d).onclick = () => d.close(), d.addEventListener("click", (e) => e.target === d && d.close()), d.addEventListener("close", async () => {
       await done(), d.remove(), RV.cur && (RV.cur = S.cards.get(RV.cur.id) ?? null), view === "review" && showReview();
-    }), d.showModal(), $(".fv", d)?.focus();
+    }), d.showModal(), $(".rv-f[contenteditable]", d)?.focus();
   }
-  async function pasteInto(e, f, save) {
-    let file = [...e.clipboardData?.files ?? []].find((x) => /^image\//.test(x.type));
-    file && (e.preventDefault(), await upload(file, f, save));
+  async function upload(files, f, save) {
+    let imgs = files.filter((x) => /^image\//.test(x.type));
+    if (imgs.length) {
+      if (!navigator.onLine) return toast("Pictures need signal.");
+      for (let file of imgs)
+        try {
+          let r = await fetch("/api/plus/upload", { method: "POST", headers: { Authorization: `Bearer ${localStorage.getItem("cb-token") ?? ""}`, "Content-Type": file.type }, body: file }), j = await r.json();
+          if (!r.ok) throw new Error(j.error);
+          f.focus(), document.execCommand("insertHTML", !1, `<img src="${esc2(j.url)}">`), save();
+        } catch (err) {
+          toast(esc2(err.message || "The picture didn\u2019t come through."));
+        }
+    }
   }
-  async function dropInto(e, f, save) {
-    let file = [...e.dataTransfer?.files ?? []].find((x) => /^image\//.test(x.type));
-    file && (e.preventDefault(), await upload(file, f, save));
-  }
-  async function upload(file, f, save) {
-    if (!navigator.onLine) return toast("Pictures need signal.");
-    try {
-      let r = await fetch("/api/plus/upload", { method: "POST", headers: { Authorization: `Bearer ${localStorage.getItem("cb-token") ?? ""}`, "Content-Type": file.type }, body: file }), j = await r.json();
-      if (!r.ok) throw new Error(j.error);
-      f.focus(), document.execCommand("insertHTML", !1, `<img src="${j.url}">`), save();
-    } catch (err) {
-      toast(esc2(err.message || "The picture didn\u2019t come through."));
+  async function keepPics(f, save) {
+    for (let im of f.querySelectorAll("img")) {
+      let src = im.getAttribute("src") ?? "";
+      if (!/^\/api\/plus\/media\//.test(src)) {
+        try {
+          let url;
+          if (/^(data:|blob:)/.test(src)) {
+            let b = await (await fetch(src)).blob(), r = await fetch("/api/plus/upload", { method: "POST", headers: { Authorization: `Bearer ${localStorage.getItem("cb-token") ?? ""}`, "Content-Type": b.type }, body: b }), j = await r.json();
+            if (!r.ok) throw new Error(j.error);
+            url = j.url;
+          } else url = (await api("grab", { url: src })).url;
+          im.setAttribute("src", url);
+        } catch {
+          im.remove(), toast("A picture couldn\u2019t be kept: it was taken out.");
+        }
+        save();
+      }
     }
   }
   async function deleteNote(nid, quiet = !1) {
@@ -1308,7 +1331,7 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
     let tbl = $(".br-tbl", app);
     tbl.innerHTML = `<div class="tr th" role="row">${COLS.map(([key, name]) => `<button type="button" role="columnheader" class="td c-${key}${BR.sort === key ? BR.desc ? " desc" : " asc" : ""}" data-sort="${key}" aria-sort="${BR.sort === key ? BR.desc ? "descending" : "ascending" : "none"}">${name}</button>`).join("")}</div>
     ${shown.map(
-      (x) => `<div class="tr${BR.sel.has(x.card.id) ? " sel" : ""} st-${x.state}" data-c="${x.card.id}" role="row" aria-selected="${BR.sel.has(x.card.id)}"><span class="td c-word zh">${x.flag ? `<i class="fd fd${x.flag}"></i>` : ""}${esc2(x.word)}</span><span class="td c-card">${esc2(x.tmpl)}</span><span class="td c-state"><i class="sdot"></i>${STATE_NAME[x.state]}</span><span class="td c-due">${x.due == null ? "" : dueText(x.card, k)}</span><span class="td c-ivl">${x.ivl ? label(x.ivl) : ""}</span><span class="td c-r">${pct(x.r)}</span><span class="td c-lapses">${x.lapses || ""}</span></div>`
+      (x) => `<div class="tr${BR.sel.has(x.card.id) ? " sel" : ""} st-${x.state}" data-c="${x.card.id}" role="row" aria-selected="${BR.sel.has(x.card.id)}"><span class="td c-word zh">${x.flag ? `<i class="fd fd${x.flag}"></i>` : ""}${esc2(x.word)}<span class="c-kind">${esc2(x.tmpl)}</span></span><span class="td c-card">${esc2(x.tmpl)}</span><span class="td c-state"><i class="sdot"></i>${STATE_NAME[x.state]}</span><span class="td c-due">${x.due == null ? "" : dueText(x.card, k)}</span><span class="td c-ivl">${x.ivl ? label(x.ivl) : ""}</span><span class="td c-r">${pct(x.r)}</span><span class="td c-lapses">${x.lapses || ""}</span></div>`
     ).join("")}
     ${rows.length > shown.length ? `<button type="button" class="btn-q br-more">Show all ${fmtN(rows.length)}</button>` : ""}${rows.length ? "" : `<div class="br-none"><p>Nothing matches.</p>${active(BR.f) || BR.f.q ? '<button type="button" class="btn-q" data-clear="1">Clear filters</button>' : ""}</div>`}`, tbl.querySelectorAll("[data-sort]").forEach(
       (b) => b.onclick = () => {
@@ -1650,7 +1673,7 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
         if (KEYS.is(e, "rv.flag")) return e.preventDefault(), act("flag");
       }
       let on = t.closest?.("button");
-      if ((e.key === " " || e.key === "Enter") && on && !on.matches(".rw-show,.rw-a")) return;
+      if ((e.key === " " || e.key === "Enter") && on && on.matches(":focus-visible") && !on.matches(".rw-show,.rw-a")) return;
       if (KEYS.is(e, "rv.show"))
         return e.preventDefault(), RV.shown ? grade(3) : act("show");
       let g = ["rv.again", "rv.hard", "rv.good", "rv.easy"].findIndex((id) => KEYS.is(e, id));

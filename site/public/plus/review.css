@@ -9,8 +9,8 @@
 /* ---------- fields ---------- */
 .rv-fields{display:grid;gap:12px;min-width:0}
 .rv-field{position:relative;display:grid;gap:5px}
-.rv-l{font:500 12px/1 var(--latin);letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);padding-left:2px}
-/* every field reads like the Sentence: the board's Chinese face (LXGW WenKai) at 27px, whatever he writes in it */
+.rv-l{font:400 var(--fs-s)/var(--lh-snug) var(--latin);color:var(--ink-3);padding-left:2px}
+/* the Reviews tab's Edit uses these same fields (anki.css .ed). Every field reads like the Sentence: the board's Chinese face (LXGW WenKai) at 27px, whatever he writes in it */
 .rv-f{min-height:44px;padding:12px 16px;border-radius:12px;background:var(--wash);color:var(--ink);font-family:var(--zh);font-size:27px;line-height:1.5;
   outline:none;overflow-wrap:anywhere;cursor:text;box-shadow:inset 0 0 0 1px transparent;transition:background-color .15s ease,box-shadow .15s ease}
 .rv-f:hover{background:var(--wash-2)}
@@ -18,7 +18,7 @@
 .rv-chinese .rv-f{padding-right:56px;min-height:64px}
 .rv-notes .rv-f{min-height:96px}
 .rv-picture .rv-f{min-height:166px;display:block;padding:8px 12px}
-.rv-picture .rv-f:empty::before{content:"Pick, paste or drop pictures";display:block;text-align:center;font:400 15px/150px var(--latin);color:var(--ink-4)}
+.rv-picture .rv-f:empty::before{content:"+";display:block;text-align:center;font:300 40px/150px var(--latin);color:var(--ink-4)}
 /* Cmd+Shift+H marks the word, <mark>: the page's own highlighter yellow (essays.css --hl-rgb) */
 .rv-f mark{color:inherit;background:rgb(var(--hl-rgb,255 210 0) / var(--es-hl-a,.3));border-radius:3px;padding:0 1px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
 .rv-f mark mark{background:none;padding:0}
@@ -44,13 +44,14 @@ html.rv-dragging,html.rv-dragging *{cursor:grabbing!important;user-select:none;-
 @media (prefers-reduced-motion:reduce){.rv-ghost,.rv-ghost.home{transition:opacity .2s ease}.rv-ghost.up{scale:none}}
 
 /* V: the sentence read aloud */
-.rv-say{position:absolute;right:10px;top:calc(50% + 9px);transform:translateY(-50%);width:36px;height:36px;border-radius:50%;border:0;
-  background:var(--surface);color:var(--ink-3);font:600 13px/1 var(--latin);cursor:pointer;box-shadow:0 0 0 1px var(--hair);
+.rv-say{position:absolute;right:10px;bottom:14px;width:36px;height:36px;border-radius:50%;border:0;
+  display:grid;place-items:center;padding:0;background:var(--surface);color:var(--ink-3);cursor:pointer;box-shadow:0 0 0 1px var(--hair);
   transition:transform .12s var(--rv-ease),background-color .15s ease,color .15s ease}
 .rv-say:hover{color:var(--ink)}
-.rv-say:active{transform:translateY(-50%) scale(.94)}
+.rv-say:active{transform:scale(.94)}
 .rv-say.on{background:var(--ink);color:var(--on-ink);box-shadow:none}
 .rv-say.busy{color:transparent;background:var(--surface)}
+.rv-say.busy svg{opacity:0}
 .rv-say.busy::after{content:"";position:absolute;inset:11px;border-radius:50%;border:2px solid var(--ink-4);border-top-color:var(--ink);animation:rv-spin .6s linear infinite}
 
 /* ---------- pictures to choose from: one strip, drawings first, then More images and More drawings as tiles ---------- */
@@ -84,28 +85,36 @@ html.rv-dragging,html.rv-dragging *{cursor:grabbing!important;user-select:none;-
 @keyframes rv-pulse{50%{opacity:.55}}
 @keyframes rv-spin{to{transform:rotate(1turn)}}
 @media (prefers-reduced-motion:reduce){.rv-tile{animation:none}.rv-tile.wait,.rv-mt:disabled{animation:none;opacity:.7}}
-@media (max-width:640px){.rv{padding:16px 16px 0}.rv-bar{margin:0 -16px;padding:12px 16px 16px}.rv-strip{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.rv{padding:16px 16px 0}.rv-strip{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
-/* ---------- a narrow screen: the card or the card he adds, one at a time; the switch floats at the foot (review.js pane) ---------- */
+/* the Cards view fades with opacity only: the board's view animation leaves a transform on it, and that would pin the
+   fixed bar below (Add) to the view instead of the screen */
+#view-cards.view{animation-name:rv-view}
+@keyframes rv-view{from{opacity:0}}
+
+/* ---------- a narrow screen: the card or the card he adds, one at a time. One calm bar at the foot: the Card · Add switch
+   on the left, Add beside it (review.js pane) ---------- */
 .rv-seg{display:none}
 @media (max-width:1100px){
   .cd-page[data-pane=card] .cd-side,.cd-page[data-pane=add] .cd-sheet{display:none}
   .cd-page{padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
   .rv-seg:not([hidden]){display:grid}
-  .rv-seg{grid-template-columns:1fr 1fr;position:fixed;z-index:12;left:50%;bottom:calc(14px + env(safe-area-inset-bottom,0px));translate:-50% 0;
-    width:min(260px,calc(100vw - 48px));padding:4px;border-radius:999px;background:color-mix(in srgb,var(--surface) 72%,transparent);
-    -webkit-backdrop-filter:saturate(1.8) blur(20px);backdrop-filter:saturate(1.8) blur(20px);box-shadow:0 0 0 1px var(--hair),0 10px 30px -10px rgba(21,23,28,.3)}
-  .rv-seg button{position:relative;z-index:1;border:0;background:none;font:500 16px/1 var(--latin);padding:12px 0;border-radius:999px;color:var(--ink-3);cursor:pointer;
+  .rv-seg{--seg-w:min(200px,42vw);grid-template-columns:1fr 1fr;position:fixed;z-index:12;left:16px;bottom:calc(10px + env(safe-area-inset-bottom,0px));
+    width:var(--seg-w);padding:4px;border-radius:999px;background:var(--wash)}
+  /* the bar itself: the page's own color, a hairline on top; on the Add side the Add bar draws it (under the switch) */
+  .rv-seg[data-pane=card]::before{content:"";position:fixed;z-index:-1;left:0;right:0;bottom:0;height:calc(64px + env(safe-area-inset-bottom,0px));background:var(--bg);box-shadow:0 -1px 0 var(--hair)}
+  .rv-seg button{position:relative;z-index:1;border:0;background:none;font:500 var(--fs-s)/1 var(--latin);padding:12px 0;border-radius:999px;color:var(--ink-3);cursor:pointer;
     -webkit-tap-highlight-color:transparent;transition:color .2s ease}
   .rv-seg button[aria-selected=true]{color:var(--ink)}
   .rv-seg i{position:absolute;top:4px;bottom:4px;left:4px;width:calc(50% - 4px);border-radius:999px;background:var(--surface);
     box-shadow:0 1px 3px rgba(21,23,28,.14),0 0 0 .5px var(--hair);transition:translate .34s var(--rv-ease)}
   .rv-seg[data-pane=add] i{translate:100% 0}
-  .rv-bar{bottom:calc(74px + env(safe-area-inset-bottom,0px))}
+  .rv-bar{position:fixed;z-index:11;left:0;right:0;bottom:0;margin:0;padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px)) calc(16px + min(200px,42vw) + 10px);
+    background:var(--bg);box-shadow:0 -1px 0 var(--hair);border-radius:0}
+  .rv-add{padding:14px 18px}
   .rv{padding-bottom:0}
-  body:has(> .rv-seg:not([hidden])) .toast{bottom:calc(80px + env(safe-area-inset-bottom,0px))}
+  body:has(> .rv-seg:not([hidden])) .toast{bottom:calc(76px + env(safe-area-inset-bottom,0px))}
 }
-@media (max-width:1100px) and (prefers-reduced-transparency:reduce){.rv-seg{background:var(--surface);-webkit-backdrop-filter:none;backdrop-filter:none}}
 @media (max-width:1100px) and (prefers-reduced-motion:reduce){.rv-seg i{transition:none}}
 @media (hover:none){.rv-f:hover{background:var(--wash)}.rv-f:focus{background:var(--surface)}.rv-tile:hover{box-shadow:0 0 0 1px var(--hair)}
   .rv-tile[aria-pressed=true]:hover{box-shadow:0 0 0 2.5px var(--ink)}.rv-f img:hover{outline:none}.rv-mt:hover:not(:disabled){background:none;color:var(--ink-2);box-shadow:inset 0 0 0 1.5px var(--hair)}}

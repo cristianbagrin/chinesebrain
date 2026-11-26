@@ -135,40 +135,8 @@
     return (RV.st[id] = st);
   }
 
-  // ---------- pasted things, made safe (formatting and pictures stay, everything else becomes text) ----------
-  const KEEP = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'MARK', 'BR', 'DIV', 'P', 'SPAN', 'IMG', 'UL', 'OL', 'LI', 'SUB', 'SUP', 'FONT']);
-  const DROP = new Set(['SCRIPT', 'STYLE', 'META', 'LINK', 'TITLE', 'IFRAME', 'OBJECT', 'SVG', 'NOSCRIPT', 'TEMPLATE']);
-  function clean(html) {
-    const t = document.createElement('template');
-    t.innerHTML = html;
-    (function walk(node) {
-      for (const n of [...node.childNodes]) {
-        if (n.nodeType === 8) n.remove();
-        if (n.nodeType !== 1) continue;
-        if (DROP.has(n.tagName)) {
-          n.remove();
-          continue;
-        }
-        walk(n);
-        if (!KEEP.has(n.tagName)) {
-          n.replaceWith(...n.childNodes);
-          continue;
-        }
-        const src = n.tagName === 'IMG' ? (n.getAttribute('src') || '').replace(location.origin + '/api/plus/media/', '/api/plus/media/') : '';
-        const color = n.style?.color, bg = n.style?.backgroundColor, fw = n.style?.fontWeight, ul = /underline/.test(n.style?.textDecorationLine || n.style?.textDecoration || '');
-        for (const a of [...n.attributes]) n.removeAttribute(a.name);
-        if (n.tagName === 'IMG') {
-          if (/^(https:|data:image\/|blob:|\/api\/plus\/media\/)/.test(src)) n.setAttribute('src', src);
-          else n.remove();
-        }
-        if (color) n.style.color = color;
-        if (bg) n.style.backgroundColor = bg;
-        if (fw && +fw >= 600) n.style.fontWeight = 'bold';
-        if (ul && n.tagName === 'SPAN') n.style.textDecoration = 'underline'; // the editor reads it as <u>
-      }
-    })(t.content);
-    return t.innerHTML;
-  }
+  // pasted things made safe: the shared editor's (kit/editor.ts)
+  const clean = (html) => EDITOR.clean(html);
   const kept = (html) => String(html).replace(/src="([^"]+)"/g, (m, s) => (RV.kept[s.replace(/&amp;/g, '&')] ? `src="${esc(RV.kept[s.replace(/&amp;/g, '&')])}"` : m));
   /** Every picture in a field that isn't on the site yet goes there now (in the background); its address swaps in. */
   function keepPictures(root) {
@@ -248,7 +216,7 @@
   const EL = document.createElement('section');
   EL.className = 'rv';
   EL.hidden = true;
-  EL.innerHTML = `<div class="rv-slots" role="tablist" aria-label="Cards for this word" hidden></div><div class="rv-typebox opt"><div class="rv-type" role="radiogroup" aria-label="Note type">${TYPES.map(([t, l]) => `<button type="button" role="radio" data-rv="type" data-t="${t}" aria-checked="false">${l}</button>`).join('')}</div></div><div class="rv-fields">${FIELDS.map(([k, label]) => `<div class="rv-field rv-${k}${k === 'word' ? ' opt' : ''}"><span class="rv-l" id="rv-l-${k}">${label}</span><div class="rv-f${k === 'chinese' || k === 'word' ? ' zh' : ''}" data-f="${k}" contenteditable="true" spellcheck="false" lang="${k === 'notes' ? 'en' : 'zh-Hant'}" role="textbox" aria-multiline="true" aria-labelledby="rv-l-${k}"></div>${k === 'chinese' ? '<button type="button" class="rv-say" data-rv="say" aria-label="Read it aloud (V)">V</button>' : ''}</div>`).join('')}</div>
+  EL.innerHTML = `<div class="rv-slots" role="tablist" aria-label="Cards for this word" hidden></div><div class="rv-typebox opt"><div class="rv-type" role="radiogroup" aria-label="Note type">${TYPES.map(([t, l]) => `<button type="button" role="radio" data-rv="type" data-t="${t}" aria-checked="false">${l}</button>`).join('')}</div></div><div class="rv-fields">${FIELDS.map(([k, label]) => `<div class="rv-field rv-${k}${k === 'word' ? ' opt' : ''}"><span class="rv-l" id="rv-l-${k}">${label}</span><div class="rv-f${k === 'chinese' || k === 'word' ? ' zh' : ''}" data-f="${k}" contenteditable="true" spellcheck="false" lang="${k === 'notes' ? 'en' : 'zh-Hant'}" role="textbox" aria-multiline="true" aria-labelledby="rv-l-${k}"></div>${k === 'chinese' ? '<button type="button" class="rv-say" data-rv="say" aria-label="Read it aloud"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 9.5h3.2L12 5.6v12.8l-4.8-3.9H4z" fill="currentColor"/><path d="M15.5 8.8a4.5 4.5 0 0 1 0 6.4M18.2 6.2a8.2 8.2 0 0 1 0 11.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>' : ''}</div>`).join('')}</div>
   <div class="rv-strip" aria-label="Pictures to choose from"></div>
   <div class="rv-bar"><button type="button" class="rv-add" data-rv="add" data-cardit></button></div>`;
   CD_EL.querySelector('.cd-side').appendChild(EL);
@@ -278,242 +246,14 @@
   const $ = (s) => EL.querySelector(s);
   const field = (k) => EL.querySelector(`.rv-f[data-f="${k}"]`);
 
-  // ---------- rich text in the fields, the way Ten Dollar Words does it (app/js/editor.js toggleStyle): the field is read
-  // into styled characters, a style goes on (or, if every character already has it, off) over the selection, and the
-  // field is written back as clean HTML: <b>, <i>, <u>, and <mark> for the word's mark (a highlight here; his note
-  // types turn it green, and into the blank on the sentence card; cards.ts markWord moved the old <u> marks over).
-  // No execCommand('bold'): browsers nest and restyle what it makes. The fields keep their own undo, so Cmd+Z steps back through typing and
-  // formatting alike. ----------
-  const RT = (() => {
-    const BIT = { b: 1, i: 2, ul: 4, hl: 8 };
-    const BLOCK = /^(DIV|P|LI|UL|OL|H[1-6]|BLOCKQUOTE)$/;
-    /** The field as pieces, one per UTF-16 unit of text ({c, f, s}), a line break ({br}) or a picture ({img}); `at` and
-     *  `end` say where each node starts and ends among them. A block (what Enter makes) starts a new line. */
-    function read(f) {
-      const out = [], at = new Map(), end = new Map();
-      const walk = (node, fl, sty) => {
-        for (const n of node.childNodes) {
-          if (n.nodeType === 3) {
-            at.set(n, out.length);
-            for (let k = 0; k < n.nodeValue.length; k++) out.push({ c: n.nodeValue[k], f: fl, s: sty });
-          } else if (n.nodeType === 1) {
-            const t = n.tagName;
-            if (BLOCK.test(t) && out.length && !out[out.length - 1].br) out.push({ br: 1 });
-            at.set(n, out.length);
-            if (t === 'BR') out.push({ br: 1 });
-            else if (t === 'IMG') out.push({ img: n });
-            else {
-              let f2 = fl, s2 = sty;
-              const st = n.style;
-              if (t === 'B' || t === 'STRONG' || +st?.fontWeight >= 600 || st?.fontWeight === 'bold') f2 |= BIT.b;
-              if (t === 'I' || t === 'EM' || st?.fontStyle === 'italic') f2 |= BIT.i;
-              if (/underline/.test(st?.textDecorationLine || st?.textDecoration || '')) f2 |= BIT.ul;
-              if (t === 'U') f2 |= BIT.ul;
-              if (t === 'MARK') f2 |= BIT.hl;
-              if (st?.color || st?.backgroundColor) s2 = [st.color && `color:${st.color}`, st.backgroundColor && `background-color:${st.backgroundColor}`].filter(Boolean).join(';');
-              walk(n, f2, s2);
-            }
-          }
-          end.set(n, out.length);
-        }
-      };
-      walk(f, 0, '');
-      return { out, at, end };
-    }
-    const escT = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/ /g, '&nbsp;');
-    /** Pieces back to HTML: runs of one style each, the tags always in the same order. */
-    function write(out) {
-      let h = '', i = 0;
-      while (i < out.length) {
-        const p = out[i];
-        if (p.br) (h += '<br>'), i++;
-        else if (p.img) {
-          const im = document.createElement('img');
-          im.setAttribute('src', p.img.getAttribute('src') || '');
-          if (p.img.dataset.from) im.dataset.from = p.img.dataset.from;
-          (h += im.outerHTML), i++;
-        } else {
-          let t = '';
-          for (; i < out.length && out[i].c != null && out[i].f === p.f && out[i].s === p.s; i++) t += out[i].c;
-          t = escT(t);
-          if (p.f & BIT.hl) t = `<mark>${t}</mark>`;
-          if (p.f & BIT.ul) t = `<u>${t}</u>`;
-          if (p.f & BIT.i) t = `<i>${t}</i>`;
-          if (p.f & BIT.b) t = `<b>${t}</b>`;
-          if (p.s) t = `<span style="${p.s}">${t}</span>`;
-          h += t;
-        }
-      }
-      return h;
-    }
-    /** A point in the DOM (a selection's end) → its place among the pieces. */
-    function index(f, m, node, off) {
-      if (node.nodeType === 3) return (m.at.get(node) ?? 0) + off;
-      const kids = node.childNodes;
-      if (off < kids.length) return m.at.get(kids[off]) ?? 0;
-      return node === f ? m.out.length : m.end.get(node) ?? m.out.length;
-    }
-    function selOf(f) {
-      const s = getSelection();
-      if (!s.rangeCount) return null;
-      const r = s.getRangeAt(0);
-      if (!f.contains(r.startContainer) || !f.contains(r.endContainer)) return null;
-      const m = read(f);
-      return [index(f, m, r.startContainer, r.startOffset), index(f, m, r.endContainer, r.endOffset)];
-    }
-    /** A place among the pieces → a point in the DOM. */
-    function point(f, i) {
-      const m = read(f);
-      for (const [n, a] of m.at) if (n.nodeType === 3 && i >= a && i <= a + n.nodeValue.length) return [n, i - a];
-      for (const [n, a] of m.at) if (n.nodeType === 1 && a === i && (n.tagName === 'BR' || n.tagName === 'IMG')) return [n.parentNode, [...n.parentNode.childNodes].indexOf(n)];
-      return [f, f.childNodes.length];
-    }
-    function select(f, a, b) {
-      const r = document.createRange();
-      try {
-        r.setStart(...point(f, a));
-        r.setEnd(...point(f, b ?? a));
-      } catch {
-        return;
-      }
-      const s = getSelection();
-      s.removeAllRanges();
-      s.addRange(r);
-    }
-    // ---- undo ----
-    const H = new WeakMap();
-    const hist = (f) => H.get(f) || (H.set(f, { u: [], r: [], t: 0, k: '' }), H.get(f));
-    /** The field as it is, kept before a change. Typing within a second of the last keystroke is one step. */
-    function snap(f, kind) {
-      if (!f) return;
-      const h = hist(f), now = Date.now();
-      if (kind === 'type' && h.k === 'type' && now - h.t < 1000) return void (h.t = now);
-      h.u.push({ html: f.innerHTML, sel: selOf(f) });
-      if (h.u.length > 200) h.u.shift();
-      h.r = [];
-      h.k = kind;
-      h.t = now;
-    }
-    function step(f, from, to) {
-      const h = hist(f), x = h[from].pop();
-      if (!x) return;
-      h[to].push({ html: f.innerHTML, sel: selOf(f) });
-      h.k = '';
-      f.innerHTML = x.html;
-      if (x.sel) select(f, ...x.sel);
-      changed();
-    }
-    // ---- styles ----
-    const api = {
-      pend: null,
-      snap,
-      undo: (f) => step(f, 'u', 'r'),
-      redo: (f) => step(f, 'r', 'u'),
-      forget: (f) => H.delete(f),
-      /** kind: b, i, ul or hl. With nothing selected, it applies to what he types next. */
-      toggle(f, kind) {
-        const bit = BIT[kind], sel = selOf(f);
-        if (!sel) return;
-        let [a, b] = sel;
-        if (a > b) [a, b] = [b, a];
-        const { out } = read(f);
-        if (a === b) {
-          const before = out[a - 1], had = before && before.c != null ? before.f & bit : 0;
-          const p = api.pend && api.pend.f === f && api.pend.at === a ? api.pend : { f, at: a, on: 0, off: 0 };
-          if (p.on & bit) p.on &= ~bit;
-          else if (p.off & bit) p.off &= ~bit;
-          else if (had) p.off |= bit;
-          else p.on |= bit;
-          api.pend = p.on || p.off ? p : null;
-          return;
-        }
-        snap(f, 'format');
-        const all = out.slice(a, b).every((p) => p.c == null || !/\S/.test(p.c) || p.f & bit);
-        for (let k = a; k < b; k++) if (out[k].c != null) out[k].f = all ? out[k].f & ~bit : out[k].f | bit;
-        f.innerHTML = write(out);
-        select(f, a, b);
-        changed();
-      },
-      /** What he typed since a style was asked for with nothing selected gets it. */
-      typed(f) {
-        const p = api.pend;
-        if (!p || p.f !== f) return;
-        const sel = selOf(f);
-        if (!sel || sel[0] !== sel[1] || sel[0] <= p.at) return;
-        const { out } = read(f), c = sel[0];
-        for (let k = p.at; k < c; k++) if (out[k].c != null) out[k].f = (out[k].f | p.on) & ~p.off;
-        f.innerHTML = write(out);
-        select(f, c);
-        api.pend = null;
-      },
-    };
-    return api;
-  })();
-  EL.addEventListener('beforeinput', (e) => {
-    const f = e.target.closest?.('.rv-f');
-    if (!f) return;
-    const t = e.inputType || '';
-    if (t === 'historyUndo' || t === 'historyRedo') {
-      e.preventDefault();
-      return t === 'historyUndo' ? RT.undo(f) : RT.redo(f);
-    }
-    // the phone's own B / I / U (in its selection menu) do what the shortcuts do; no other styling from the browser
-    const fm = { formatBold: 'b', formatItalic: 'i', formatUnderline: 'ul' }[t];
-    if (fm || t.startsWith('format')) {
-      e.preventDefault();
-      if (fm) RT.toggle(f, fm);
-      return;
-    }
-    if (t === 'insertCompositionText') return;
-    RT.snap(f, /^(insertText|deleteContent(Backward|Forward))$/.test(t) ? 'type' : 'edit');
+  // ---------- rich text in the fields: the one editor Reviews' Edit uses too (kit/editor.ts): Cmd+B/I/U, Cmd+Shift+H for
+  // the word's mark (<mark>), its own undo, paste and drop cleaned, pictures as files kept on the site, the phone's B I U H bar ----------
+  const RT = EDITOR.attach(EL, {
+    field: '.rv-f',
+    changed: () => changed(),
+    files: (files) => insertFiles(files),
+    pasted: (f) => keepPictures(f),
   });
-  EL.addEventListener('compositionstart', (e) => RT.snap(e.target.closest?.('.rv-f'), 'type'));
-  EL.addEventListener('compositionend', (e) => {
-    const f = e.target.closest?.('.rv-f');
-    if (f) setTimeout(() => (RT.typed(f), changed()));
-  });
-  EL.addEventListener('input', (e) => {
-    const f = e.target.closest?.('.rv-f');
-    if (f && !e.isComposing && RT.pend) RT.typed(f);
-  });
-  EL.addEventListener('pointerdown', () => (RT.pend = null));
-  EL.addEventListener('focusout', () => (RT.pend = null));
-
-  // ---------- on a phone, a selection in a field brings up a small bar under it (no toolbar the rest of the time) ----------
-  const FMT = document.createElement('div');
-  FMT.className = 'rv-fmt';
-  FMT.hidden = true;
-  FMT.innerHTML = '<button type="button" data-k="b" aria-label="Bold"><b>B</b></button><button type="button" data-k="i" aria-label="Italic"><i>I</i></button><button type="button" data-k="ul" aria-label="Underline"><u>U</u></button><button type="button" data-k="hl" aria-label="Highlight"><span>H</span></button>';
-  document.body.appendChild(FMT);
-  const TOUCH = matchMedia('(pointer:coarse)');
-  // a press on the bar keeps the selection (no focus moves to the button)
-  FMT.addEventListener('pointerdown', (e) => e.preventDefault());
-  FMT.addEventListener('mousedown', (e) => e.preventDefault());
-  FMT.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-k]'), f = FMT._f;
-    if (!b || !f) return;
-    RT.toggle(f, b.dataset.k);
-    sfx('tap');
-    placeFmt();
-  });
-  function placeFmt() {
-    const s = getSelection(), r = s.rangeCount ? s.getRangeAt(0) : null;
-    const f = r && !s.isCollapsed && r.commonAncestorContainer && (r.commonAncestorContainer.nodeType === 1 ? r.commonAncestorContainer : r.commonAncestorContainer.parentElement)?.closest?.('.rv .rv-f');
-    if (!TOUCH.matches || !f || EL.hidden) return void ((FMT.hidden = true), (FMT._f = null));
-    FMT._f = f;
-    FMT.hidden = false;
-    const rect = r.getBoundingClientRect(), vv = visualViewport, top = vv ? vv.offsetTop : 0, h = vv ? vv.height : innerHeight;
-    const w = FMT.offsetWidth, bh = FMT.offsetHeight;
-    // under the selection (the phone's own menu sits above it); above it when there's no room left over the keyboard
-    let y = rect.bottom + 14;
-    if (y + bh > top + h - 8) y = rect.top - bh - 14;
-    FMT.style.left = Math.max(8, Math.min(innerWidth - w - 8, rect.left + rect.width / 2 - w / 2)) + 'px';
-    FMT.style.top = Math.max(top + 8, y) + 'px';
-  }
-  document.addEventListener('selectionchange', () => requestAnimationFrame(placeFmt));
-  visualViewport?.addEventListener('resize', () => FMT.hidden || placeFmt());
-  visualViewport?.addEventListener('scroll', () => FMT.hidden || placeFmt());
-  BUS.on('view', (v) => v !== 'cards' && (FMT.hidden = true));
 
   // Add: a press adds and moves on; a hold adds and stays (the button fills while held, kit/hold.ts)
   HOLD($('.rv-add'), { tap: () => add(false), hold: () => add(true) });
@@ -864,47 +604,11 @@
     const f = e.target.closest('.rv-f[data-f="chinese"]'), st = CD.cur && state(CD.cur);
     if (f && st) pinyinOf(st).catch(() => {});
   });
-  EL.addEventListener('paste', (e) => {
-    const f = e.target.closest('.rv-f');
-    if (!f) return;
-    e.preventDefault();
-    RT.snap(f, 'edit');
-    const files = e.clipboardData?.files;
-    if (files && files.length && insertFiles(files)) return changed();
-    const html = e.clipboardData?.getData('text/html');
-    if (html) document.execCommand('insertHTML', false, clean(html));
-    else document.execCommand('insertText', false, e.clipboardData?.getData('text/plain') || '');
-    keepPictures(f);
-    changed();
-  });
   EL.addEventListener('dragstart', (e) => {
     const im = e.target.closest?.('.rv-tile img');
     if (!im) return;
     e.dataTransfer.setData('text/html', `<img src="${esc(im.dataset.full)}" data-from="${esc(im.dataset.full)}">`);
     e.dataTransfer.setData('text/uri-list', im.dataset.full);
-  });
-  EL.addEventListener('drop', (e) => {
-    const f = e.target.closest('.rv-f');
-    if (!f) return;
-    const files = e.dataTransfer?.files;
-    RT.snap(f, 'edit');
-    if (!files || !files.length) {
-      // HTML from the strip or another page: the browser drops it where the pointer is; cleaned and kept on input
-      setTimeout(() => {
-        f.innerHTML = clean(f.innerHTML);
-        keepPictures(f);
-        changed();
-      });
-      return;
-    }
-    e.preventDefault();
-    const pos = document.caretRangeFromPoint?.(e.clientX, e.clientY);
-    f.focus();
-    if (pos) {
-      getSelection().removeAllRanges();
-      getSelection().addRange(pos);
-    }
-    if (insertFiles(files)) changed();
   });
   EL.addEventListener('keydown', (e) => {
     const tile = e.target.closest?.('.rv-tile[data-rv="pick"]');
@@ -916,22 +620,6 @@
     }
     const f = e.target.closest('.rv-f');
     if (!f) return;
-    // Cmd+B, Cmd+I, Cmd+U, Cmd+Shift+H (the word's mark): on the selection, or on what he types next
-    const fmt = [['cd.bold', 'b'], ['cd.italic', 'i'], ['cd.underline', 'ul'], ['cd.mark', 'hl']].find(([id]) => KEYS.is(e, id));
-    if (fmt) {
-      e.preventDefault();
-      e.stopPropagation();
-      RT.toggle(f, fmt[1]);
-      return;
-    }
-    // the fields keep their own undo (typing and formatting alike), so the board's Cmd+Z stays out of them
-    if (KEYS.is(e, 'undo') || KEYS.is(e, 'redo')) {
-      e.preventDefault();
-      e.stopPropagation();
-      KEYS.is(e, 'redo') ? RT.redo(f) : RT.undo(f);
-      return;
-    }
-    if (/^(Arrow|Home|End|Page)/.test(e.key)) RT.pend = null;
     if (RV.selImg && (e.key === 'Backspace' || e.key === 'Delete')) {
       e.preventDefault();
       RT.snap(f, 'edit');

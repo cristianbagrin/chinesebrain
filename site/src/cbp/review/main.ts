@@ -24,6 +24,8 @@ declare const LAB: { get(id: string): string; row(id: string, group: string, o: 
 declare const SOUND: { play(src: string | string[], o?: { rate?: number; onEnd?: () => void }): Promise<boolean>; stop(): void; autoplay(): boolean };
 declare const KEYS: { is(e: KeyboardEvent, id: string): boolean; label(id: string): string };
 declare const RUBY: { set(el: Element | ShadowRoot | null | undefined, on: boolean): Promise<void>; shown(): boolean; CSS: string };
+import type { EDITOR as EDITOR_ } from '../kit/editor.ts';
+declare const EDITOR: typeof EDITOR_;
 declare const SETTINGS: { open(to?: string): void; close(): void; redraw(): void };
 declare const FUN: { celebrate(kind: string, o?: { x?: number; y?: number }): void } | undefined;
 // the Cards page's (board/js/cards.js), for a combined card
@@ -61,6 +63,8 @@ VIEW_EL.innerHTML = `<div class="rx">
   <div class="rx-body"></div>
 </div>`;
 const app = $('.rx-body', VIEW_EL);
+// it takes the keys when the tab opens (takeKeys), so Space works without a click on the page first
+app.tabIndex = -1;
 
 // ---------- the collection, read ----------
 const col = () => S.meta.get('col') as ColMeta;
@@ -267,6 +271,7 @@ function go(v: View) {
   app.className = 'rx-body v-' + v;
   ($('.rx', VIEW_EL) as HTMLElement).dataset.rx = v;
   paint();
+  if (v === 'review' && VIEW === 'reviews') takeKeys();
   try {
     sessionStorage.setItem('cbp-rx', v);
   } catch {}
@@ -379,8 +384,18 @@ function showReview(): void {
 const footRO = typeof ResizeObserver === 'function' ? new ResizeObserver((es) => es.forEach((e) => e.target.isConnected && VIEW_EL.style.setProperty('--rw-foot', `${Math.ceil((e.target as HTMLElement).offsetHeight)}px`))) : null;
 function watchFoot() {
   footRO?.disconnect();
-  const f = $('.rw-foot', app);
-  if (f) footRO?.observe(f);
+  const f = $('.rw-foot', app) as HTMLElement | null;
+  if (!f) return;
+  // measured now, so the first frame already has the right room under the card (the observer keeps it right after)
+  VIEW_EL.style.setProperty('--rw-foot', `${Math.ceil(f.offsetHeight)}px`);
+  footRO?.observe(f);
+}
+/** Space works the moment the tab opens: a button the mouse just pressed (the Reviews tab, Review · Browse) lets go of
+ *  the focus, so Space shows the answer instead of pressing that button again. A button reached with Tab keeps it. */
+function takeKeys() {
+  const a = document.activeElement as HTMLElement | null;
+  if (a && a !== document.body && a.matches('button, a, [role="tab"], [role="button"]') && !a.matches(':focus-visible')) a.blur();
+  if (!document.activeElement || document.activeElement === document.body) app.focus({ preventScroll: true });
 }
 function bindReview() {
   app.querySelectorAll<HTMLElement>('[data-a]').forEach((b) => (b.onclick = () => act(b.dataset.a!)));
@@ -671,26 +686,42 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
 }
 
 // ================= the editor: his fields, and a quiet delete =================
-const pasteNote = new WeakMap<HTMLElement, Note>();
+// The same editor as the Cards page's Add (kit/editor.ts, review.js): the same fields in the same order, the same look
+// (review.css .rv-field), the same keys (Cmd+B/I/U, Cmd+Shift+H, its own Cmd+Z), paste cleaning and the same V button.
+/** Add's field order (review.js FIELDS); any other field of the type after them, in its own order. */
+const ED_ORDER = ['chinese', 'word', 'mnemonic', 'picture', 'notes'];
+const edKey = (name: string) => name.toLowerCase();
+function edLabel(t: NoteType, name: string) {
+  if (edKey(name) !== 'chinese') return name;
+  return /radical/i.test(t.name) ? 'Character' : /phrase/i.test(t.name) ? 'Phrase' : 'Sentence';
+}
 function editor(host: HTMLElement, note0: Note, onClose?: () => void) {
   const t = typeOf(note0)!;
   const start = clone(note0);
   let note = note0;
-  host.innerHTML = `<div class="ed">${t.fields
-    .slice()
-    .sort((a, b) => a.ord - b.ord)
-    .map((f) =>
-      // the audio field is a sound, not text: Play, or Make when there is none (V and Shift+V do the same)
-      /^audio$/i.test(f.name)
-        ? `<div class="ef"><span>${esc(f.name)}</span><div class="ef-snd"></div><div class="fv" hidden data-o="${f.ord}">${note.flds[f.ord] ?? ''}</div></div>`
-        : `<label class="ef"><span>${esc(f.name)}</span><div class="fv${/chinese|word|sentence|mnemonic/i.test(f.name) ? ' zh' : ''}" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" data-o="${f.ord}">${note.flds[f.ord] ?? ''}</div></label>`,
-    )
+  const rank = (name: string) => {
+    const i = ED_ORDER.indexOf(edKey(name));
+    return i < 0 ? ED_ORDER.length : i;
+  };
+  const fields = t.fields.slice().sort((a, b) => rank(a.name) - rank(b.name) || a.ord - b.ord);
+  const ai = t.fields.find((f) => /^audio$/i.test(f.name))?.ord ?? -1;
+  const si = t.fields.find((f) => /^chinese$/i.test(f.name))?.ord ?? fields[0]?.ord ?? 0;
+  host.innerHTML = `<div class="ed rv-fields">${fields
+    .map((f) => {
+      const k = edKey(f.name), id = `ed-l-${note.id}-${f.ord}`;
+      // the audio is a sound, not text: the V button on the sentence plays it (or makes it), as on Add
+      if (f.ord === ai) return `<div class="rv-f" hidden data-o="${f.ord}">${note.flds[f.ord] ?? ''}</div>`;
+      // Add never shows the pinyin (it's done for him): here it stays out of sight until Option shows it
+      const opt = k === 'pinyin' ? ' opt' : '';
+      const zh = /chinese|word|mnemonic|pinyin/.test(k) ? ' zh' : '';
+      return `<div class="rv-field rv-${esc(k)}${opt}"><span class="rv-l" id="${id}">${esc(edLabel(t, f.name))}</span><div class="rv-f${zh}" data-o="${f.ord}" contenteditable="true" spellcheck="false" lang="${k === 'notes' ? 'en' : 'zh-Hant'}" role="textbox" aria-multiline="true" aria-labelledby="${id}">${note.flds[f.ord] ?? ''}</div>${f.ord === si && ai >= 0 ? `<button type="button" class="rv-say" data-e="say" aria-label="Read it aloud">${SPEAKER}</button>` : ''}</div>`;
+    })
     .join('')}
     <div class="ed-end"><button type="button" class="ed-del" data-e="del">Delete note</button></div></div>`;
   let saveT: ReturnType<typeof setTimeout> | undefined;
   const read = (): Note => {
     const flds = [...note.flds];
-    host.querySelectorAll<HTMLElement>('.fv').forEach((f) => (flds[Number(f.dataset.o)] = clean(f.innerHTML)));
+    host.querySelectorAll<HTMLElement>('.rv-f[data-o]').forEach((f) => (flds[Number(f.dataset.o)] = clean(f.innerHTML)));
     return { ...note, flds };
   };
   const save = () => {
@@ -700,47 +731,42 @@ function editor(host: HTMLElement, note0: Note, onClose?: () => void) {
       if (JSON.stringify(note.flds) !== JSON.stringify(S.notes.get(note.id)?.flds)) await put('note', note.id, note);
     }, 400);
   };
-  host.querySelectorAll<HTMLElement>('.fv').forEach((f) => {
-    pasteNote.set(f, note);
-    f.addEventListener('input', save);
-    f.addEventListener('paste', (e) => pasteInto(e, f, save));
-    f.addEventListener('drop', (e) => dropInto(e, f, save));
+  const fa = () => host.querySelector<HTMLElement>(`.rv-f[data-o="${ai}"]`);
+  const fs = () => host.querySelector<HTMLElement>(`.rv-f[data-o="${si}"]`);
+  const said = (f: HTMLElement | null) => strip((f?.innerHTML ?? '').replace(/<br\s*\/?>|<\/div>/gi, '\n')).replace(/[ \t]+/g, ' ').trim();
+  // the sentence the audio was made for: change the sentence and V makes it anew, as Add does
+  let audioFor = said(fs());
+  const paintSnd = () => host.querySelector('.rv-say')?.classList.toggle('on', /\[sound:[^\]]+\]/.test(fa()?.textContent ?? '') && said(fs()) === audioFor);
+  EDITOR.attach(host, {
+    field: '.rv-f',
+    changed: () => (save(), paintSnd()),
+    files: (files, f) => (void upload(files, f, save), true),
+    pasted: (f) => void keepPics(f, save),
   });
-  $('[data-e="del"]', host).onclick = async () => {
+  host.addEventListener('input', () => (save(), paintSnd()));
+  host.querySelector<HTMLElement>('[data-e="del"]')!.onclick = async () => {
     clearTimeout(saveT);
     await deleteNote(note.id);
     onClose?.();
   };
-  // V (not typing): the sentence read aloud into the Audio field, made now if it has none (Shift+V makes it again)
-  const ai = t.fields.find((f) => /^audio$/i.test(f.name))?.ord ?? -1;
-  const si = t.fields.find((f) => /^chinese$/i.test(f.name))?.ord ?? 0;
   let voicing = false;
-  const sndRow = host.querySelector<HTMLElement>('.ef-snd');
-  const paintSnd = () => {
-    if (!sndRow) return;
-    const fa = host.querySelector<HTMLElement>(`.fv[data-o="${ai}"]`);
-    const has = /\[sound:[^\]]+\]/.test(fa?.textContent ?? '');
-    sndRow.innerHTML = has ? `<button type="button" class="btn-q ed-snd" data-v="play">${SPEAKER}Play</button><button type="button" class="btn-q" data-v="again">Make again</button>` : `<button type="button" class="btn-q" data-v="make">Make</button>`;
-    sndRow.querySelectorAll<HTMLElement>('[data-v]').forEach((b) => (b.onclick = () => void me.voice(b.dataset.v === 'again')));
-  };
-  paintSnd();
   const me = {
     host,
+    /** V (not typing) or the button: the sentence read aloud, made now if it has none or the sentence changed (Shift+V makes it again) */
     voice: async (again: boolean) => {
-      if (voicing) return;
-      const fa = host.querySelector<HTMLElement>(`.fv[data-o="${ai}"]`), fs = host.querySelector<HTMLElement>(`.fv[data-o="${si}"]`);
-      if (!fa || !fs) return;
-      const have = /\[sound:([^\]]+)\]/.exec(fa.textContent ?? '');
-      if (have && !again) return void SOUND.play(have[1]);
-      const text = strip(fs.innerHTML.replace(/<br\s*\/?>|<\/div>/gi, '\n')).replace(/[ \t]+/g, ' ').trim();
+      const a = fa(), s = fs(), b = host.querySelector<HTMLElement>('.rv-say');
+      if (voicing || !a || !s) return;
+      const text = said(s);
+      const have = /\[sound:([^\]]+)\]/.exec(a.textContent ?? '');
+      if (have && !again && text === audioFor) return void SOUND.play(have[1]);
       if (!text) return toast('The sentence is empty.');
       if (!navigator.onLine) return toast('The voice needs signal.');
-      fa.classList.add('busy');
       voicing = true;
+      b?.classList.add('busy');
       try {
         const { url } = await api('voice', { text });
-        fa.textContent = `[sound:${url}]`;
-        paintSnd();
+        a.textContent = `[sound:${url}]`;
+        audioFor = text;
         save();
         sfx('save');
         void SOUND.play(url);
@@ -748,10 +774,13 @@ function editor(host: HTMLElement, note0: Note, onClose?: () => void) {
         toast(esc((e as Error).message || 'The voice didn’t come through.'));
       } finally {
         voicing = false;
-        fa.classList.remove('busy');
+        b?.classList.remove('busy');
+        paintSnd();
       }
     },
   };
+  host.querySelector<HTMLElement>('[data-e="say"]')?.addEventListener('click', () => void me.voice(false));
+  paintSnd();
   ED = me;
   /** Called when the editor goes away: the edit joins the undo history as one step. */
   return async () => {
@@ -766,7 +795,7 @@ function editor(host: HTMLElement, note0: Note, onClose?: () => void) {
   };
 }
 let ED: { host: HTMLElement; voice: (again: boolean) => Promise<void> } | null = null;
-const clean = (h: string) => h.replace(/^(<br>)+$/, '').replace(/\s+data-[\w-]+="[^"]*"/g, '');
+const clean = (h: string) => h.replace(/^(<br>)+$/, '').replace(/\s+data-[\w-]+="[^"]*"/g, '').replace(/ class="rv-sel"/g, '');
 
 function editDialog(note: Note) {
   const d = document.createElement('dialog');
@@ -783,33 +812,47 @@ function editDialog(note: Note) {
     if (view === 'review') showReview();
   });
   d.showModal();
-  ($('.fv', d) as HTMLElement | null)?.focus();
+  ($('.rv-f[contenteditable]', d) as HTMLElement | null)?.focus();
 }
 
-/** A picture pasted or dropped into a field: kept on the site, then put in. */
-async function pasteInto(e: ClipboardEvent, f: HTMLElement, save: () => void) {
-  const file = [...(e.clipboardData?.files ?? [])].find((x) => /^image\//.test(x.type));
-  if (!file) return;
-  e.preventDefault();
-  await upload(file, f, save);
-}
-async function dropInto(e: DragEvent, f: HTMLElement, save: () => void) {
-  const file = [...(e.dataTransfer?.files ?? [])].find((x) => /^image\//.test(x.type));
-  if (!file) return;
-  e.preventDefault();
-  await upload(file, f, save);
-}
-async function upload(file: File, f: HTMLElement, save: () => void) {
+/** Pictures pasted or dropped into a field as files: kept on the site, then put in where the caret is. */
+async function upload(files: File[], f: HTMLElement, save: () => void) {
+  const imgs = files.filter((x) => /^image\//.test(x.type));
+  if (!imgs.length) return;
   if (!navigator.onLine) return toast('Pictures need signal.');
-  try {
-    const r = await fetch('/api/plus/upload', { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('cb-token') ?? ''}`, 'Content-Type': file.type }, body: file });
-    const j = await r.json();
-    if (!r.ok) throw new Error(j.error);
-    f.focus();
-    document.execCommand('insertHTML', false, `<img src="${j.url}">`);
+  for (const file of imgs) {
+    try {
+      const r = await fetch('/api/plus/upload', { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('cb-token') ?? ''}`, 'Content-Type': file.type }, body: file });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error);
+      f.focus();
+      document.execCommand('insertHTML', false, `<img src="${esc(j.url)}">`);
+      save();
+    } catch (err) {
+      toast(esc((err as Error).message || 'The picture didn’t come through.'));
+    }
+  }
+}
+/** Pictures that came in with pasted HTML (another page's): kept on the site, as Add does (cards.ts grab). */
+async function keepPics(f: HTMLElement, save: () => void) {
+  for (const im of f.querySelectorAll<HTMLImageElement>('img')) {
+    const src = im.getAttribute('src') ?? '';
+    if (/^\/api\/plus\/media\//.test(src)) continue;
+    try {
+      let url: string;
+      if (/^(data:|blob:)/.test(src)) {
+        const b = await (await fetch(src)).blob();
+        const r = await fetch('/api/plus/upload', { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('cb-token') ?? ''}`, 'Content-Type': b.type }, body: b });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error);
+        url = j.url;
+      } else url = (await api('grab', { url: src })).url;
+      im.setAttribute('src', url);
+    } catch {
+      im.remove();
+      toast('A picture couldn’t be kept: it was taken out.');
+    }
     save();
-  } catch (err) {
-    toast(esc((err as Error).message || 'The picture didn’t come through.'));
   }
 }
 
@@ -950,7 +993,7 @@ function paintBrowse() {
     ${shown
       .map(
         (x) =>
-          `<div class="tr${BR.sel.has(x.card.id) ? ' sel' : ''} st-${x.state}" data-c="${x.card.id}" role="row" aria-selected="${BR.sel.has(x.card.id)}"><span class="td c-word zh">${x.flag ? `<i class="fd fd${x.flag}"></i>` : ''}${esc(x.word)}</span><span class="td c-card">${esc(x.tmpl)}</span><span class="td c-state"><i class="sdot"></i>${STATE_NAME[x.state]}</span><span class="td c-due">${x.due == null ? '' : dueText(x.card, k)}</span><span class="td c-ivl">${x.ivl ? label(x.ivl) : ''}</span><span class="td c-r">${pct(x.r)}</span><span class="td c-lapses">${x.lapses || ''}</span></div>`,
+          `<div class="tr${BR.sel.has(x.card.id) ? ' sel' : ''} st-${x.state}" data-c="${x.card.id}" role="row" aria-selected="${BR.sel.has(x.card.id)}"><span class="td c-word zh">${x.flag ? `<i class="fd fd${x.flag}"></i>` : ''}${esc(x.word)}<span class="c-kind">${esc(x.tmpl)}</span></span><span class="td c-card">${esc(x.tmpl)}</span><span class="td c-state"><i class="sdot"></i>${STATE_NAME[x.state]}</span><span class="td c-due">${x.due == null ? '' : dueText(x.card, k)}</span><span class="td c-ivl">${x.ivl ? label(x.ivl) : ''}</span><span class="td c-r">${pct(x.r)}</span><span class="td c-lapses">${x.lapses || ''}</span></div>`,
       )
       .join('')}
     ${rows.length > shown.length ? `<button type="button" class="btn-q br-more">Show all ${fmtN(rows.length)}</button>` : ''}${rows.length ? '' : `<div class="br-none"><p>Nothing matches.</p>${active(BR.f) || BR.f.q ? '<button type="button" class="btn-q" data-clear="1">Clear filters</button>' : ''}</div>`}`;
@@ -1518,8 +1561,9 @@ addEventListener(
       if (f >= 0) return eat(), flagIt(f);
       if (KEYS.is(e, 'rv.flag')) return e.preventDefault(), act('flag');
     }
+    // Space and Enter press a button only when he got to it with Tab (a clicked one, like the Reviews tab, doesn't count)
     const on = t.closest?.('button');
-    if ((e.key === ' ' || e.key === 'Enter') && on && !on.matches('.rw-show,.rw-a')) return;
+    if ((e.key === ' ' || e.key === 'Enter') && on && on.matches(':focus-visible') && !on.matches('.rw-show,.rw-a')) return;
     if (KEYS.is(e, 'rv.show')) {
       e.preventDefault();
       return RV.shown ? grade(3) : act('show');

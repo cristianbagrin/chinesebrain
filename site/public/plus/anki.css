@@ -3,9 +3,12 @@
 
 /* ---------- the tab's own bar: Review · Browse, the sync dot, the gear ---------- */
 #view-reviews{--k:.92}
-/* the board's view fade keeps a transform once done (fill both), which would pin the fixed strip to the view, not the screen */
-#view-reviews.view{animation-fill-mode:backwards}
+/* the tab fades in with opacity only: the board's view animation moves it (a transform), and while a transform is on
+   the view the fixed strip is pinned to the view, not the screen (Show answer jumped from mid-screen to the bottom) */
+#view-reviews.view{animation-name:rx-in}
+@keyframes rx-in{from{opacity:0}}
 .rx{max-width:1180px;margin:0 auto}
+.rx-body:focus{outline:0}
 .rx-top{display:flex;align-items:center;gap:var(--s2);margin:calc(-1 * var(--s5)) 0 var(--s4)}
 .rx-seg{display:inline-flex;gap:2px;background:var(--wash);border-radius:999px;padding:3px}
 .rx-seg button{border:0;background:none;border-radius:999px;padding:7px 18px;font-size:var(--fs-s);font-weight:500;color:var(--ink-3);cursor:pointer;transition:background .2s,color .2s}
@@ -36,9 +39,9 @@
 .rw-foot>*{pointer-events:auto;max-width:760px;margin-inline:auto}
 .rw-foot>.rw-flags{margin:0;max-width:none}
 .rw-bar{padding:0 0 var(--s2)}
-.rw-show{display:block;width:min(100%,360px);margin:0 auto;border:0;border-radius:14px;padding:12px 22px;background:var(--ink);color:var(--on-ink);font-size:var(--fs-m);font-weight:550;letter-spacing:.005em;cursor:pointer;transition:transform .12s var(--ease),box-shadow .2s;box-shadow:0 8px 22px -12px rgba(21,23,28,.55)}
-.rw-g{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-width:520px;margin:0 auto}
-.rw-a{border:0;border-radius:14px;padding:12px 6px;font-size:var(--fs-m);font-weight:550;cursor:pointer;transition:transform .12s var(--ease),background .15s,box-shadow .2s;-webkit-user-select:none;user-select:none}
+.rw-show{display:block;width:min(100%,280px);margin:0 auto;border:0;border-radius:12px;padding:9px 20px;background:var(--ink);color:var(--on-ink);font-size:var(--fs-s);font-weight:550;letter-spacing:.005em;cursor:pointer;transition:transform .12s var(--ease),box-shadow .2s;box-shadow:0 8px 22px -12px rgba(21,23,28,.55)}
+.rw-g{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-width:440px;margin:0 auto}
+.rw-a{border:0;border-radius:12px;padding:9px 6px;font-size:var(--fs-s);font-weight:550;cursor:pointer;transition:transform .12s var(--ease),background .15s,box-shadow .2s;-webkit-user-select:none;user-select:none}
 .rw-a1{background:var(--red-wash);color:var(--red)}
 .rw-a2{background:var(--wash);color:var(--ink-2)}
 .rw-a3{background:var(--green-wash);color:var(--green-deep)}
@@ -86,16 +89,9 @@
 .dnote:focus{box-shadow:inset 0 0 0 1.5px var(--ink-2)}
 .dnote:empty::before{content:attr(data-ph);color:var(--ink-4);font-family:var(--latin);font-size:var(--fs-m)}
 
-/* ---------- the editor (in a dialog on Review, beside the list in Browse) ---------- */
-.ed{display:flex;flex-direction:column;gap:var(--s4)}
-.ef{display:flex;flex-direction:column;gap:6px}
-.ef>span{font-size:var(--fs-s);color:var(--ink-3)}
-.fv{min-height:46px;border-radius:12px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--hair);padding:10px 14px;font-size:var(--fs-m);line-height:var(--lh);outline:0;overflow-wrap:anywhere;transition:box-shadow .15s}
-.fv.zh{font-family:var(--zh);font-size:var(--fs-l)}
-.fv:focus{box-shadow:inset 0 0 0 1.5px var(--ink-2)}
-.fv.busy{animation:rx-pulse 1s ease-in-out infinite alternate}
-@keyframes rx-pulse{to{opacity:.4}}
-.fv img{max-height:160px;border-radius:8px;vertical-align:middle}
+/* ---------- the editor (in a dialog on Review, beside the list in Browse): the Cards page's Add, the same fields
+   (review.css .rv-field, .rv-f, .rv-say), so the two look and behave alike ---------- */
+.ed.rv-fields{gap:12px}
 .ed-end{display:flex;justify-content:flex-end;padding-top:var(--s2)}
 .ed-del{border:0;background:none;color:var(--ink-3);font-size:var(--fs-s);padding:8px 12px;border-radius:999px;cursor:pointer;transition:color .15s,background .15s}
 @media (hover:hover){.ed-del:hover{color:var(--red);background:var(--red-wash)}}
@@ -169,11 +165,13 @@
 .th .td.asc,.th .td.desc{color:var(--ink)}
 .td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--fs-s);color:var(--ink-2);font-variant-numeric:tabular-nums}
 .td.c-word{font-size:var(--fs-l);color:var(--ink);display:flex;align-items:center;gap:8px}
+/* the card type beside the word, only once its own column has to go (the panel open, a phone): a word's cards stay told apart */
+.c-kind{display:none;min-width:0;overflow:hidden;text-overflow:ellipsis;font:400 var(--fs-xs)/1.2 var(--ui);color:var(--ink-3)}
 .td.c-r,.td.c-lapses,.th .c-r,.th .c-lapses{text-align:right}
 .tr.st-suspended .td,.tr.st-buried .td{color:var(--ink-4)}
 .tr.sel{background:var(--surface);box-shadow:inset 0 0 0 1px var(--hair)}
 @media (hover:hover){.tr:not(.th):not(.sel):hover{background:var(--wash)}}
-@container (max-width:720px){.tr{grid-template-columns:minmax(0,1.8fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,.9fr) minmax(0,.6fr)}.td.c-card,.td.c-lapses{display:none}}
+@container (max-width:720px){.tr{grid-template-columns:minmax(0,1.8fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,.9fr) minmax(0,.6fr)}.td.c-card,.td.c-lapses{display:none}.c-kind{display:block}}
 @container (max-width:460px){.tr{grid-template-columns:minmax(0,1.5fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,.8fr)}.td.c-r{display:none}}
 .br-more{margin:var(--s3) auto;display:flex}
 .br-none{color:var(--ink-3);padding:var(--s5) var(--s3);display:flex;align-items:center;gap:var(--s3)}
@@ -181,8 +179,8 @@
 /* one card, opened: its face, its numbers, then its note one click further */
 .br-side{position:sticky;top:calc(var(--bar) + env(safe-area-inset-top,0px) + 8px);max-height:calc(100dvh - var(--bar) - 32px);overflow:auto;overscroll-behavior:contain;background:var(--surface);border-radius:18px;box-shadow:0 0 0 1px var(--hair),0 20px 50px -30px rgba(21,23,28,.35);padding:var(--s3) var(--s5) var(--s5);animation:rx-side .26s var(--ease)}
 @keyframes rx-side{from{opacity:0;transform:translateX(12px)}}
-.br-side .fv{background:var(--bg)}
-.br-side .fv img{max-height:110px;max-width:calc(50% - 6px);margin:2px}
+.br-side .rv-f{background:var(--bg)}
+.br-side .rv-f:focus{background:var(--surface)}
 .sd-top{display:flex;align-items:center;justify-content:space-between;gap:var(--s2)}
 .sd-w{font-size:var(--fs-2xl);line-height:var(--lh-tight)}
 .sd-sub{display:flex;flex-wrap:wrap;gap:4px var(--s4);margin:var(--s1) 0 var(--s4);font-size:var(--fs-s);color:var(--ink-3)}
@@ -191,7 +189,7 @@
 .sd-seg{display:flex;width:fit-content;margin:0 0 var(--s1) auto;gap:2px;background:var(--wash);border-radius:999px;padding:2px}
 .sd-seg button{border:0;background:none;border-radius:999px;padding:4px 11px;font-size:var(--fs-xs);color:var(--ink-3);cursor:pointer}
 .sd-seg button[aria-checked=true]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px var(--shade)}
-.sd-host{zoom:.72;min-height:120px}
+.sd-host{zoom:.92;min-height:120px} /* the card drawn small, but nothing on it under --fs-xs */
 .sd-host.loud{cursor:pointer}
 .sd-facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:var(--s3) var(--s4);margin:0 0 var(--s4)}
 .sd-facts div{min-width:0}
@@ -208,9 +206,6 @@
 .sd-note[aria-expanded=true] i{transform:rotate(-135deg) translate(-2px,-1px)}
 .sd-ed{padding-top:var(--s2)}
 .sd-ed[hidden]{display:none}
-.ef-snd{display:flex;gap:2px;margin-left:calc(-1 * var(--s3))}
-.ed-snd{display:inline-flex;align-items:center;gap:6px}
-.ed-snd svg{width:18px;height:18px}
 @media (max-width:860px){
   .br-main.open{grid-template-columns:1fr}
   .br-main.open .br-side{position:fixed;inset:auto 0 0 0;top:auto;max-height:88dvh;border-radius:20px 20px 0 0;z-index:9;padding-bottom:calc(var(--s5) + env(safe-area-inset-bottom,0px));animation:rx-sheet .3s var(--ease)}
@@ -246,7 +241,7 @@
 /* a phone: the answer buttons sit low and big, under the thumb; nothing wider than the screen */
 @media (max-width:520px){
   .rw-g{gap:6px}
-  .rw-a,.rw-show{min-height:54px;padding:14px 4px}
+  .rw-a,.rw-show{min-height:46px;padding:10px 4px}
   .rw-show{width:100%}
   .rw-merge{padding:var(--s3)}
 }
