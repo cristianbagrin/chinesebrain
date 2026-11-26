@@ -76,7 +76,9 @@
 .paper.stacked::after{--pp-b:var(--pp-b2);--pp-b-size:var(--pp-b2-size);transform:translate(calc(6px * var(--k)),calc(3px * var(--k))) rotate(.7deg)}
 .paper.stacked,.paper.stacked[data-paper="lined"]{--pp-b1:var(--pp-grid);--pp-b1-size:var(--pp-grid-size);--pp-b2:var(--pp-dots);--pp-b2-size:var(--pp-dots-size)}
 .paper.stacked[data-paper="grid"]{--pp-b1:var(--pp-dots);--pp-b1-size:var(--pp-dots-size);--pp-b2:var(--pp-lined);--pp-b2-size:var(--pp-lined-size)}
-.paper.stacked[data-paper="dots"],.paper.stacked[data-paper="plain"]{--pp-b1:var(--pp-grid);--pp-b1-size:var(--pp-grid-size);--pp-b2:var(--pp-lined);--pp-b2-size:var(--pp-lined-size)}
+.paper.stacked[data-paper="dots"]{--pp-b1:var(--pp-grid);--pp-b1-size:var(--pp-grid-size);--pp-b2:var(--pp-lined);--pp-b2-size:var(--pp-lined-size)}
+/* plain paper lies on plain paper: no ruling peeking out at the edges */
+.paper.stacked[data-paper="plain"]{--pp-b1:linear-gradient(transparent,transparent);--pp-b1-size:auto;--pp-b2:linear-gradient(transparent,transparent);--pp-b2-size:auto}
 @media (max-width:600px){
   .paper{--paper-x:calc(20px * var(--k));--paper-top:calc(52px * var(--k))}
   .paper.stacked::before{transform:translate(-2px,5px) rotate(-1.4deg)}

@@ -835,11 +835,11 @@ CREATE INDEX ix_notes_csum ON notes (csum);`;
     let list = [...root.querySelectorAll("[data-sound]")].map((b) => b.dataset.sound);
     list.length && SOUND.play(list);
   }
-  var autoplayed = "", cardCss = (t) => t.css.replace(/@import[^;]+;/g, ""), OVER = `:host{display:block}.card{background:transparent!important;min-height:100%;box-sizing:border-box}hr{border:0;border-top:1px solid #E4E6EC;margin:22px 0}
+  var autoplayed = "", cardCss = (t) => t.css.replace(/@import[^;]+;/g, ""), XICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>', OVER = `:host{display:block}.card{background:transparent!important;min-height:100%;box-sizing:border-box}hr{border:0;border-top:1px solid #E4E6EC;margin:22px 0}
 a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn))){display:none}
-img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!important;height:auto!important;object-fit:contain!important}
+img{max-width:100%!important;max-height:calc(min(38vh,400px) / var(--rw-z,1) / var(--rw-z2,1))!important;width:auto!important;height:auto!important;object-fit:contain!important}
 .cbp-pics{display:flex!important;justify-content:center;align-items:center;gap:10px;margin-inline:auto;max-width:100%}
-.cbp-pics>img{flex:0 1 auto;min-width:0;margin:0!important;max-width:calc((100% - (var(--n) - 1) * 10px) / var(--n))!important;max-height:min(30vh,320px)!important}`;
+.cbp-pics>img{flex:0 1 auto;min-width:0;margin:0!important;max-width:calc((100% - (var(--n) - 1) * 10px) / var(--n))!important;max-height:calc(min(30vh,320px) / var(--rw-z,1) / var(--rw-z2,1))!important}`;
   function sideBySide(root) {
     let blank2 = (n) => n.nodeType === 3 && !(n.textContent ?? "").trim(), done = /* @__PURE__ */ new Set();
     for (let img of root.querySelectorAll("img")) {
@@ -1198,7 +1198,7 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
   var ED = null, clean = (h) => h.replace(/^(<br>)+$/, "").replace(/\s+data-[\w-]+="[^"]*"/g, "").replace(/ class="rv-sel"/g, "");
   function editDialog(note) {
     let d = document.createElement("dialog");
-    d.className = "rx-dlg", d.innerHTML = `<div class="dlg-top"><span class="dlg-w zh">${esc2(wordOfNote(note))}</span><button type="button" class="dlg-x" aria-label="Close">\xD7</button></div><div class="dlg-ed"></div>`, document.body.append(d);
+    d.className = "rx-dlg", d.innerHTML = `<div class="dlg-top"><span class="dlg-w zh">${esc2(wordOfNote(note))}</span><button type="button" class="dlg-x" aria-label="Close">${XICON}</button></div><div class="dlg-ed"></div>`, document.body.append(d);
     let done = editor($(".dlg-ed", d), note, () => d.close());
     $(".dlg-x", d).onclick = () => d.close(), d.addEventListener("click", (e) => e.target === d && d.close()), d.addEventListener("close", async () => {
       await done(), d.remove(), RV.cur && (RV.cur = S.cards.get(RV.cur.id) ?? null), view === "review" && showReview();
@@ -1429,7 +1429,7 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
     let bulk = $(".br-bulk", app);
     if (bulk.hidden = sel.length < 2, sel.length >= 2) {
       let anySusp = sel.some((c) => c.queue === -1);
-      bulk.innerHTML = `<span class="bk-n">${sel.length} cards</span><button type="button" class="btn-q" data-b="${anySusp ? "unsusp" : "susp"}">${anySusp ? "Unsuspend" : "Suspend"}</button><button type="button" class="btn-q" data-b="red"><i class="fd fd1"></i>Red</button><button type="button" class="btn-q" data-b="green"><i class="fd fd3"></i>Green</button><button type="button" class="btn-q bk-del" data-b="del">Delete</button><button type="button" class="dlg-x" data-b="none" aria-label="Clear selection">\xD7</button>`, bulk.querySelectorAll("[data-b]").forEach((b) => b.onclick = () => bulkAct(b.dataset.b, sel));
+      bulk.innerHTML = `<span class="bk-n">${sel.length} cards</span><button type="button" class="btn-q" data-b="${anySusp ? "unsusp" : "susp"}">${anySusp ? "Unsuspend" : "Suspend"}</button><button type="button" class="btn-q" data-b="red"><i class="fd fd1"></i>Red</button><button type="button" class="btn-q" data-b="green"><i class="fd fd3"></i>Green</button><button type="button" class="btn-q bk-del" data-b="del">Delete</button><button type="button" class="dlg-x" data-b="none" aria-label="Clear selection">${XICON}</button>`, bulk.querySelectorAll("[data-b]").forEach((b) => b.onclick = () => bulkAct(b.dataset.b, sel));
     }
     let side = $(".br-side", app), focus = sel.length === 1 ? sel[0] : null;
     if (!focus) {
@@ -1450,7 +1450,7 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
       ["Added", day(x.added)],
       ["Uses", x.uses == null ? "" : DOTS(x.uses)]
     ].filter(([, v]) => v);
-    side.innerHTML = `<div class="sd-top"><span class="sd-w zh">${esc2(x.word)}</span><button type="button" class="dlg-x" aria-label="Close">\xD7</button></div>
+    side.innerHTML = `<div class="sd-top"><span class="sd-w zh">${esc2(x.word)}</span><button type="button" class="dlg-x" aria-label="Close">${XICON}</button></div>
     <p class="sd-sub"><span class="sd-st st-${x.state}"><i class="sdot"></i>${STATE_NAME[x.state]}</span><span>${esc2(x.tmpl)}</span></p>
     <div class="sd-face"><div class="sd-seg" role="radiogroup" aria-label="Side"><button type="button" role="radio" data-face="q" aria-checked="${BR.face === "q"}">Front</button><button type="button" role="radio" data-face="a" aria-checked="${BR.face === "a"}">Back</button></div><div class="host sd-host"></div></div>
     <dl class="sd-facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>

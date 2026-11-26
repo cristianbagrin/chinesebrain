@@ -218,11 +218,13 @@ function playAll(root: ShadowRoot | null | undefined) {
 let autoplayed = '';
 const cardCss = (t: NoteType) => t.css.replace(/@import[^;]+;/g, '');
 // his styling, then the board's ground under it: no white box, no "Show Pinyin" link or play buttons (P and V do those)
+/** The × of every dialog and panel (the Settings window's). */
+const XICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
 const OVER = `:host{display:block}.card{background:transparent!important;min-height:100%;box-sizing:border-box}hr{border:0;border-top:1px solid #E4E6EC;margin:22px 0}
 a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn))){display:none}
-img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!important;height:auto!important;object-fit:contain!important}
+img{max-width:100%!important;max-height:calc(min(38vh,400px) / var(--rw-z,1) / var(--rw-z2,1))!important;width:auto!important;height:auto!important;object-fit:contain!important}
 .cbp-pics{display:flex!important;justify-content:center;align-items:center;gap:10px;margin-inline:auto;max-width:100%}
-.cbp-pics>img{flex:0 1 auto;min-width:0;margin:0!important;max-width:calc((100% - (var(--n) - 1) * 10px) / var(--n))!important;max-height:min(30vh,320px)!important}`;
+.cbp-pics>img{flex:0 1 auto;min-width:0;margin:0!important;max-width:calc((100% - (var(--n) - 1) * 10px) / var(--n))!important;max-height:calc(min(30vh,320px) / var(--rw-z,1) / var(--rw-z2,1))!important}`;
 /** Pictures side by side: two or three in a row (only spaces between them) share one line, each shown whole, instead of
  *  stacking and pushing the card past the screen. The note stays as it is; only what's drawn changes. */
 function sideBySide(root: ParentNode) {
@@ -804,7 +806,7 @@ const clean = (h: string) => h.replace(/^(<br>)+$/, '').replace(/\s+data-[\w-]+=
 function editDialog(note: Note) {
   const d = document.createElement('dialog');
   d.className = 'rx-dlg';
-  d.innerHTML = `<div class="dlg-top"><span class="dlg-w zh">${esc(wordOfNote(note))}</span><button type="button" class="dlg-x" aria-label="Close">×</button></div><div class="dlg-ed"></div>`;
+  d.innerHTML = `<div class="dlg-top"><span class="dlg-w zh">${esc(wordOfNote(note))}</span><button type="button" class="dlg-x" aria-label="Close">${XICON}</button></div><div class="dlg-ed"></div>`;
   document.body.append(d);
   const done = editor($('.dlg-ed', d), note, () => d.close());
   $('.dlg-x', d).onclick = () => d.close();
@@ -1180,7 +1182,7 @@ async function paintSel() {
   bulk.hidden = sel.length < 2;
   if (sel.length >= 2) {
     const anySusp = sel.some((c) => c.queue === -1);
-    bulk.innerHTML = `<span class="bk-n">${sel.length} cards</span><button type="button" class="btn-q" data-b="${anySusp ? 'unsusp' : 'susp'}">${anySusp ? 'Unsuspend' : 'Suspend'}</button><button type="button" class="btn-q" data-b="red"><i class="fd fd1"></i>Red</button><button type="button" class="btn-q" data-b="green"><i class="fd fd3"></i>Green</button><button type="button" class="btn-q bk-del" data-b="del">Delete</button><button type="button" class="dlg-x" data-b="none" aria-label="Clear selection">×</button>`;
+    bulk.innerHTML = `<span class="bk-n">${sel.length} cards</span><button type="button" class="btn-q" data-b="${anySusp ? 'unsusp' : 'susp'}">${anySusp ? 'Unsuspend' : 'Suspend'}</button><button type="button" class="btn-q" data-b="red"><i class="fd fd1"></i>Red</button><button type="button" class="btn-q" data-b="green"><i class="fd fd3"></i>Green</button><button type="button" class="btn-q bk-del" data-b="del">Delete</button><button type="button" class="dlg-x" data-b="none" aria-label="Clear selection">${XICON}</button>`;
     bulk.querySelectorAll<HTMLElement>('[data-b]').forEach((b) => (b.onclick = () => bulkAct(b.dataset.b!, sel)));
   }
   const side = $('.br-side', app);
@@ -1212,7 +1214,7 @@ async function paintSel() {
       ['Uses', x.uses == null ? '' : DOTS(x.uses)],
     ] as [string, string][]
   ).filter(([, v]) => v);
-  side.innerHTML = `<div class="sd-top"><span class="sd-w zh">${esc(x.word)}</span><button type="button" class="dlg-x" aria-label="Close">×</button></div>
+  side.innerHTML = `<div class="sd-top"><span class="sd-w zh">${esc(x.word)}</span><button type="button" class="dlg-x" aria-label="Close">${XICON}</button></div>
     <p class="sd-sub"><span class="sd-st st-${x.state}"><i class="sdot"></i>${STATE_NAME[x.state]}</span><span>${esc(x.tmpl)}</span></p>
     <div class="sd-face"><div class="sd-seg" role="radiogroup" aria-label="Side"><button type="button" role="radio" data-face="q" aria-checked="${BR.face === 'q'}">Front</button><button type="button" role="radio" data-face="a" aria-checked="${BR.face === 'a'}">Back</button></div><div class="host sd-host"></div></div>
     <dl class="sd-facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>

@@ -264,7 +264,7 @@ CD_EL.innerHTML=`<div class="cd-bar">
     </article>
     <aside class="cd-side"></aside>
   </div>
-  <div class="cd-empty" hidden><p class="cd-empty-t">Nothing waiting.</p><p>Type any word above, or the next five come in tonight.</p></div>`;
+  <div class="cd-empty empty" hidden><p class="empty-t">Nothing waiting.</p><p>Type any word above, or the next five come in tonight.</p></div>`;
 document.getElementById('view-cards').appendChild(CD_EL);
 const CD_SH=CD_EL.querySelector('.cd-sheet'), CD_MAIN=CD_EL.querySelector('.cd-main');
 

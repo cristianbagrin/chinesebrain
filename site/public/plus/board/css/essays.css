@@ -11,13 +11,14 @@
    floats over the pages) */
 .es-top{position:sticky;top:calc(var(--bar) + 8px);z-index:5;height:0;max-width:var(--es-w);display:flex;justify-content:flex-end}
 .es-top .es-sw{height:max-content;transition:background .2s,box-shadow .2s,padding .2s}
-.es-top.stuck .es-sw{padding:6px 10px 6px 14px;margin-right:-10px;background:color-mix(in srgb,var(--bg) 86%,transparent);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-radius:999px;box-shadow:0 0 0 1px var(--hair),0 6px 18px -8px rgba(21,23,28,.18)}
+.es-top.stuck .es-sw{padding:6px 10px 6px 14px;margin-right:-10px;background:var(--surface);border-radius:999px;box-shadow:var(--sh-pop)}
 .es-wh{padding-right:150px}
-.es-sw{display:inline-flex;align-items:center;gap:10px;border:0;background:none;padding:6px 2px;font-size:var(--fs-s);font-weight:400;color:var(--ink-3);cursor:pointer;border-radius:8px;white-space:nowrap}
-.es-sw i{position:relative;width:32px;height:19px;border-radius:999px;background:var(--wash-2);transition:background .2s}
-.es-sw i::after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:var(--surface);box-shadow:0 1px 2px rgba(21,23,28,.22);transition:transform .25s var(--ease)}
-.es-sw[aria-checked="true"] i{background:var(--ink-2)}
-.es-sw[aria-checked="true"] i::after{transform:translateX(13px)}
+.es-sw{display:inline-flex;align-items:center;gap:10px;border:0;background:none;padding:6px 2px;font-size:var(--fs-s);font-weight:500;color:var(--ink-3);cursor:pointer;border-radius:8px;white-space:nowrap}
+/* the switch is Settings' (.st-tg), a size down: ink when on */
+.es-sw i{position:relative;width:38px;height:23px;border-radius:999px;background:var(--wash-2);transition:background .2s}
+.es-sw i::after{content:"";position:absolute;top:2.5px;left:2.5px;width:18px;height:18px;border-radius:50%;background:var(--surface);box-shadow:0 1px 3px rgba(21,23,28,.25);transition:transform .28s var(--spring)}
+.es-sw[aria-checked="true"] i{background:var(--ink)}
+.es-sw[aria-checked="true"] i::after{transform:translateX(15px)}
 .es-sw:hover{color:var(--ink)}
 
 /* phones and tablets: To improve sits above the diary, folded to one line (the open items as small dots) */
@@ -41,7 +42,7 @@
 .es-days{position:relative;min-width:0}
 .es-wk+.es-wk{margin-top:var(--s9)}
 .es-wh{display:flex;align-items:center;gap:var(--s4);max-width:var(--es-w);margin:0 0 var(--s5)}
-.es-wh h2{white-space:nowrap;font-size:var(--fs-l);font-weight:500;color:var(--ink-2);letter-spacing:.005em;font-variant-numeric:tabular-nums}
+.es-wh h2{white-space:nowrap;font-size:var(--fs-l);font-weight:600;color:var(--ink);letter-spacing:.005em;font-variant-numeric:tabular-nums}
 .es-dots{display:inline-flex;gap:5px}
 .es-dots i{width:9px;height:9px;border-radius:50%;background:var(--wash-2)}
 .es-dots i.on{background:var(--green)}
@@ -113,7 +114,7 @@ html{--hl-rgb:255 210 0;--es-hl-a:.3}
 
 /* the tip: one look for every mark and every tapped word (essays.js ES_markTip, ES_wordTip): the board's surface,
    its type scale, nothing under --fs-s, Chinese at --fs-zh or more */
-.es-tip{position:absolute;z-index:6;width:min(340px,calc(100vw - 16px));max-width:100%;box-sizing:border-box;background:var(--surface);border-radius:var(--r);box-shadow:0 0 0 1px var(--hair),0 16px 40px -10px rgba(21,23,28,.2);padding:var(--s4) 18px;display:grid;gap:var(--s2);justify-items:start;transform-origin:var(--ox,24px) 100%;animation:tipin .18s var(--ease)}
+.es-tip{position:absolute;z-index:6;width:min(340px,calc(100vw - 16px));max-width:100%;box-sizing:border-box;background:var(--surface);border-radius:var(--r);box-shadow:var(--sh-pop);padding:var(--s3) var(--s4);display:grid;gap:var(--s2);justify-items:start;transform-origin:var(--ox,24px) 100%;animation:tipin .18s var(--ease)}
 .es-tip.below{transform-origin:var(--ox,24px) 0}
 @keyframes tipin{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:none}}
 .es-tip p{margin:0}

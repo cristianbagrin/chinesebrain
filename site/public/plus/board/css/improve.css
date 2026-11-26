@@ -1,4 +1,4 @@
-/* To improve: the list beside the diary (Essays) and its open items on Today (#improve-today). Owner: essays agent
+/* To improve: the list beside the diary (Essays). Owner: essays agent
    Rows edit like Notion; the right version is the text (red underline on what changed), what he wrote sits under it,
    struck. Crossed off is Notion's to-do: a ticked box, the text grey and struck, in place till Monday. */
 
@@ -25,8 +25,8 @@
 .es-t{min-width:0;display:grid;gap:2px;justify-items:start}
 .es-t>*{max-width:100%}
 .es-w{font-family:var(--zh);font-weight:400;font-size:max(var(--fs-zh),var(--es-imp,21px));line-height:var(--lh-zh);color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere;outline:0;border-radius:4px;min-height:1.5em;cursor:text}
-.es-w .es-en,.imt-t .es-en{font:inherit}
-.es-w u.d,.imt-t u.d{text-decoration-line:underline;text-decoration-color:var(--red);text-decoration-thickness:2px;text-underline-offset:.3em;text-decoration-skip-ink:none}
+.es-w .es-en{font:inherit}
+.es-w u.d{text-decoration-line:underline;text-decoration-color:var(--red);text-decoration-thickness:2px;text-underline-offset:.3em;text-decoration-skip-ink:none}
 .es-w:empty::before{content:attr(data-ph);color:var(--ink-4);pointer-events:none}
 .es-w:focus{box-shadow:0 0 0 6px var(--surface);background:var(--surface)}
 .es-o{font-family:var(--zh);font-size:var(--fs-zh);line-height:var(--lh-zh);overflow-wrap:anywhere;user-select:text}
@@ -53,7 +53,7 @@
 .es-grip{cursor:grab;touch-action:none}
 .es-plus:hover,.es-grip:hover{background:var(--wash-2);color:var(--ink-2)}
 .es-row.drag{z-index:5}
-.es-row.drag .es-ri{background:var(--surface);box-shadow:0 0 0 1px var(--hair),0 14px 32px -8px rgba(21,23,28,.22);transform:scale(1.015);transition:box-shadow .2s,transform .2s}
+.es-row.drag .es-ri{background:var(--surface);box-shadow:var(--sh-pop);transform:scale(1.015);transition:box-shadow .2s,transform .2s}
 .es-row.drag .es-grip{cursor:grabbing}
 .es-row.shift{transition:transform .22s var(--ease)}
 .es-row.flash .es-ri{animation:imflash 1.6s var(--ease)}
@@ -88,14 +88,3 @@
   .im-new{width:calc(100% + 40px)}
 }
 
-/* Today: the same list, big, each a line he can click to go to its sentence; the box ticks it off */
-#improve-today .im-head{margin-bottom:var(--s2)}
-.imt{list-style:none;margin:0;padding:0}
-/* on a wide Today the list runs in two columns, so it all fits on screen with the essay */
-@media (min-width:1180px){.imt{columns:2;column-gap:var(--s7)}.imt-li{break-inside:avoid}}
-.imt-in{display:grid;grid-template-columns:18px minmax(0,1fr);gap:0 var(--s3);align-items:start;padding:7px 10px;margin:0 -10px;border-radius:var(--r-s);cursor:pointer;transition:background .15s}
-.imt-in:hover{background:var(--wash)}
-.imt-li.done:not(.jump) .imt-in{cursor:default;background:none}
-.imt-t{font-family:var(--zh);font-weight:400;font-size:var(--fs-l);line-height:var(--lh-zh);color:var(--ink);overflow-wrap:anywhere}
-.imt-in .es-box{margin-top:.38em}
-#improve-today .im-empty{padding-left:0}

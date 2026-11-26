@@ -1,8 +1,8 @@
 /* Chinese Brain Plus: the Tutor (src/cbp/tutor/main.ts), a pane that slides in from the right over any page: a quiet
    column, his lines in his pen on the right, the tutor's on the page, its words as small chips he can tap into a card.
    The composer sits at the pane's foot, the same place in Scene and Ask. */
-.tu-pane{position:fixed;z-index:25;top:calc(12px + env(safe-area-inset-top,0px));bottom:12px;right:12px;width:min(440px,calc(100vw - 24px));display:flex;flex-direction:column;background:var(--bg);border-radius:16px;box-shadow:0 20px 60px rgba(21,23,28,.18),0 0 0 1px var(--hair);overflow:hidden;overscroll-behavior:contain;touch-action:pan-y;
-  transform:translateX(calc(100% + 24px));transition:transform .45s cubic-bezier(.32,.72,0,1),opacity .2s ease}
+.tu-pane{position:fixed;z-index:25;top:calc(12px + env(safe-area-inset-top,0px));bottom:12px;right:12px;width:min(440px,calc(100vw - 24px));display:flex;flex-direction:column;background:var(--bg);border-radius:var(--r-l);box-shadow:var(--sh-dlg);overflow:hidden;overscroll-behavior:contain;touch-action:pan-y;
+  transform:translateX(calc(100% + 24px));transition:transform .45s var(--sheet),opacity .2s ease}
 .tu-pane.open{transform:none}
 .tu-pane.drag{transition:none}
 .tu-pane:not(.open):not(.drag){box-shadow:none}
@@ -17,9 +17,9 @@
 :where(.tu-pane) button{font:inherit;color:inherit}
 .tu-pane svg{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 /* its top bar: Scene/Ask, New, pin, × (a mouse drags it right to send the pane away) */
-.tu-top{display:flex;align-items:center;gap:var(--s1);padding:10px 8px 10px 12px;border-bottom:1px solid var(--hair);flex:none}
+.tu-top{display:flex;align-items:center;gap:var(--s1);padding:12px 12px 10px 16px;border-bottom:1px solid var(--hair);flex:none}
 .tu-top .tu-mode{margin-right:auto}
-.tu-ic{display:grid;place-items:center;width:36px;height:36px;border:0;border-radius:50%;background:none;color:var(--ink-3);cursor:pointer;transition:background .12s,color .12s}
+.tu-ic{display:grid;place-items:center;width:36px;height:36px;border:0;border-radius:50%;background:none;color:var(--ink-2);cursor:pointer;transition:background .12s,color .12s}
 .tu-ic svg{width:18px;height:18px}
 .tu-pin[aria-pressed="true"]{background:var(--ink);color:var(--on-ink)}
 /* pinning only means something beside a page wide enough to keep using */
@@ -27,7 +27,7 @@
 .tu-scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:var(--s5) var(--s4) var(--s4)}
 .tu{position:relative}
 /* the button in the hot corner: there only while the pointer is in the corner */
-.tu-fab{position:fixed;z-index:24;right:20px;bottom:calc(20px + env(safe-area-inset-bottom,0px));width:48px;height:48px;display:grid;place-items:center;border:0;border-radius:50%;background:var(--ink);color:var(--on-ink);box-shadow:0 6px 20px rgba(21,23,28,.22);cursor:pointer;
+.tu-fab{position:fixed;z-index:24;right:20px;bottom:calc(20px + env(safe-area-inset-bottom,0px));width:48px;height:48px;display:grid;place-items:center;border:0;border-radius:50%;background:var(--ink);color:var(--on-ink);box-shadow:var(--sh-btn);cursor:pointer;
   opacity:0;transform:scale(.85);pointer-events:none;transition:opacity .15s ease,transform .2s var(--ease)}
 .tu-fab svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linejoin:round}
 .tu-fab.show{opacity:1;transform:none;pointer-events:auto}
@@ -49,15 +49,15 @@
 .tu-w:active{transform:translateY(1px)}
 /* the composer, at the pane's foot */
 .tu-dock{flex:none;padding:var(--s2) var(--s3) calc(var(--s3) + env(safe-area-inset-bottom,0px))}
-.tu-in{display:flex;align-items:flex-end;gap:var(--s2);background:var(--surface);border:1px solid var(--hair);border-radius:16px;padding:6px 6px 6px var(--s4);box-shadow:0 2px 12px var(--shade)}
+.tu-in{display:flex;align-items:flex-end;gap:var(--s2);background:var(--surface);border-radius:var(--r-l);padding:6px 6px 6px var(--s4);box-shadow:var(--sh-1)}
 .tu-in.off{opacity:.6}
-.tu-in textarea{flex:1;min-width:0;border:0;outline:0;resize:none;background:none;font-family:var(--zh);font-size:calc(20px * var(--k));line-height:1.45;color:var(--ink);padding:5px 0;height:calc(20px * var(--k) * 1.45 + 10px);max-height:40vh;overflow-y:auto}
-.tu-send{width:34px;height:34px;flex:none;border:0;border-radius:10px;background:var(--ink);color:var(--on-ink);cursor:pointer;display:grid;place-items:center;transition:opacity .15s}
+.tu-in textarea{flex:1;min-width:0;border:0;outline:0;resize:none;background:none;font-family:var(--zh);font-size:var(--fs-zh);line-height:1.45;color:var(--ink);padding:5px 0;height:calc(var(--fs-zh) * 1.45 + 10px);max-height:40vh;overflow-y:auto}
+.tu-send{width:36px;height:36px;flex:none;border:0;border-radius:50%;background:var(--ink);color:var(--on-ink);cursor:pointer;display:grid;place-items:center;transition:opacity .15s}
 .tu-in.empty .tu-send{opacity:.35}
 .tu-send::before{content:"";width:16px;height:16px;background:currentColor;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19V5M5 12l7-7 7 7'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19V5M5 12l7-7 7 7'/%3E%3C/svg%3E") center/contain no-repeat}
 .tu-mode{display:flex;gap:2px;background:var(--wash);border-radius:999px;padding:3px}
-.tu-mode button{border:0;background:none;color:var(--ink-3);font:inherit;font-size:var(--fs-s);padding:4px 12px;border-radius:999px;cursor:pointer}
-.tu-mode button[aria-checked="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px var(--shade)}
-.tu-new{border:0;background:none;color:var(--ink-3);font:inherit;font-size:var(--fs-s);cursor:pointer;padding:var(--s2) var(--s3);border-radius:999px}
-.tu-card{position:absolute;transform:translateX(-50%);z-index:5;border:0;border-radius:999px;background:var(--ink);color:var(--on-ink);font:inherit;font-size:var(--fs-s);font-weight:500;padding:8px 16px;cursor:pointer;box-shadow:0 4px 14px var(--shade)}
+.tu-mode button{border:0;background:none;color:var(--ink-3);font:inherit;font-size:var(--fs-s);font-weight:500;line-height:var(--lh-snug);padding:5px 14px;border-radius:999px;cursor:pointer;transition:background .15s,color .15s}
+.tu-mode button[aria-checked="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--sh-1)}
+.tu-new{border:0;background:none;color:var(--ink-2);font:inherit;font-size:var(--fs-s);font-weight:500;cursor:pointer;padding:8px 14px;border-radius:999px;transition:background .15s,color .15s}
+.tu-card{position:absolute;transform:translateX(-50%);z-index:5;border:0;border-radius:999px;background:var(--ink);color:var(--on-ink);font:inherit;font-size:var(--fs-s);font-weight:500;padding:8px 16px;cursor:pointer;box-shadow:var(--sh-btn)}
 @media (hover:hover) and (pointer:fine){.tu-new:hover,.tu-ic:hover{background:var(--wash);color:var(--ink-2)}.tu-pin[aria-pressed="true"]:hover{background:var(--ink-2);color:var(--on-ink)}.tu-w:hover{background:var(--gold)}}

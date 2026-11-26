@@ -326,14 +326,13 @@
       ["cd.voice", "Play the sentence", "v"],
       ["cd.images", "Pictures on the web", "i"]
     ]),
-    ...D("Cards", "field", [
-      ["cd.add", "Add and move on", "mod+shift+enter"],
-      ["cd.mark", "Highlight", "mod+shift+h"]
-    ]),
+    ...D("Cards", "field", [["cd.add", "Add and move on", "mod+shift+enter"]]),
+    ...D("Card fields", "field", [["cd.mark", "Highlight", "mod+shift+h"]]),
     // Cards: add and stay, Gemini, rich text in the card's fields
     ...D("Cards", void 0, [["cd.gemini", "Gemini", "g"]]),
-    ...D("Cards", "field", [
-      ["cd.addstay", "Add and stay", "mod+enter"],
+    ...D("Cards", "field", [["cd.addstay", "Add and stay", "mod+enter"]]),
+    // a card's fields, wherever they're edited (Cards' Add, Reviews' Edit): kit/editor.ts
+    ...D("Card fields", "field", [
       ["cd.bold", "Bold", "mod+b"],
       ["cd.italic", "Italic", "mod+i"],
       ["cd.underline", "Underline", "mod+u"]
