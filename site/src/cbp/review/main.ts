@@ -714,7 +714,7 @@ function editor(host: HTMLElement, note0: Note, onClose?: () => void) {
       // Add never shows the pinyin (it's done for him): here it stays out of sight until Option shows it
       const opt = k === 'pinyin' ? ' opt' : '';
       const zh = /chinese|word|mnemonic|pinyin/.test(k) ? ' zh' : '';
-      return `<div class="rv-field rv-${esc(k)}${opt}"><span class="rv-l" id="${id}">${esc(edLabel(t, f.name))}</span><div class="rv-f${zh}" data-o="${f.ord}" contenteditable="true" spellcheck="false" lang="${k === 'notes' ? 'en' : 'zh-Hant'}" role="textbox" aria-multiline="true" aria-labelledby="${id}">${note.flds[f.ord] ?? ''}</div>${f.ord === si && ai >= 0 ? '<button type="button" class="rv-say" data-e="say" aria-label="Read it aloud (V)">V</button>' : ''}</div>`;
+      return `<div class="rv-field rv-${esc(k)}${opt}"><span class="rv-l" id="${id}">${esc(edLabel(t, f.name))}</span><div class="rv-f${zh}" data-o="${f.ord}" contenteditable="true" spellcheck="false" lang="${k === 'notes' ? 'en' : 'zh-Hant'}" role="textbox" aria-multiline="true" aria-labelledby="${id}">${note.flds[f.ord] ?? ''}</div>${f.ord === si && ai >= 0 ? `<button type="button" class="rv-say" data-e="say" aria-label="Read it aloud">${SPEAKER}</button>` : ''}</div>`;
     })
     .join('')}
     <div class="ed-end"><button type="button" class="ed-del" data-e="del">Delete note</button></div></div>`;
@@ -993,7 +993,7 @@ function paintBrowse() {
     ${shown
       .map(
         (x) =>
-          `<div class="tr${BR.sel.has(x.card.id) ? ' sel' : ''} st-${x.state}" data-c="${x.card.id}" role="row" aria-selected="${BR.sel.has(x.card.id)}"><span class="td c-word zh">${x.flag ? `<i class="fd fd${x.flag}"></i>` : ''}${esc(x.word)}</span><span class="td c-card">${esc(x.tmpl)}</span><span class="td c-state"><i class="sdot"></i>${STATE_NAME[x.state]}</span><span class="td c-due">${x.due == null ? '' : dueText(x.card, k)}</span><span class="td c-ivl">${x.ivl ? label(x.ivl) : ''}</span><span class="td c-r">${pct(x.r)}</span><span class="td c-lapses">${x.lapses || ''}</span></div>`,
+          `<div class="tr${BR.sel.has(x.card.id) ? ' sel' : ''} st-${x.state}" data-c="${x.card.id}" role="row" aria-selected="${BR.sel.has(x.card.id)}"><span class="td c-word zh">${x.flag ? `<i class="fd fd${x.flag}"></i>` : ''}${esc(x.word)}<span class="c-kind">${esc(x.tmpl)}</span></span><span class="td c-card">${esc(x.tmpl)}</span><span class="td c-state"><i class="sdot"></i>${STATE_NAME[x.state]}</span><span class="td c-due">${x.due == null ? '' : dueText(x.card, k)}</span><span class="td c-ivl">${x.ivl ? label(x.ivl) : ''}</span><span class="td c-r">${pct(x.r)}</span><span class="td c-lapses">${x.lapses || ''}</span></div>`,
       )
       .join('')}
     ${rows.length > shown.length ? `<button type="button" class="btn-q br-more">Show all ${fmtN(rows.length)}</button>` : ''}${rows.length ? '' : `<div class="br-none"><p>Nothing matches.</p>${active(BR.f) || BR.f.q ? '<button type="button" class="btn-q" data-clear="1">Clear filters</button>' : ''}</div>`}`;

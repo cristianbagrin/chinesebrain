@@ -165,11 +165,13 @@
 .th .td.asc,.th .td.desc{color:var(--ink)}
 .td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--fs-s);color:var(--ink-2);font-variant-numeric:tabular-nums}
 .td.c-word{font-size:var(--fs-l);color:var(--ink);display:flex;align-items:center;gap:8px}
+/* the card type beside the word, only once its own column has to go (the panel open, a phone): a word's cards stay told apart */
+.c-kind{display:none;min-width:0;overflow:hidden;text-overflow:ellipsis;font:400 var(--fs-xs)/1.2 var(--ui);color:var(--ink-3)}
 .td.c-r,.td.c-lapses,.th .c-r,.th .c-lapses{text-align:right}
 .tr.st-suspended .td,.tr.st-buried .td{color:var(--ink-4)}
 .tr.sel{background:var(--surface);box-shadow:inset 0 0 0 1px var(--hair)}
 @media (hover:hover){.tr:not(.th):not(.sel):hover{background:var(--wash)}}
-@container (max-width:720px){.tr{grid-template-columns:minmax(0,1.8fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,.9fr) minmax(0,.6fr)}.td.c-card,.td.c-lapses{display:none}}
+@container (max-width:720px){.tr{grid-template-columns:minmax(0,1.8fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,.9fr) minmax(0,.6fr)}.td.c-card,.td.c-lapses{display:none}.c-kind{display:block}}
 @container (max-width:460px){.tr{grid-template-columns:minmax(0,1.5fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,.8fr)}.td.c-r{display:none}}
 .br-more{margin:var(--s3) auto;display:flex}
 .br-none{color:var(--ink-3);padding:var(--s5) var(--s3);display:flex;align-items:center;gap:var(--s3)}
@@ -187,7 +189,7 @@
 .sd-seg{display:flex;width:fit-content;margin:0 0 var(--s1) auto;gap:2px;background:var(--wash);border-radius:999px;padding:2px}
 .sd-seg button{border:0;background:none;border-radius:999px;padding:4px 11px;font-size:var(--fs-xs);color:var(--ink-3);cursor:pointer}
 .sd-seg button[aria-checked=true]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px var(--shade)}
-.sd-host{zoom:.72;min-height:120px}
+.sd-host{zoom:.92;min-height:120px} /* the card drawn small, but nothing on it under --fs-xs */
 .sd-host.loud{cursor:pointer}
 .sd-facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:var(--s3) var(--s4);margin:0 0 var(--s4)}
 .sd-facts div{min-width:0}

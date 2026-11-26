@@ -356,7 +356,7 @@
     let m = [];
     return (MAC ? e.metaKey : e.ctrlKey) && m.push("mod"), MAC && e.ctrlKey && m.push("ctrl"), !MAC && e.metaKey && m.push("meta"), e.altKey && m.push("alt"), e.shiftKey && (k.length > 1 || /[a-z0-9]/.test(k)) && m.push("shift"), [...m, k].join("+");
   }
-  var keysOf = (id) => mine[id] != null ? mine[id].split(" ").filter(Boolean) : BY.get(id)?.keys ?? [], MODS = ["control", "shift", "alt", "meta", "os", "capslock", "fn"], KEYS = {
+  var keysOf = (id) => mine[id] != null ? mine[id].split(" ").filter(Boolean) : BY.get(id)?.keys ?? [], MODS = ["control", "shift", "alt", "meta", "os", "capslock", "fn"], KEYS2 = {
     defs: DEFS,
     is: (e, id) => !e.isComposing && keysOf(id).includes(combo(e)),
     keys: keysOf,
@@ -420,7 +420,7 @@
       });
     }, 600);
   };
-  KEYS.load(LAB.acct.keys ?? {}, (keys) => {
+  KEYS2.load(LAB.acct.keys ?? {}, (keys) => {
     LAB.acct.keys = keys, LAB.saveAcct(), LAB.push();
   });
   (async () => {
@@ -436,7 +436,7 @@
         }
         s.values[id] && s.values[id] !== LAB.get(id) && LAB.set(id, s.values[id], "server");
       }
-      LAB.acct.keys = s.keys ?? {}, KEYS.load(LAB.acct.keys, (keys) => {
+      LAB.acct.keys = s.keys ?? {}, KEYS2.load(LAB.acct.keys, (keys) => {
         LAB.acct.keys = keys, LAB.saveAcct(), LAB.push();
       }), LAB.saveAcct(), mine2 && LAB.push(), document.getElementById("settings").hidden || draw();
     } catch {
@@ -457,14 +457,14 @@
     for (let r of Object.values(LAB.rows)) (by[r.group] ??= []).push(`<div class="st-cust" data-row="${r.id}">${r.html()}</div>`);
     return by.Everyday?.unshift(sw("data-sound", SND.on, "Sound")), `<div class="st-top"><b>Settings</b><button class="btn-q" type="button" id="st-reset">Reset</button><button class="st-x" type="button" id="st-close" aria-label="Close">\xD7</button></div>
     ${[...GROUPS, ...Object.keys(by).filter((g) => !GROUPS.includes(g))].filter((g) => by[g]).map((g) => `<section class="st-g"><h3>${esc(g)}</h3>${by[g].join("")}</section>`).join("")}
-    <section class="st-g"><h3>Shortcuts</h3><button type="button" class="st-row st-go" data-page="keys"><span class="st-l">All shortcuts</span><span class="st-k">${esc(KEYS.label("shortcuts"))}</span></button></section>`;
+    <section class="st-g"><h3>Shortcuts</h3><button type="button" class="st-row st-go" data-page="keys"><span class="st-l">All shortcuts</span><span class="st-k">${esc(KEYS2.label("shortcuts"))}</span></button></section>`;
   }
   function keysHTML() {
     let groups = {};
-    for (let d of KEYS.defs) (groups[d.group] ??= []).push(d);
+    for (let d of KEYS2.defs) (groups[d.group] ??= []).push(d);
     return `<div class="st-top"><button type="button" class="btn-q st-back" data-page="main">\u2039 Settings</button><b></b><button class="btn-q" type="button" id="st-kreset">Reset</button><button class="st-x" type="button" id="st-close" aria-label="Close">\xD7</button></div>
     ${Object.entries(groups).map(
-      ([g, ds]) => `<section class="st-g"><h3>${esc(g)}</h3>${ds.map((d) => `<div class="st-row"><span class="st-l">${esc(d.label)}</span><button type="button" class="st-key${listening === d.id ? " on" : ""}${KEYS.changed(d.id) ? " mine" : ""}" data-key="${d.id}">${listening === d.id ? "Press a key" : KEYS.keys(d.id).map((k) => `<kbd>${esc(KEYS.pretty(k))}</kbd>`).join("") || "\u2014"}</button></div>`).join("")}</section>`
+      ([g, ds]) => `<section class="st-g"><h3>${esc(g)}</h3>${ds.map((d) => `<div class="st-row"><span class="st-l">${esc(d.label)}</span><button type="button" class="st-key${listening === d.id ? " on" : ""}${KEYS2.changed(d.id) ? " mine" : ""}" data-key="${d.id}">${listening === d.id ? "Press a key" : KEYS2.keys(d.id).map((k) => `<kbd>${esc(KEYS2.pretty(k))}</kbd>`).join("") || "\u2014"}</button></div>`).join("")}</section>`
     ).join("")}`;
   }
   function draw() {
@@ -497,7 +497,7 @@
       return sfx("swish"), draw();
     }
     if (t.id === "st-kreset")
-      return KEYS.reset(), sfx("swish"), draw();
+      return KEYS2.reset(), sfx("swish"), draw();
   });
   box.addEventListener("change", (e) => {
     let s = e.target.closest("select[data-xs]");
@@ -506,17 +506,17 @@
   addEventListener(
     "keydown",
     (e) => {
-      if (!listening || box.hidden || KEYS.isModifier(e)) return;
+      if (!listening || box.hidden || KEYS2.isModifier(e)) return;
       e.preventDefault(), e.stopImmediatePropagation();
       let id = listening;
-      listening = "", e.key !== "Escape" && (KEYS.bind(id, KEYS.combo(e)), sfx("stamp")), draw();
+      listening = "", e.key !== "Escape" && (KEYS2.bind(id, KEYS2.combo(e)), sfx("stamp")), draw();
     },
     !0
   );
   document.addEventListener("keydown", (e) => {
-    if (KEYS.is(e, "shortcuts"))
+    if (KEYS2.is(e, "shortcuts"))
       return e.preventDefault(), sfx("tap"), open(box.hidden || page !== "keys", "keys");
-    if (KEYS.is(e, "settings"))
+    if (KEYS2.is(e, "settings"))
       return e.preventDefault(), sfx("tap"), open(box.hidden, "main"), box.hidden && btn.focus();
     e.key === "Escape" && !box.hidden && (open(!1), btn.focus());
   });
@@ -533,7 +533,7 @@
   ], TYPING = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
   addEventListener("keydown", (e) => {
     if (e.defaultPrevented || e.isComposing || e.repeat || e.target?.closest?.(TYPING) || document.querySelector("dialog[open]")) return;
-    let hit = TO.find(([id]) => KEYS.is(e, id));
+    let hit = TO.find(([id]) => KEYS2.is(e, id));
     if (!hit || !VIEWS.includes(hit[1])) return;
     e.preventDefault();
     let [, view, sub] = hit;
@@ -620,8 +620,248 @@
     return rv && es ? `Reviews and ${essay}.` : rv ? "Reviews left." : low ? "Three sentences left." : "Your essay is left.";
   }
 
+  // site/src/cbp/kit/editor.ts
+  var BIT = { b: 1, i: 2, ul: 4, hl: 8 }, isChar = (p) => !!p && "c" in p, escT = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/ /g, "&nbsp;"), escA = (t) => t.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  function write(out) {
+    let h = "", i = 0;
+    for (; i < out.length; ) {
+      let p = out[i];
+      if ("br" in p) h += "<br>", i++;
+      else if ("img" in p) h += `<img src="${escA(p.img.src)}"${p.img.from ? ` data-from="${escA(p.img.from)}"` : ""}>`, i++;
+      else {
+        let t = "";
+        for (let q = out[i]; i < out.length && isChar(q) && q.f === p.f && q.s === p.s; q = out[++i]) t += q.c;
+        t = escT(t), p.f & BIT.hl && (t = `<mark>${t}</mark>`), p.f & BIT.ul && (t = `<u>${t}</u>`), p.f & BIT.i && (t = `<i>${t}</i>`), p.f & BIT.b && (t = `<b>${t}</b>`), p.s && (t = `<span style="${escA(p.s)}">${t}</span>`), h += t;
+      }
+    }
+    return h;
+  }
+  function toggleRange(out, a, b, kind) {
+    let bit = BIT[kind];
+    a > b && ([a, b] = [b, a]);
+    let all = out.slice(a, b).every((p) => !isChar(p) || !/\S/.test(p.c) || p.f & bit);
+    return out.map((p, k) => k >= a && k < b && isChar(p) ? { ...p, f: all ? p.f & ~bit : p.f | bit } : p);
+  }
+  var BLOCK = /^(DIV|P|LI|UL|OL|H[1-6]|BLOCKQUOTE)$/;
+  function read(f) {
+    let out = [], at = /* @__PURE__ */ new Map(), end = /* @__PURE__ */ new Map(), walk2 = (node, fl, sty) => {
+      for (let n of node.childNodes) {
+        if (n.nodeType === 3) {
+          at.set(n, out.length);
+          let v = n.nodeValue ?? "";
+          for (let k = 0; k < v.length; k++) out.push({ c: v[k], f: fl, s: sty });
+        } else if (n.nodeType === 1) {
+          let el2 = n, t = el2.tagName, last = out[out.length - 1];
+          if (BLOCK.test(t) && out.length && !(last && "br" in last) && out.push({ br: 1 }), at.set(n, out.length), t === "BR") out.push({ br: 1 });
+          else if (t === "IMG") out.push({ img: { src: el2.getAttribute("src") ?? "", from: el2.dataset.from } });
+          else {
+            let f2 = fl, s2 = sty, st = el2.style;
+            (t === "B" || t === "STRONG" || +st?.fontWeight >= 600 || st?.fontWeight === "bold") && (f2 |= BIT.b), (t === "I" || t === "EM" || st?.fontStyle === "italic") && (f2 |= BIT.i), (t === "U" || /underline/.test(st?.textDecorationLine || st?.textDecoration || "")) && (f2 |= BIT.ul), t === "MARK" && (f2 |= BIT.hl), (st?.color || st?.backgroundColor) && (s2 = [st.color && `color:${st.color}`, st.backgroundColor && `background-color:${st.backgroundColor}`].filter(Boolean).join(";")), walk2(el2, f2, s2);
+          }
+        }
+        end.set(n, out.length);
+      }
+    };
+    return walk2(f, 0, ""), { out, at, end };
+  }
+  function index(f, m, node, off2) {
+    if (node.nodeType === 3) return (m.at.get(node) ?? 0) + off2;
+    let kids = node.childNodes;
+    return off2 < kids.length ? m.at.get(kids[off2]) ?? 0 : node === f ? m.out.length : m.end.get(node) ?? m.out.length;
+  }
+  function selOf(f) {
+    let s = getSelection();
+    if (!s || !s.rangeCount) return null;
+    let r = s.getRangeAt(0);
+    if (!f.contains(r.startContainer) || !f.contains(r.endContainer)) return null;
+    let m = read(f);
+    return [index(f, m, r.startContainer, r.startOffset), index(f, m, r.endContainer, r.endOffset)];
+  }
+  function point(f, i) {
+    let m = read(f);
+    for (let [n, a] of m.at) if (n.nodeType === 3 && i >= a && i <= a + (n.nodeValue ?? "").length) return [n, i - a];
+    for (let [n, a] of m.at) if (n.nodeType === 1 && a === i && /^(BR|IMG)$/.test(n.tagName)) return [n.parentNode, [...n.parentNode.childNodes].indexOf(n)];
+    return [f, f.childNodes.length];
+  }
+  function select(f, a, b = a) {
+    let r = document.createRange();
+    try {
+      r.setStart(...point(f, a)), r.setEnd(...point(f, b));
+    } catch {
+      return;
+    }
+    let s = getSelection();
+    s?.removeAllRanges(), s?.addRange(r);
+  }
+  var KEEP = /* @__PURE__ */ new Set(["B", "STRONG", "I", "EM", "U", "MARK", "BR", "DIV", "P", "SPAN", "IMG", "UL", "OL", "LI", "SUB", "SUP", "FONT"]), DROP = /* @__PURE__ */ new Set(["SCRIPT", "STYLE", "META", "LINK", "TITLE", "IFRAME", "OBJECT", "SVG", "NOSCRIPT", "TEMPLATE"]);
+  function clean(html) {
+    let t = document.createElement("template");
+    return t.innerHTML = html, function walk2(node) {
+      for (let n of [...node.childNodes]) {
+        if (n.nodeType === 8 && n.remove(), n.nodeType !== 1) continue;
+        let el2 = n;
+        if (DROP.has(el2.tagName)) {
+          el2.remove();
+          continue;
+        }
+        if (walk2(el2), !KEEP.has(el2.tagName)) {
+          el2.replaceWith(...el2.childNodes);
+          continue;
+        }
+        let src = el2.tagName === "IMG" ? (el2.getAttribute("src") || "").replace(location.origin + "/api/plus/media/", "/api/plus/media/") : "", color = el2.style?.color, bg = el2.style?.backgroundColor, fw = el2.style?.fontWeight, ul = /underline/.test(el2.style?.textDecorationLine || el2.style?.textDecoration || "");
+        for (let a of [...el2.attributes]) el2.removeAttribute(a.name);
+        el2.tagName === "IMG" && (/^(https:|data:image\/|blob:|\/api\/plus\/media\/)/.test(src) ? el2.setAttribute("src", src) : el2.remove()), color && (el2.style.color = color), bg && (el2.style.backgroundColor = bg), fw && +fw >= 600 && (el2.style.fontWeight = "bold"), ul && el2.tagName === "SPAN" && (el2.style.textDecoration = "underline");
+      }
+    }(t.content), t.innerHTML;
+  }
+  var ROOTS = [], FMT = null, TOUCH2 = () => matchMedia("(pointer:coarse)").matches;
+  function fieldOf(n) {
+    let el2 = n && (n.nodeType === 1 ? n : n.parentElement);
+    for (let R2 of ROOTS) {
+      let f = el2?.closest(R2.sel);
+      if (f && R2.root.contains(f) && R2.root.isConnected) return { f, ed: R2.ed };
+    }
+    return null;
+  }
+  function placeFmt() {
+    if (!FMT) return;
+    let s = getSelection(), r = s && s.rangeCount ? s.getRangeAt(0) : null, hit = r && !s.isCollapsed ? fieldOf(r.commonAncestorContainer) : null;
+    if (!TOUCH2() || !hit || !hit.f.offsetParent) return FMT.hidden = !0, void (FMT._f = null);
+    FMT._f = hit;
+    let home = hit.f.closest("dialog") ?? document.body;
+    FMT.parentElement !== home && home.appendChild(FMT), FMT.hidden = !1;
+    let rect = r.getBoundingClientRect(), vv = visualViewport, top = vv ? vv.offsetTop : 0, h = vv ? vv.height : innerHeight, w = FMT.offsetWidth, bh = FMT.offsetHeight, y = rect.bottom + 14;
+    y + bh > top + h - 8 && (y = rect.top - bh - 14), FMT.style.left = Math.max(8, Math.min(innerWidth - w - 8, rect.left + rect.width / 2 - w / 2)) + "px", FMT.style.top = Math.max(top + 8, y) + "px";
+  }
+  function fmtBar() {
+    FMT || (FMT = document.createElement("div"), FMT.className = "rv-fmt", FMT.hidden = !0, FMT.innerHTML = '<button type="button" data-k="b" aria-label="Bold"><b>B</b></button><button type="button" data-k="i" aria-label="Italic"><i>I</i></button><button type="button" data-k="ul" aria-label="Underline"><u>U</u></button><button type="button" data-k="hl" aria-label="Highlight"><span>H</span></button>', document.body.appendChild(FMT), FMT.addEventListener("pointerdown", (e) => e.preventDefault()), FMT.addEventListener("mousedown", (e) => e.preventDefault()), FMT.addEventListener("click", (e) => {
+      let b = e.target.closest("[data-k]"), hit = FMT._f;
+      !b || !hit || (hit.ed.toggle(hit.f, b.dataset.k), sfx("tap"), placeFmt());
+    }), document.addEventListener("selectionchange", () => requestAnimationFrame(placeFmt)), visualViewport?.addEventListener("resize", () => FMT.hidden || placeFmt()), visualViewport?.addEventListener("scroll", () => FMT.hidden || placeFmt()), typeof BUS < "u" && BUS.on("view", () => FMT && (FMT.hidden = !0)));
+  }
+  function attach(root, o) {
+    let fieldIn = (t) => {
+      let f = t?.closest?.(o.field);
+      return f && root.contains(f) ? f : null;
+    }, changed = (f) => o.changed?.(f), H = /* @__PURE__ */ new WeakMap(), hist = (f) => H.get(f) ?? (H.set(f, { u: [], r: [], t: 0, k: "" }), H.get(f));
+    function snap(f, kind) {
+      if (!f) return;
+      let h = hist(f), now = Date.now();
+      if (kind === "type" && h.k === "type" && now - h.t < 1e3) return void (h.t = now);
+      h.u.push({ html: f.innerHTML, sel: selOf(f) }), h.u.length > 200 && h.u.shift(), h.r = [], h.k = kind, h.t = now;
+    }
+    function step(f, from, to) {
+      let h = hist(f), x = h[from].pop();
+      x && (h[to].push({ html: f.innerHTML, sel: selOf(f) }), h.k = "", f.innerHTML = x.html, x.sel && select(f, ...x.sel), changed(f));
+    }
+    let pend = null, ed = {
+      snap,
+      undo: (f) => step(f, "u", "r"),
+      redo: (f) => step(f, "r", "u"),
+      forget: (f) => H.delete(f),
+      reset: () => pend = null,
+      toggle(f, kind) {
+        let bit = BIT[kind], sel = selOf(f);
+        if (!sel) return;
+        let [a, b] = sel;
+        a > b && ([a, b] = [b, a]);
+        let { out } = read(f);
+        if (a === b) {
+          let before = out[a - 1], had = isChar(before) ? before.f & bit : 0, p = pend && pend.f === f && pend.at === a ? pend : { f, at: a, on: 0, off: 0 };
+          p.on & bit ? p.on &= ~bit : p.off & bit ? p.off &= ~bit : had ? p.off |= bit : p.on |= bit, pend = p.on || p.off ? p : null;
+          return;
+        }
+        snap(f, "format"), f.innerHTML = write(toggleRange(out, a, b, kind)), select(f, a, b), changed(f);
+      }
+    };
+    function typed(f) {
+      let p = pend;
+      if (!p || p.f !== f) return;
+      let sel = selOf(f);
+      if (!sel || sel[0] !== sel[1] || sel[0] <= p.at) return;
+      let { out } = read(f), c = sel[0];
+      for (let k = p.at; k < c; k++) {
+        let q = out[k];
+        isChar(q) && (q.f = (q.f | p.on) & ~p.off);
+      }
+      f.innerHTML = write(out), select(f, c), pend = null;
+    }
+    root.addEventListener("beforeinput", (e) => {
+      let f = fieldIn(e.target);
+      if (!f) return;
+      let t = e.inputType || "";
+      if (t === "historyUndo" || t === "historyRedo")
+        return e.preventDefault(), t === "historyUndo" ? ed.undo(f) : ed.redo(f);
+      let fm = { formatBold: "b", formatItalic: "i", formatUnderline: "ul" }[t];
+      if (fm || t.startsWith("format")) {
+        e.preventDefault(), fm && ed.toggle(f, fm);
+        return;
+      }
+      t !== "insertCompositionText" && snap(f, /^(insertText|deleteContent(Backward|Forward))$/.test(t) ? "type" : "edit");
+    }), root.addEventListener("compositionstart", (e) => snap(fieldIn(e.target), "type")), root.addEventListener("compositionend", (e) => {
+      let f = fieldIn(e.target);
+      f && setTimeout(() => (typed(f), changed(f)));
+    }), root.addEventListener("input", (e) => {
+      let f = fieldIn(e.target);
+      f && !e.isComposing && pend && typed(f);
+    }), root.addEventListener("pointerdown", () => pend = null), root.addEventListener("focusout", () => pend = null), root.addEventListener("keydown", (e) => {
+      let f = fieldIn(e.target);
+      if (!f) return;
+      let fmt = [["cd.bold", "b"], ["cd.italic", "i"], ["cd.underline", "ul"], ["cd.mark", "hl"]].find(([id]) => KEYS.is(e, id));
+      if (fmt) {
+        e.preventDefault(), e.stopPropagation(), ed.toggle(f, fmt[1]);
+        return;
+      }
+      if (KEYS.is(e, "undo") || KEYS.is(e, "redo")) {
+        e.preventDefault(), e.stopPropagation(), KEYS.is(e, "redo") ? ed.redo(f) : ed.undo(f);
+        return;
+      }
+      /^(Arrow|Home|End|Page)/.test(e.key) && (pend = null);
+    }), root.addEventListener("paste", (e) => {
+      let f = fieldIn(e.target);
+      if (!f) return;
+      e.preventDefault(), snap(f, "edit");
+      let files = [...e.clipboardData?.files ?? []];
+      if (files.length && o.files?.(files, f)) return changed(f);
+      let html = e.clipboardData?.getData("text/html");
+      html ? document.execCommand("insertHTML", !1, clean(html)) : document.execCommand("insertText", !1, e.clipboardData?.getData("text/plain") || ""), o.pasted?.(f), changed(f);
+    }), root.addEventListener("drop", (e) => {
+      let f = fieldIn(e.target);
+      if (!f) return;
+      let files = [...e.dataTransfer?.files ?? []];
+      if (snap(f, "edit"), !files.length) {
+        setTimeout(() => {
+          f.innerHTML = clean(f.innerHTML), o.pasted?.(f), changed(f);
+        });
+        return;
+      }
+      e.preventDefault();
+      let pos = document.caretRangeFromPoint?.(e.clientX, e.clientY);
+      f.focus(), pos && (getSelection()?.removeAllRanges(), getSelection()?.addRange(pos)), o.files?.(files, f) && changed(f);
+    }), fmtBar(), ROOTS.push({ root, sel: o.field, ed });
+    for (let i = ROOTS.length - 1; i >= 0; i--) !ROOTS[i].root.isConnected && ROOTS[i].root !== root && ROOTS.splice(i, 1);
+    return ed;
+  }
+  var EDITOR = { attach, clean, write, toggleRange, BIT };
+
+  // site/src/cbp/kit/known.ts
+  var HAN4 = /[㐀-䶿一-鿿豈-﫿]/, cache = /* @__PURE__ */ new WeakMap();
+  function of(kit) {
+    if (!kit) return { words: /* @__PURE__ */ new Set(), chars: /* @__PURE__ */ new Set() };
+    let s = cache.get(kit);
+    return s || (s = { words: new Set(String(kit.known ?? "").split(/\s+/).filter(Boolean)), chars: new Set([...String(kit.chars ?? "")].filter((c) => HAN4.test(c))) }, cache.set(kit, s)), s;
+  }
+  function needsPinyin(word2, s) {
+    let w = String(word2 ?? "").trim();
+    if (!HAN4.test(w) || s.words.has(w)) return !1;
+    let han2 = [...w].filter((c) => HAN4.test(c));
+    return !(han2.length === 1 && (s.chars.has(han2[0]) || s.words.has(han2[0])));
+  }
+  var KNOWN = { of, needsPinyin };
+
   // site/src/cbp/kit/main.ts
-  Object.assign(window, { SOUND, HOLD, RUBY, KEYS, SETTINGS });
+  Object.assign(window, { EDITOR, KNOWN });
+  Object.assign(window, { SOUND, HOLD, RUBY, KEYS: KEYS2, SETTINGS });
   Object.assign(window, { HABIT: habit_exports });
   BUS.on("leave", () => SOUND.stop());
 })();
