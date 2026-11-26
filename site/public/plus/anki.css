@@ -95,6 +95,7 @@
 .ed-end{display:flex;justify-content:flex-end;padding-top:var(--s2)}
 .ed-del{border:0;background:none;color:var(--ink-3);font-size:var(--fs-s);padding:8px 12px;border-radius:999px;cursor:pointer;transition:color .15s,background .15s}
 @media (hover:hover){.ed-del:hover{color:var(--red);background:var(--red-wash)}}
+.rx-dlg:focus{outline:none}
 .rx-dlg{border:0;border-radius:var(--r-l);padding:0;width:min(600px,calc(100vw - 32px));max-height:calc(100dvh - 48px);background:var(--bg);color:var(--ink);box-shadow:var(--sh-dlg)}
 .rx-dlg[open]{animation:rx-dlg .22s var(--ease)}
 @keyframes rx-dlg{from{opacity:0;transform:translateY(8px) scale(.98)}}

@@ -51,7 +51,7 @@
   link('stylesheet', '/plus/review.css?v=3');
   if (tutor) link('stylesheet', '/plus/tutor.css?v=7');
   if (reviews) {
-    link('stylesheet', '/plus/anki.css?v=10');
+    link('stylesheet', '/plus/anki.css?v=11');
     link('manifest', '/plus/app.webmanifest');
   }
   document.documentElement.classList.remove('locked');
