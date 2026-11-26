@@ -87,6 +87,11 @@ html.rv-dragging,html.rv-dragging *{cursor:grabbing!important;user-select:none;-
 @media (prefers-reduced-motion:reduce){.rv-tile{animation:none}.rv-tile.wait,.rv-mt:disabled{animation:none;opacity:.7}}
 @media (max-width:640px){.rv{padding:16px 16px 0}.rv-strip{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
+/* the Cards view fades with opacity only: the board's view animation leaves a transform on it, and that would pin the
+   fixed bar below (Add) to the view instead of the screen */
+#view-cards.view{animation-name:rv-view}
+@keyframes rv-view{from{opacity:0}}
+
 /* ---------- a narrow screen: the card or the card he adds, one at a time. One calm bar at the foot: the Card · Add switch
    on the left, Add beside it (review.js pane) ---------- */
 .rv-seg{display:none}
@@ -96,15 +101,16 @@ html.rv-dragging,html.rv-dragging *{cursor:grabbing!important;user-select:none;-
   .rv-seg:not([hidden]){display:grid}
   .rv-seg{--seg-w:min(200px,42vw);grid-template-columns:1fr 1fr;position:fixed;z-index:12;left:16px;bottom:calc(10px + env(safe-area-inset-bottom,0px));
     width:var(--seg-w);padding:4px;border-radius:999px;background:var(--wash)}
-  /* the bar itself: the page's own color, a hairline on top (no transform or filter on .rv-seg, so this sits on the screen) */
-  .rv-seg::before{content:"";position:fixed;z-index:-1;left:0;right:0;bottom:0;height:calc(64px + env(safe-area-inset-bottom,0px));background:var(--bg);box-shadow:0 -1px 0 var(--hair)}
+  /* the bar itself: the page's own color, a hairline on top; on the Add side the Add bar draws it (under the switch) */
+  .rv-seg[data-pane=card]::before{content:"";position:fixed;z-index:-1;left:0;right:0;bottom:0;height:calc(64px + env(safe-area-inset-bottom,0px));background:var(--bg);box-shadow:0 -1px 0 var(--hair)}
   .rv-seg button{position:relative;z-index:1;border:0;background:none;font:500 var(--fs-s)/1 var(--latin);padding:12px 0;border-radius:999px;color:var(--ink-3);cursor:pointer;
     -webkit-tap-highlight-color:transparent;transition:color .2s ease}
   .rv-seg button[aria-selected=true]{color:var(--ink)}
   .rv-seg i{position:absolute;top:4px;bottom:4px;left:4px;width:calc(50% - 4px);border-radius:999px;background:var(--surface);
     box-shadow:0 1px 3px rgba(21,23,28,.14),0 0 0 .5px var(--hair);transition:translate .34s var(--rv-ease)}
   .rv-seg[data-pane=add] i{translate:100% 0}
-  .rv-bar{position:fixed;z-index:13;left:calc(16px + min(200px,42vw) + 10px);right:16px;bottom:calc(10px + env(safe-area-inset-bottom,0px));margin:0;padding:0;background:none;border-radius:0}
+  .rv-bar{position:fixed;z-index:11;left:0;right:0;bottom:0;margin:0;padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px)) calc(16px + min(200px,42vw) + 10px);
+    background:var(--bg);box-shadow:0 -1px 0 var(--hair);border-radius:0}
   .rv-add{padding:14px 18px}
   .rv{padding-bottom:0}
   body:has(> .rv-seg:not([hidden])) .toast{bottom:calc(76px + env(safe-area-inset-bottom,0px))}
