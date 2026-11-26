@@ -275,7 +275,11 @@ function go(v: View) {
   try {
     sessionStorage.setItem('cbp-rx', v);
   } catch {}
+  // where he is, for Back and Forward (kit/go.ts)
+  BUS.emit('place');
 }
+// Back and Forward come back to Review, Browse or Card designs through this (kit/go.ts)
+Object.assign(window, { RX_go: (v: View) => v !== view && go(v) });
 function paint() {
   if (!ready) return;
   if (view === 'review') showReview();

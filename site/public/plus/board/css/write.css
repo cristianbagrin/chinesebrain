@@ -37,7 +37,10 @@ u.d{text-decoration:underline 2px var(--red);text-underline-offset:5px;text-deco
 /* his writing: the pen, a touch bigger and thicker, in ink, at the Chinese line height (no ruling to sit on) */
 #write .sheet{min-height:calc(var(--paper-row) * 6);padding:0;background:none;font-family:var(--pen);font-size:var(--wr-fs);line-height:var(--paper-row);
   letter-spacing:.01em;color:var(--paper-ink);caret-color:var(--paper-ink);-webkit-text-stroke:var(--pen-stroke) currentColor}
-#write .sheet:empty::before{color:var(--ink-4);-webkit-text-stroke:0}
+/* one block per paragraph (write.js): a new paragraph sits further apart than a wrapped line, as on the Essays page */
+#write .sheet{position:relative}
+#write .sheet>div+div{margin-top:var(--para-zh)}
+#write .sheet:empty::before,#write .sheet.blank::before{content:attr(data-ph);position:absolute;left:0;top:0;color:var(--ink-4);-webkit-text-stroke:0;pointer-events:none}
 /* a phone: the sheet is as tall as what he wrote, three lines at least (no tall empty box) */
 @media (max-width:600px){#write .sheet{min-height:calc(var(--paper-row) * 3)}}
 

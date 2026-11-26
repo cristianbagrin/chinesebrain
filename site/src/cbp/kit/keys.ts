@@ -23,6 +23,9 @@ export const DEFS: Def[] = [
     ['go.cards', 'Cards', 'c'],
     ['go.reviews', 'Reviews', 'r'],
     ['go.browse', 'Browse', 'b'],
+    // the pages he was on, like a browser's back and forward (go.ts)
+    ['back', 'Back', 'mod+['],
+    ['forward', 'Forward', 'mod+]'],
     // Tutor: the pane from the right, open or away (tutor/main.ts)
     ['tutor', 'Tutor', 'a'],
   ]),

@@ -869,7 +869,9 @@ img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!imp
       sessionStorage.setItem("cbp-rx", v);
     } catch {
     }
+    BUS.emit("place");
   }
+  Object.assign(window, { RX_go: (v) => v !== view && go(v) });
   function paint() {
     ready && (view === "review" ? showReview() : view === "browse" ? showBrowse() : showDesigns());
   }

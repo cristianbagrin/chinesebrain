@@ -109,7 +109,7 @@ KEYS.load(LAB.acct.keys ?? {}, (keys) => {
 
 // ---------- the window ----------
 /* A window in the middle of the screen (a sheet from the bottom on a phone): the sections on the left (a strip across
-   the top on a phone), one section at a time on the right, each a rounded group of one-line rows. A native modal
+   the top on a phone), all of them on one page on the right that scrolls, each a rounded group of one-line rows. A native modal
    <dialog>: the page behind is inert, Tab stays inside, Escape or a click outside closes it. The pattern for every
    dialog in Plus: `dialog.st` and its tokens in kit.css. */
 type Sec = { id: string; label: string; icon: string };
@@ -135,6 +135,7 @@ btn.innerHTML =
   '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>';
 
 let sec = 'Everyday', listening = '';
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)');
 const isSwitch = (d: LabDef) => d.options.length === 2 && d.options[0][0] === 'on' && d.options[1][0] === 'off';
 const sw = (attr: string, on: boolean, label: string) => `<div class="st-row"><span class="st-l">${esc(label)}</span><button type="button" role="switch" class="st-tg" aria-checked="${on}" aria-label="${esc(label)}" ${attr}><i></i></button></div>`;
 function row(d: LabDef) {
@@ -178,37 +179,84 @@ function keysHTML() {
 }
 function draw() {
   const a = document.activeElement as HTMLElement | null;
-  const keep = a && dlg.contains(a) ? a.dataset.x ?? a.dataset.key ?? a.dataset.sec ?? a.dataset.xs ?? (a.dataset.sound != null ? 'sound' : a.id) : '';
+  const keep = a && dlg.contains(a) ? a.dataset.x ?? a.dataset.key ?? a.dataset.sec ?? a.dataset.xs ?? a.dataset.reset ?? (a.dataset.sound != null ? 'sound' : a.id) : '';
   const body = dlg.querySelector('.st-body');
   const top = body?.scrollTop ?? 0;
   const by = rowsBy();
   const list = sections(by);
   if (!list.some((s) => s.id === sec)) sec = list[0].id;
-  const cur = list.find((s) => s.id === sec)!;
   dlg.innerHTML = `<div class="st-grab" aria-hidden="true"></div>
     <nav class="st-side" aria-label="Sections"><h2 id="st-title">Settings</h2><div class="st-toc">${list
       .map((s) => `<button type="button" class="st-ti" data-sec="${esc(s.id)}" aria-current="${s.id === sec}">${glyph(s.icon)}<span>${esc(s.label)}</span></button>`)
       .join('')}</div></nav>
     <div class="st-main">
-      <div class="st-head"><h3>${esc(cur.label)}</h3>${changed(sec) ? '<button type="button" class="st-reset" id="st-reset">Reset</button>' : ''}<button type="button" class="st-x" id="st-close" aria-label="Close">${X}</button></div>
-      <div class="st-body">${sec === 'Shortcuts' ? keysHTML() : `<div class="st-grp">${by[sec].join('')}</div>`}</div>
+      <div class="st-head"><h2 class="st-now" aria-hidden="true">Settings</h2><button type="button" class="st-x" id="st-close" aria-label="Close">${X}</button></div>
+      <div class="st-body">${list
+        .map(
+          (s) =>
+            `<section class="st-sec" data-s="${esc(s.id)}" aria-labelledby="st-s-${esc(s.id)}"><div class="st-sh"><h3 id="st-s-${esc(s.id)}">${esc(s.label)}</h3>${
+              changed(s.id) ? `<button type="button" class="st-reset" data-reset="${esc(s.id)}">Reset</button>` : ''
+            }</div>${s.id === 'Shortcuts' ? keysHTML() : `<div class="st-grp">${by[s.id].join('')}</div>`}</section>`,
+        )
+        .join('')}</div>
     </div>`;
   for (const r of Object.values(LAB.rows)) {
     const el = dlg.querySelector<HTMLElement>(`[data-row="${r.id}"]`);
     if (el) r.bind(el);
   }
-  const nb = dlg.querySelector('.st-body')!;
+  const nb = dlg.querySelector<HTMLElement>('.st-body')!;
   nb.scrollTop = top;
+  nb.addEventListener('scroll', spy, { passive: true });
   if (keep) {
-    const q = `[data-x="${keep}"][aria-checked="true"],[data-x="${keep}"],[data-key="${keep}"],[data-sec="${keep}"],[data-xs="${keep}"]`;
+    const q = `[data-x="${keep}"][aria-checked="true"],[data-x="${keep}"],[data-key="${keep}"],[data-sec="${keep}"],[data-xs="${keep}"],[data-reset="${keep}"]`;
     (dlg.querySelector<HTMLElement>(q) ?? (keep === 'sound' ? dlg.querySelector<HTMLElement>('[data-sound]') : keep ? dlg.querySelector<HTMLElement>('#' + CSS.escape(keep)) : null) ?? dlg.querySelector<HTMLElement>('.st-x'))?.focus({ preventScroll: true });
   }
+  mark();
+}
+/* One page, every section on it: the list on the left jumps to a section, and the section in view is the one lit
+   (the line 1/4 down the page decides). A jump holds the light on its section until the scroll stops. */
+let jumping = 0;
+function mark() {
+  dlg.querySelectorAll<HTMLElement>('.st-ti').forEach((b) => b.setAttribute('aria-current', String(b.dataset.sec === sec)));
   // the phone's strip of sections keeps the current one in view
-  dlg.querySelector('.st-ti[aria-current="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  const on = dlg.querySelector<HTMLElement>('.st-ti[aria-current="true"]');
+  const toc = on?.parentElement;
+  if (on && toc && toc.scrollWidth > toc.clientWidth) toc.scrollTo({ left: on.offsetLeft - (toc.clientWidth - on.offsetWidth) / 2, behavior: REDUCED.matches ? 'auto' : 'smooth' });
+}
+function spy() {
+  if (jumping) return;
+  const b = dlg.querySelector<HTMLElement>('.st-body');
+  if (!b) return;
+  const all = [...b.querySelectorAll<HTMLElement>('.st-sec')];
+  const line = b.getBoundingClientRect().top + b.clientHeight / 4;
+  let cur = all[0];
+  for (const s of all) if (s.getBoundingClientRect().top <= line) cur = s;
+  // at the very end, the last one (a short last section never reaches the line)
+  if (b.scrollTop > 0 && b.scrollTop + b.clientHeight >= b.scrollHeight - 2) cur = all[all.length - 1];
+  if (cur && cur.dataset.s !== sec) {
+    sec = cur.dataset.s!;
+    mark();
+  }
+}
+function jump(to: string, smooth: boolean) {
+  const b = dlg.querySelector<HTMLElement>('.st-body');
+  const s = b?.querySelector<HTMLElement>(`.st-sec[data-s="${CSS.escape(to)}"]`);
+  if (!b || !s) return;
+  sec = to;
+  mark();
+  clearTimeout(jumping);
+  const y = s === b.firstElementChild ? 0 : Math.round(b.scrollTop + s.getBoundingClientRect().top - b.getBoundingClientRect().top - parseFloat(getComputedStyle(b).paddingTop));
+  if (!smooth || REDUCED.matches) {
+    jumping = 0;
+    b.scrollTop = y;
+    return;
+  }
+  jumping = window.setTimeout(() => (jumping = 0), 700);
+  b.addEventListener('scrollend', () => (clearTimeout(jumping), (jumping = 0)), { once: true });
+  b.scrollTo({ top: y, behavior: 'smooth' });
 }
 
 // opening and closing: a short fade and lift in the middle; on a phone the sheet slides up (and follows his finger down)
-const REDUCED = matchMedia('(prefers-reduced-motion: reduce)');
 let closing = 0;
 function show(to?: string) {
   listening = '';
@@ -217,12 +265,14 @@ function show(to?: string) {
   clearTimeout(closing);
   dlg.classList.remove('out');
   dlg.style.transform = '';
+  const was = dlg.open;
   draw();
-  if (!dlg.open) {
+  if (!was) {
     dlg.showModal();
-    dlg.querySelector('.st-body')!.scrollTop = 0;
     requestAnimationFrame(() => dlg.classList.add('on'));
   }
+  // to the section asked for (or the one he was on last time)
+  if (to || !was) jump(sec, false);
   btn.setAttribute('aria-expanded', 'true');
   (dlg.querySelector<HTMLElement>('.st-ti[aria-current="true"]') ?? dlg.querySelector<HTMLElement>('button'))?.focus({ preventScroll: true });
 }
@@ -270,12 +320,8 @@ dlg.addEventListener('click', (e) => {
   }
   const s = t.closest<HTMLElement>('[data-sec]');
   if (s) {
-    if (s.dataset.sec === sec) return;
     sfx('tap');
-    sec = s.dataset.sec!;
-    listening = '';
-    dlg.querySelector('.st-body')!.scrollTop = 0;
-    return draw();
+    return jump(s.dataset.sec!, true);
   }
   const k = t.closest<HTMLElement>('[data-key]');
   if (k) {
@@ -284,9 +330,11 @@ dlg.addEventListener('click', (e) => {
     return draw();
   }
   if (t.closest('#st-close')) return sfx('tap'), hide();
-  if (t.closest('#st-reset')) {
-    if (sec === 'Shortcuts') KEYS.reset();
-    else for (const id of LAB.order) if (LAB.defs[id].group === sec) LAB.set(id, LAB.defs[id].def);
+  const rs = t.closest<HTMLElement>('[data-reset]');
+  if (rs) {
+    const g = rs.dataset.reset!;
+    if (g === 'Shortcuts') KEYS.reset();
+    else for (const id of LAB.order) if (LAB.defs[id].group === g) LAB.set(id, LAB.defs[id].def);
     sfx('swish');
     return draw();
   }
@@ -336,10 +384,9 @@ document.addEventListener('keydown', (e) => {
     const all = [...dlg.querySelectorAll<HTMLElement>('.st-ti')];
     const i = all.indexOf(ti as HTMLElement) + (/Up|Left/.test(e.key) ? -1 : 1);
     const n = all[(i + all.length) % all.length];
-    sec = n.dataset.sec!;
     sfx('tap');
-    draw();
-    dlg.querySelector<HTMLElement>(`[data-sec="${CSS.escape(sec)}"]`)?.focus();
+    jump(n.dataset.sec!, true);
+    n.focus();
   }
 });
 BUS.on('lab', () => dlg.open && draw());
