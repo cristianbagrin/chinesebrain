@@ -623,10 +623,13 @@
   var habit_exports = {};
   __export(habit_exports, {
     LOW_SENTENCES: () => LOW_SENTENCES,
+    MILESTONES: () => MILESTONES,
     addDays: () => addDays,
     blank: () => blank,
     dayOf: () => dayOf,
+    goal: () => goal,
     han: () => han,
+    hold: () => hold,
     left: () => left,
     merge: () => merge,
     met: () => met,
@@ -635,7 +638,12 @@
     sentences: () => sentences,
     walk: () => walk
   });
-  var LOW_SENTENCES = 3, HAN3 = /[㐀-鿿豈-﫿]/g, han = (t) => (String(t ?? "").match(HAN3) ?? []).length, sentences = (t) => String(t ?? "").split(/[。！？!?；;\n]+/).filter((s) => han(s) > 0).length, blank = () => ({ rv: 0, cleared: !0, chars: 0, sent: 0, cards: 0, test: !1 }), active = (d) => d.rv > 0 || d.chars > 0 || d.cards > 0 || d.test, met = (d, low) => d.cleared && (low ? d.sent >= 3 : d.chars > 0), P = (s) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)), K = (ms) => new Date(ms).toISOString().slice(0, 10), addDays = (s, n) => K(P(s) + n * 864e5), monday = (s) => addDays(s, -((new Date(P(s)).getUTCDay() + 6) % 7)), dayOf = (ms, tzMin = 480, rollover = 4) => K(ms + tzMin * 6e4 - rollover * 36e5);
+  var LOW_SENTENCES = 3, HAN3 = /[㐀-鿿豈-﫿]/g, han = (t) => (String(t ?? "").match(HAN3) ?? []).length, sentences = (t) => String(t ?? "").split(/[。！？!?；;\n]+/).filter((s) => han(s) > 0).length, blank = () => ({ rv: 0, cleared: !0, chars: 0, sent: 0, cards: 0, test: !1 }), active = (d) => d.rv > 0 || d.chars > 0 || d.cards > 0 || d.test, met = (d, low) => d.cleared && (low ? d.sent >= 3 : d.chars > 0), hold = (d, writing, counted) => writing && !counted ? { ...d, chars: 0, sent: 0 } : d, MILESTONES = [7, 14, 21, 30, 50, 75, 100, 150, 200, 250, 300, 365];
+  function goal(streak, todayDone) {
+    let need = Math.max(1, streak + (todayDone ? 0 : 1));
+    return MILESTONES.find((m) => m >= need) ?? Math.ceil(need / 100) * 100;
+  }
+  var P = (s) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)), K = (ms) => new Date(ms).toISOString().slice(0, 10), addDays = (s, n) => K(P(s) + n * 864e5), monday = (s) => addDays(s, -((new Date(P(s)).getUTCDay() + 6) % 7)), dayOf = (ms, tzMin = 480, rollover = 4) => K(ms + tzMin * 6e4 - rollover * 36e5);
   function walk(days, today) {
     let out = {}, start = Object.keys(days).filter((k) => k <= today && days[k] && days[k].chars > 0).sort()[0];
     if (!start) return { days: out, streak: 0, start: null, low: !1 };

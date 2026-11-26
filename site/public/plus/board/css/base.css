@@ -165,3 +165,12 @@ html.opt-on .opt:not(.kept){animation:opt-in .14s var(--ease) both}
   .toc .l{display:none}.toc .s{display:inline}.toc{margin-right:0}
 }
 @media (max-width:440px){.toc>.s:nth-child(2){display:none}}
+
+/* Today (wave 4): the bar. The glass let the essay papers' long shadows show through under it, which read as a shadow
+   over the left half of the page; the bar is solid now, its hairline the only edge, full width. The tab dots get room
+   so they never touch the next tab's name. On a phone the countdown reads "TOCFL 16d", whole. */
+.appbar{background:var(--bg);-webkit-backdrop-filter:none;backdrop-filter:none}
+.seg button:has(>.dot:not([hidden])){margin-right:calc(10px * var(--k))}
+.dot{right:-11px}
+@media (max-width:760px){.toc{font-size:var(--fs-s)}.toc>.s:nth-child(2){display:inline}.seg{padding-right:12px}}
+/* (end Today) */

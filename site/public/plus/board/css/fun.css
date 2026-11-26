@@ -10,8 +10,8 @@ html.cd-on .fun-fx{z-index:65}
 #companion .fun-cv,.fo-cv{position:absolute;left:0;top:0;display:block;pointer-events:none}
 /* the forest on Progress (FUN.forest(el), or an empty #pr-forest): a tree a month, the month under it */
 .fo{position:relative;padding-top:calc(190px * var(--k))}
-.fo-row{position:relative;height:calc(var(--fs-xs) * 1.4 + var(--s1));margin-top:var(--s1)}
-.fo-m{position:absolute;top:0;text-align:center;font-size:var(--fs-xs);color:var(--ink-4);padding-top:var(--s1);cursor:default;-webkit-tap-highlight-color:transparent}
+.fo-row{position:relative;height:calc(var(--fs-s) * 1.4 + var(--s1));margin-top:var(--s1)}
+.fo-m{position:absolute;top:0;text-align:center;font-size:var(--fs-s);color:var(--ink-3);padding-top:var(--s1);cursor:default;-webkit-tap-highlight-color:transparent}
 /* the month's note: plain text under its name while the pointer is on its tree (not a floating box over the trees) */
 .fo-note{position:absolute;left:50%;top:100%;display:grid;justify-items:center;gap:1px;padding-top:var(--s1);white-space:nowrap;
   font-size:var(--fs-s);line-height:1.35;color:var(--ink-2);opacity:0;transform:translate(-50%,-3px);transition:opacity .18s,transform .18s var(--ease);pointer-events:none}

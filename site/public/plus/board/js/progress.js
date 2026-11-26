@@ -8,7 +8,6 @@
    tree over each month; fun.js fills #pr-forest). Months only, never weeks. ---------- */
 const PR={hover:null,C:null,S:null,F:null,G:null,w:0,h:0,k:.92,px:0,py:0};
 document.getElementById('view-progress').innerHTML=`<div class="pr">
-  <section class="pr-alerts" id="pr-alerts" aria-label="Checks" hidden></section>
   <section class="pr-hero" aria-label="Words known">
     <p class="side-h">Words known</p>
     <div class="pr-head" id="pr-head" aria-live="polite"></div>
@@ -131,8 +130,8 @@ function PR_head(c){
     ?`<b>${p.delta>=0?'+':'−'}${HB_fmt(Math.abs(p.delta))}</b> in ${p.name}`:p.now?'known today':`at the start of ${MONTH[p.date.getMonth()+1>11?0:p.date.getMonth()+1]}`}${p.now&&p.delta!=null?'<span class="pr-sub2">so far</span>':''}</span>`;
 }
 
-/* ---------- the line: to scale in time and from zero. Each month's name sits under its own stretch (from the end of
-   the month before to its end, where its total is), with its new cards as a soft bar in the same stretch. Dotted where
+/* ---------- the line: to scale in time and from zero. Each month's name sits under the point that closes it (its
+   total at its end), with its new cards as a soft bar there (2026-11-26: it used to say the next month's name). Dotted where
    it's a forecast: to this month's end, past the exam, on to the next goal. ---------- */
 function PR_chart(){
   const el=document.getElementById('pr-chart'), D=STATE;
@@ -148,7 +147,7 @@ function PR_chart(){
   const x0=new Date(S[0].date.getFullYear(),S[0].date.getMonth(),1), nm=new Date(T.getFullYear(),T.getMonth()+2,0);
   const x1=examAll&&examAll.date>nm&&days(T,examAll.date)<=100?examAll.date:nm, exam=examAll&&examAll.date<=x1?examAll:null;
   const reach=!!(G&&G.eta&&G.eta<=x1);
-  const L=narrow?46:Math.round(58*k), R=narrow?18:Math.round(48*k), Tp=Math.round(34*k), B=Math.round(46*k);
+  const L=narrow?54:Math.round(62*k), R=narrow?18:Math.round(48*k), Tp=Math.round(34*k), B=Math.round(46*k);
   // time to scale
   const Wp=W-L-R, X=d=>L+Wp*((d-x0)/((x1-x0)||1));
   const GP=PR_goalPts(S,F,reach?G:null,x1);
@@ -165,10 +164,11 @@ function PR_chart(){
   if(F){
     const endD=x1, endV=Math.round((+D.total||0)+F.rate*days(T,endD));
     fc+=`<path d="M${f1(lx)} ${f1(ly)}L${f1(X(endD))} ${f1(Y(endV))}" class="pr-proj"/>`;
-    if(exam){const ex=X(exam.date);g+=`<line x1="${f1(ex)}" x2="${f1(ex)}" y1="${Tp-16}" y2="${H-B}" class="pr-exam"/><text x="${f1(ex)}" y="${Tp-22}" text-anchor="middle" class="pr-x pr-xe">TOCFL</text>`;}
+    if(exam){const ex=X(exam.date);g+=`<line x1="${f1(ex)}" x2="${f1(ex)}" y1="${Tp-16}" y2="${H-B}" class="pr-exam"/><text x="${f1(ex)}" y="${Tp-24}" text-anchor="middle" class="pr-x pr-xe">TOCFL</text>`;}
     [[ME,false],[exam,true]].forEach(([q,isEx])=>{if(!q)return;const x=X(q.date),y=Y(q.v);
       fc+=`<circle cx="${f1(x)}" cy="${f1(y)}" r="${f1(4.6*k)}" class="pr-end"/>`;
-      if(isEx||!exam||X(exam.date)-x>90*k) fc+=`<text x="${f1(x)}" y="${f1(y-14*k)}" text-anchor="middle" class="pr-fv${isEx?'':' sm'}">≈${HB_fmt(PR_r10(q.v))}</text>`;
+      if(isEx) fc+=`<text x="${f1(x-14*k)}" y="${f1(y-9*k)}" text-anchor="end" class="pr-fv">≈${HB_fmt(PR_r10(q.v))}</text>`;
+      else if(!exam||X(exam.date)-x>90*k) fc+=`<text x="${f1(x)}" y="${f1(y-14*k)}" text-anchor="middle" class="pr-fv sm">≈${HB_fmt(PR_r10(q.v))}</text>`;
       C.push({x,y,t:'fc',date:q.date,v:q.v,exam:isEx});});
   }
   // the goals: gold circles; filled where he passed one, hollow where his pace meets the next
@@ -190,7 +190,7 @@ function PR_chart(){
       if(m.n){const bw=Math.max(6*k,Math.min(26*k,w*.42)), bh=Math.max(3,m.n/mx*band);
         cb+=`<rect x="${f1(cx-bw/2)}" y="${f1(H-B-bh)}" width="${f1(bw)}" height="${f1(bh)}" rx="${f1(Math.min(4,bw/3))}" class="pr-cb${m.cur?' now':''}"/>`
           +(w>26*k?`<text x="${f1(cx)}" y="${f1(H-B-bh-6*k)}" text-anchor="middle" class="pr-cv">${HB_fmt(m.n)}</text>`:'');}
-      const nx=new Date(m.a.getFullYear(),m.a.getMonth()+1,1), t=MO[nx.getMonth()]+(nx.getMonth()===0&&nx.getFullYear()!==T.getFullYear()?' '+nx.getFullYear():''), tw=t.length*8.2*k;
+      const t=MO[m.a.getMonth()]+(m.a.getMonth()===0&&m.a.getFullYear()!==T.getFullYear()?' '+m.a.getFullYear():''), tw=t.length*9.4*k;
       if(w<tw*.9&&!m.cur) return;
       if(used.some(u=>cx-tw/2<u[1]+10&&cx+tw/2>u[0]-10)) return;
       used.push([cx-tw/2,cx+tw/2]);
@@ -282,20 +282,9 @@ function PR_note(){
   document.getElementById('pr-note').innerHTML=out.map(x=>`<span>${x}</span>`).join('');
 }
 
-// what the monthly job found out of step (board/data alerts: its checks, and a proposal for Parts 1–2 he decides on)
-function PR_alerts(){
-  const el=document.getElementById('pr-alerts'), A=STATE.alerts;
-  const key=A&&A.list&&A.list.length?'alerts:'+A.day:null;
-  el.hidden=!key||lsGet(key)==='seen';
-  if(el.hidden) return;
-  el.innerHTML=`<p class="side-h">Checks · ${fmtDate(A.day)}</p><ul>${A.list.map(x=>`<li${/^Proposal: /.test(x)?' class="pr-prop"':''}>${mix(x)}</li>`).join('')}</ul><button class="pr-x-btn" type="button" aria-label="Seen">×</button>`;
-  el.querySelector('button').onclick=()=>{lsSet(key,'seen');el.hidden=true;};
-}
-
 function PR_render(){
   if(!STATE) return;
   if(VIEW!=='progress') return;
-  PR_alerts();
   PR_chart();
   PR_head(null);
   PR_note();

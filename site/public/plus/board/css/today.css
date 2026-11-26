@@ -1,26 +1,29 @@
 /* Today: the layout, Next up, the habit heatmap. Owner: C */
 
-/* ---------- layout ----------
-   Phone and narrow: one column in reading order (the test when open, the essay, Next up, To improve, the year, the forest).
-   Middle (960–1179): the test and the essay on the left; Next up, the forest, the year and To improve on the right.
-   Wide (≥1180, the 1280–1440 laptop): three columns. Left: the test, then the essay. Then Next up, and the forest beside
-   it, as tall as the list (fun.js); the year runs under both; To improve under that. So at 1440×820 and 1280×760 the
-   year and the tree are on screen with the test and the essay. nextup.js stacks each column on its own (4px rows, a span
-   per block), so no block waits on another column's rows. Space separates the blocks: no boxes, no lines. */
+/* ---------- layout (2026-11-26) ----------
+   What a day asks of him: the essay (the work), the habit (where the day stands, and the weeks behind it), the test
+   when there is one, the next words, and the forest to look at. Space separates the blocks: no boxes, no lines.
+   Phone and narrow: one column: the streak and steps, the weeks, the test, the essay, the next words, the forest.
+   Middle (960–1179): the test and the essay on the left; the streak and steps, the weeks, the next words and the
+   forest on the right.
+   Wide (≥1180, the 1280–1440 laptop): the test and the essay on the left; on the right the streak and steps, the
+   weeks under them, then the next words with the forest beside them (as tall as the list, fun.js). nextup.js
+   stacks each column on its own (4px rows, a span per block), so no block waits on another column's rows. */
 .today{display:grid;grid-template-columns:minmax(0,1fr);row-gap:var(--s7);align-items:start}
 .today>*{min-width:0}
-.today>#habit-steps{grid-column:1/-1}
-.today>#today-buddy{position:relative;height:0;margin:0}
 #next{position:relative}
-@media (max-width:959px){.today>#companion{margin-top:calc(var(--s5) * -1)}}
-@media (max-width:959px){.today>#habit-steps{margin-bottom:calc(var(--s5) * -1)}}
+@media (max-width:959px){
+  .today>#habit-steps{margin-bottom:calc(var(--s5) * -1)}
+  .today>#companion{margin-top:calc(var(--s5) * -1)}
+}
 @media (min-width:960px){
   .today{column-gap:clamp(32px,3.4vw,64px);row-gap:0;grid-auto-flow:row dense;grid-template-columns:minmax(0,1fr) clamp(340px,34%,440px)}
   .today>#quiz,.today>#write{grid-column:1}
-  .today>#next,.today>#improve-today,.today>#habit-today,.today>#companion,.today>#today-buddy{grid-column:2}
-  .today>#habit-steps{order:-1;margin-bottom:var(--s6)}
-  /* placement order: the forest and the year are placed before To improve, so To improve comes after them */
-  .today>#companion,.today>#today-buddy{order:1}.today>#habit-today{order:2}.today>#improve-today{order:3}
+  .today>#habit-steps,.today>#next,.today>#habit-today,.today>#companion{grid-column:2}
+  /* placement order in the column: the streak and steps, the weeks, then Next up and the forest */
+  .today>#habit-steps{order:-2;margin-bottom:var(--s5)}
+  .today>#habit-today{order:-1}
+  .today>#companion{order:1}
   .today>#quiz{margin-bottom:var(--s6)}
   .today>#next{margin-bottom:var(--s6)}
   .today>#companion{margin-bottom:var(--s3)}
@@ -30,17 +33,16 @@
 }
 @media (min-width:1180px){
   .today{grid-template-columns:minmax(0,1.9fr) minmax(0,1fr) minmax(0,.78fr)}
-  .today>#companion,.today>#today-buddy{grid-column:3}
-  .today>#habit-today,.today>#improve-today{grid-column:2/4}
-  .today>#habit-today{margin-bottom:var(--s6)}
+  .today>#habit-steps,.today>#habit-today{grid-column:2/4}
+  .today>#companion{grid-column:3}
   .today>#next{margin-bottom:var(--s5)}
   .today>#companion{margin-bottom:var(--s5)}
 }
 
-/* ---------- Next up: clean rows, the word big; then the later words, quiet ---------- */
-.nu-top{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:var(--s5);row-gap:var(--s3)}
+/* ---------- Next up: clean rows; the word a size above the reading size, not a headline (2026-11-26) ---------- */
+.nu-top{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:var(--s4);row-gap:var(--s3)}
 .nu-row{position:relative;grid-column:1/-1;display:grid;grid-template-columns:subgrid;align-items:center;outline-offset:6px}
-.nu-w{font-size:calc(40px * var(--k));line-height:1.15;color:var(--ink);white-space:nowrap}
+.nu-w{font-size:var(--fs-xl);line-height:var(--lh-tight);color:var(--ink);white-space:nowrap}
 .nu-m{display:flex;flex-direction:column;min-width:0}
 .nu-py{font-size:var(--fs-m);line-height:var(--lh-snug);color:var(--ink-2)}
 .nu-gl{font-size:var(--fs-m);line-height:var(--lh-snug);color:var(--ink-3);overflow-wrap:anywhere}
@@ -55,7 +57,7 @@
 .nu-pop .nu-ex .zh{font-size:1em}
 .nu-pop .nu-gl+.nu-ex{margin-top:calc(6px * var(--k))}
 @keyframes nupop{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
-@media (max-width:420px){.nu-w{font-size:calc(36px * var(--k))}.nu-top{column-gap:var(--s4)}}
+@media (max-width:420px){.nu-top{column-gap:var(--s3)}}
 
 /* recent-tries glyphs (core's tries()): the same shapes as the test's pips */
 .tries{display:inline-flex;gap:calc(4px * var(--k));align-items:center;flex:none}
@@ -64,31 +66,66 @@
 .t.f{background:var(--red);transform:rotate(45deg) scale(.8);border-radius:2px}
 .t.p{border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--green);background:linear-gradient(90deg,var(--green) 50%,transparent 50%)}
 
-/* ---------- today's steps and the streak (habit.js): one line; each step ticks itself; done = all green ---------- */
-.habit-steps{display:flex;align-items:center;justify-content:space-between;gap:var(--s4);min-height:calc(56px * var(--k))}
-.hs-steps{display:flex;flex-wrap:wrap;gap:var(--s2)}
-.hs-s{display:inline-flex;align-items:center;gap:var(--s2);border:0;background:var(--wash);color:var(--ink-2);font:inherit;font-size:var(--fs-m);font-weight:500;line-height:1;padding:calc(9px * var(--k)) calc(16px * var(--k)) calc(9px * var(--k)) calc(10px * var(--k));border-radius:999px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .25s var(--ease),color .25s var(--ease),transform .15s var(--ease)}
-.hs-s:active{transform:scale(.97)}
-.hs-s:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-.hs-c{display:grid;place-items:center;flex:none;width:calc(22px * var(--k));height:calc(22px * var(--k));border-radius:50%;box-shadow:inset 0 0 0 2px var(--ink-4);color:#fff;transition:background .25s var(--ease),box-shadow .25s var(--ease)}
-.hs-c svg{width:72%;height:72%}
-.hs-s.on{background:var(--green-wash);color:var(--green-deep)}
-.hs-s.on .hs-c{background:var(--green);box-shadow:none;animation:hstick .45s var(--spring)}
-.habit-steps.done .hs-s.on{background:var(--green);color:#fff}
-.habit-steps.done .hs-s.on .hs-c{background:#fff;color:var(--green)}
-@keyframes hstick{0%{transform:scale(.5)}100%{transform:none}}
-.hs-streak{display:flex;align-items:baseline;gap:var(--s2);flex:none;color:var(--ink-3);font-size:var(--fs-m)}
-.hs-streak[hidden]{display:none}
-.hs-streak b{font-size:var(--fs-2xl);font-weight:600;line-height:1;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
-.habit-steps.done .hs-streak b{color:var(--green-deep)}
-@media (max-width:420px){.habit-steps{gap:var(--s2)}.hs-steps{gap:calc(6px * var(--k))}.hs-s{font-size:var(--fs-s);gap:calc(6px * var(--k));padding:calc(7px * var(--k)) calc(11px * var(--k)) calc(7px * var(--k)) calc(7px * var(--k))}.hs-c{width:calc(20px * var(--k));height:calc(20px * var(--k))}.hs-streak{font-size:var(--fs-s)}.hs-streak b{font-size:var(--fs-xl)}}
-@media (prefers-reduced-motion:reduce){.hs-s,.hs-c{transition:none}.hs-s.on .hs-c{animation:none}}
+/* ---------- the streak ring and today's steps (habit.js) ----------
+   The one playful thing on the page: its own face (Grandstander, here only), the ring filling toward the next milestone,
+   the steps a little list he crosses out. Green = done, gold = today, as everywhere on the board. */
+.habit-steps{--fun:"Grandstander","Inter",system-ui,sans-serif;--ring:calc(116px * var(--k))}
+.hc{display:flex;align-items:center;gap:var(--s5);min-height:var(--ring)}
+.hc-ring{position:relative;flex:none;width:var(--ring);height:var(--ring);display:grid;place-content:center;justify-items:center;font-family:var(--fun)}
+.hc-ring svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.hr-in{fill:transparent;transition:fill .5s var(--ease)}
+.hr-s{fill:none;stroke:var(--wash-2);stroke-width:8;transition:stroke .45s var(--ease)}
+.hr-s.d{stroke:var(--green)}
+.hr-s.t{stroke:var(--gold)}
+.hc-n{position:relative;font-size:calc(46px * var(--k));font-weight:750;line-height:.9;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.hc-u{position:relative;margin-top:calc(2px * var(--k));font-size:var(--fs-s);font-weight:600;line-height:1;color:var(--ink-3)}
+.hc.done .hr-in{fill:var(--green-wash)}
+.hc.done .hc-n{color:var(--green-deep)}
+.hc.done .hc-u{color:var(--green)}
+/* the steps: his little list. A tap goes to the step (Reviews opens the tab, Essay the sheet, Test the test). */
+.hc-steps{list-style:none;margin:0;padding:0;display:grid;gap:calc(6px * var(--k));min-width:0}
+.hc-s{display:inline-flex;align-items:center;gap:var(--s3);border:0;background:none;padding:calc(4px * var(--k)) var(--s2) calc(4px * var(--k)) 0;margin:0;font-family:var(--fun);font-size:var(--fs-l);font-weight:600;line-height:var(--lh-tight);color:var(--ink);cursor:pointer;border-radius:var(--r-s);-webkit-tap-highlight-color:transparent;transition:transform .15s var(--ease),color .3s var(--ease)}
+.hc-s:active{transform:scale(.97)}
+.hc-s:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.hc-b{display:grid;place-items:center;flex:none;width:calc(24px * var(--k));height:calc(24px * var(--k));border-radius:calc(8px * var(--k));box-shadow:inset 0 0 0 2.5px var(--ink-4);color:#fff;rotate:-3deg;transition:background .25s var(--ease),box-shadow .25s var(--ease)}
+li:nth-child(even)>.hc-s .hc-b{rotate:2deg}
+.hc-b svg{width:78%;height:78%}
+.hc-t{position:relative;white-space:nowrap}
+/* crossed out by hand: a stroke a little off level, drawn left to right when it happens */
+.hc-t::after{content:"";position:absolute;left:-3%;right:-4%;top:52%;height:calc(3px * var(--k));border-radius:3px;background:currentColor;rotate:-2.5deg;transform:scaleX(0);transform-origin:left center}
+li:nth-child(even)>.hc-s .hc-t::after{rotate:1.5deg}
+.hc-s.on{color:var(--ink-3)}
+.hc-s.on .hc-b{background:var(--green);box-shadow:none}
+.hc-s.on .hc-t::after{transform:none}
+.hc-s.fresh .hc-b{animation:hcbox .5s var(--spring) both}
+.hc-s.fresh .hc-t::after{animation:hcstrike .32s cubic-bezier(.23,1,.32,1) .14s both}
+@keyframes hcbox{from{transform:scale(.6)}}
+@keyframes hcstrike{from{transform:scaleX(0)}}
+/* the day turns done: the list folds into the ring (each step to its centre, --dx/--dy from habit.js) */
+.hc.fold .hc-s{transform:translate(var(--dx,0),var(--dy,0)) scale(.3);opacity:0;transition:transform .46s cubic-bezier(.65,0,.35,1),opacity .3s ease .14s;transition-delay:calc(var(--i,0) * 60ms),calc(var(--i,0) * 60ms + 140ms)}
+.hc.land .hc-n{animation:hcpop .6s var(--spring) both}
+.hc.land .hc-week{animation:hcin .32s cubic-bezier(.23,1,.32,1) .2s both}
+@keyframes hcpop{0%{transform:scale(.7);opacity:.4}100%{transform:none;opacity:1}}
+@keyframes hcin{from{opacity:0;transform:translateY(6px)}}
+/* this week, once the day is done: done and rest days filled, today ringed, days to come faint */
+.hc-week{display:flex;gap:calc(10px * var(--k))}
+.hw{display:grid;justify-items:center;gap:calc(6px * var(--k));font-family:var(--fun);font-size:var(--fs-s);font-weight:600;line-height:1;color:var(--ink-3)}
+.hw i{display:block;width:calc(22px * var(--k));height:calc(22px * var(--k));border-radius:50%;background:var(--wash-2)}
+.hw.d i{background:var(--green)}
+.hw.now{color:var(--green-deep)}
+.hw.now i{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--green-soft)}
+.hw.later i{background:none;box-shadow:inset 0 0 0 2px var(--wash-2)}
+.hw.later{color:var(--ink-4)}
+@media (min-width:960px){.habit-steps{--ring:calc(124px * var(--k))}.hc-n{font-size:calc(50px * var(--k))}}
+@media (max-width:420px){.habit-steps{--ring:calc(100px * var(--k))}.hc{gap:var(--s4)}.hc-n{font-size:calc(40px * var(--k))}.hc-week{gap:calc(7px * var(--k))}.hw i{width:calc(20px * var(--k));height:calc(20px * var(--k))}}
+@media (prefers-reduced-motion:reduce){.hc-s,.hr-s,.hr-in{transition:none}.hc-s.fresh .hc-b,.hc-s.fresh .hc-t::after,.hc.land .hc-n{animation:none}.hc.land .hc-week{animation:hcfade .3s ease both}@keyframes hcfade{from{opacity:0}}}
 
 /* ---------- the year: a heatmap, one column a week (habit.js) ----------
    Cells fill the width (up to a cap), so the year grows rightward a column each Monday. Done: green; done with a test:
-   deeper; rest: a green ring; partial (something, not enough): pale; missed: blank. Today: the gold ring. */
+   deeper; rest: the same green as done (a rest is part of the habit, his pick 2026-11-26); partial (something, not
+   enough): pale; missed: blank. Today: the gold ring. */
 .hm{container-type:inline-size;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;
-  --hm-lw:calc(22px * var(--k));--hm-max:calc(18px * var(--k));
+  --hm-lw:calc(26px * var(--k));--hm-max:calc(18px * var(--k));
   --hm-0:var(--wash-2);--hm-pre:#EFF0F4;--hm-1:#CFE6D8;--hm-3:#4A9A6D;--hm-4:var(--green-deep)}
 .hm-full{--hm-max:calc(30px * var(--k))}
 .hm-in{--p:min(var(--hm-max),calc((100cqw - var(--hm-lw)) / var(--w)));--gap:max(2px,calc(var(--p) * .2));--c:calc(var(--p) - var(--gap));
@@ -98,17 +135,16 @@
 .hm-mo span.now{color:var(--ink)}
 .hm-mo span.later{opacity:.6}
 .hm-wd{grid-column:1;display:grid;grid-template-rows:repeat(7,var(--c));row-gap:var(--gap)}
-.hm-wd span{font-size:var(--fs-s);line-height:var(--c);color:var(--ink-3);overflow:visible;white-space:nowrap}
+.hm-wd span{font-size:var(--fs-s);font-weight:500;line-height:var(--c);color:var(--ink-2);overflow:visible;white-space:nowrap}
 /* on a phone the weeks so far are narrow: every other month's name, and no weekday letters (too small to sit apart) */
-@container (max-width:420px){.hm-today .hm-mo span:nth-child(even):not(.now){visibility:hidden}}
+@container (max-width:420px){.hm-full .hm-mo span:nth-child(even):not(.now){visibility:hidden}}
 @container (max-width:560px){.hm-in{--hm-lw:0px}.hm-wd{display:none}}
 .hm-g{grid-column:2;display:grid;grid-template-rows:repeat(7,var(--c));grid-auto-flow:column;grid-auto-columns:var(--c);gap:var(--gap)}
 .hm-c{display:block;border-radius:28%;background:var(--hm-0);transition:transform .15s var(--ease)}
 .hm-c.pre{background:var(--hm-pre)}
 .hm-c.partial{background:var(--hm-1)}
-.hm-c.done{background:var(--hm-3)}
 .hm-c.deep{background:var(--hm-4)}
-.hm-c.rest{background:transparent;box-shadow:inset 0 0 0 max(1.5px,calc(var(--c) * .16)) var(--hm-3)}
+.hm-c.done,.hm-c.rest{background:var(--hm-3)}
 .hm-c.today{box-shadow:0 0 0 calc(1.5px * var(--k)) var(--bg),0 0 0 calc(3.5px * var(--k)) var(--gold)}
 .hm-c.today.open{background:var(--gold-wash)}
 .hm-c.off{visibility:hidden}
@@ -119,7 +155,7 @@
 /* the key's glyphs inside the tip */
 .hm-k{display:inline-block;flex:none;width:calc(12px * var(--k));height:calc(12px * var(--k));border-radius:28%;background:#4A9A6D}
 .hm-k.l1{background:#CFE6D8}.hm-k.l3{background:#4A9A6D}.hm-k.l4{background:var(--green-deep)}
-.hm-k.rest{background:none;box-shadow:inset 0 0 0 2px #4A9A6D}
+.hm-k.rest{background:#4A9A6D}
 @media (prefers-reduced-motion:reduce){.hm-c{transition:none}.hm-c.pop{animation:none}}
 
 /* the tip: one floating note for anything with data-tip (habit.js); Progress's month charts use it too */

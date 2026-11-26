@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { walk, reviewDays, merge, left, sentences, han, met, monday, dayOf, blank, type Day } from '../site/src/cbp/habit.ts';
+import { walk, reviewDays, merge, left, sentences, han, met, monday, dayOf, blank, hold, goal, type Day } from '../site/src/cbp/habit.ts';
 import { encrypt, vapid, b64u, unb64u, nudge, TIMES } from '../site/src/cbp/push.ts';
 import { SETTINGS } from '../site/src/cbp/settings.ts';
 
@@ -191,4 +191,26 @@ test('the nudge waits for his time, skips a done day, and goes once', async () =
   assert.deepEqual(await nudge(fakeDb({ last: { day: '2026-11-26' } }).env as never, { now: nine }), { day: '2026-11-26', skipped: 'sent' });
   assert.equal(await nudge(fakeDb({ settings: { values: { nudge: 'off' } } }).env as never, { now: nine }), null, 'off');
   assert.equal((await nudge(fakeDb({ settings: { values: { nudge: '22:30' } } }).env as never, { now: nine + 90 * 60e3 }))?.day, '2026-11-26', 'his own time');
+});
+
+test('the essay counts once he leaves the writing box, and stays counted', () => {
+  const d = day({ rv: 20, chars: 120, sent: 5 });
+  assert.equal(met(hold(d, true, false), false), false, 'still writing: held back');
+  assert.equal(met(hold(d, true, false), true), false, 'held on a low day too');
+  assert.equal(met(hold(d, false, false), false), true, 'left the box: done');
+  assert.equal(met(hold(d, true, true), false), true, 'writing again after it counted: still done');
+  assert.deepEqual(hold(d, true, false), { ...d, chars: 0, sent: 0 }, 'only the essay is held, not the reviews');
+  const w = walk({ '2026-11-16': done, '2026-11-17': hold(d, true, false) }, '2026-11-17');
+  assert.equal(w.days['2026-11-17'].st, 'open');
+  assert.equal(walk({ '2026-11-16': done, '2026-11-17': hold(d, false, false) }, '2026-11-17').streak, 2);
+});
+
+test('the ring fills toward the next milestone', () => {
+  assert.equal(goal(0, false), 7);
+  assert.equal(goal(6, false), 7, "today's segment completes the week");
+  assert.equal(goal(7, true), 7, 'a milestone reached today shows full');
+  assert.equal(goal(7, false), 14);
+  assert.equal(goal(29, true), 30);
+  assert.equal(goal(365, false), 400);
+  assert.equal(goal(420, true), 500);
 });

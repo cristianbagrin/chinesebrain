@@ -23,6 +23,18 @@ const active = (d: Day) => d.rv > 0 || d.chars > 0 || d.cards > 0 || d.test;
 /** The day's bar: normal (the essay written) or low (three sentences, the day after a miss). */
 export const met = (d: Day, low: boolean) => d.cleared && (low ? d.sent >= LOW_SENTENCES : d.chars > 0);
 
+/** Today's essay counts once he leaves the writing box, never while he is still in it: the step ticks and the day turns
+ *  done when he steps away (blur, another tab, the page closed). Once it has counted, writing more doesn't take it back. */
+export const hold = (d: Day, writing: boolean, counted: boolean): Day => (writing && !counted ? { ...d, chars: 0, sent: 0 } : d);
+
+/** The streak's next milestone, what the ring on Today fills toward. Today still open needs room for its own segment;
+ *  a day that just reached a milestone shows the ring full until tomorrow. Past a year: every hundred. */
+export const MILESTONES = [7, 14, 21, 30, 50, 75, 100, 150, 200, 250, 300, 365];
+export function goal(streak: number, todayDone: boolean) {
+  const need = Math.max(1, streak + (todayDone ? 0 : 1));
+  return MILESTONES.find((m) => m >= need) ?? Math.ceil(need / 100) * 100;
+}
+
 // ---------- dates ----------
 const P = (s: string) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10));
 const K = (ms: number) => new Date(ms).toISOString().slice(0, 10);
