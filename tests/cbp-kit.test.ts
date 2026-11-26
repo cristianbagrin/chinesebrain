@@ -4,7 +4,7 @@ import { DEFS, KEYS, RETIRED, clash, free } from '../site/src/cbp/kit/keys.ts';
 import { hit, marked, words } from '../site/src/cbp/kit/find.ts';
 
 // a keydown, as the handlers see it
-const key = (k: string, o: Partial<KeyboardEvent> & { target?: unknown } = {}) =>
+const key = (k: string, o: Record<string, unknown> = {}) =>
   ({ key: k, code: '', altKey: false, ctrlKey: false, metaKey: false, shiftKey: false, isComposing: false, repeat: false, defaultPrevented: false, target: null, ...o }) as unknown as KeyboardEvent;
 const field = { closest: (s: string) => (s.includes('textarea') ? {} : null) };
 const page = { closest: () => null };
