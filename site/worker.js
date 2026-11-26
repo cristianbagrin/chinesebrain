@@ -721,6 +721,9 @@ async function plusMachine(request, env, url) {
     if (url.pathname === '/api/plus/push/pull') return json(await plus.pull(env, await request.json()));
     if (url.pathname === '/api/plus/push/switch') return json(await plus.switchOver(env));
     if (url.pathname === '/api/plus/push/clean') return json(await cards.clean(env));
+    // Cards: the word's mark moves from <u> to <mark>, once (src/cbp/cards.ts markWord; ?dry=1 counts only)
+    if (url.pathname === '/api/plus/push/mark-word') return json(await cards.markWord(env, url.searchParams.get('dry') === '1'));
+    // (end Cards)
     // the 10 pm job and the essay corrections, run now (src/cbp/nightly.ts): ?day=YYYY-MM-DD, ?notest=1
     if (url.pathname === '/api/plus/push/nightly') return long(async () => nightly.nightly(env, await ownerBrain(env), { day: url.searchParams.get('day') ?? undefined, noTest: url.searchParams.get('notest') === '1' }));
     // his Todoist "Chinese" project as the nightly would read it, closing nothing

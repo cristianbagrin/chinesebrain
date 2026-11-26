@@ -1,7 +1,8 @@
 /* Chinese Brain Plus: the card he adds, beside the study card on the Cards page (Stage 3). /plus only: it hooks into the
    board's Cards page (plus/board/js/cards.js, copied from life/chinese/board) and fills its side column (.cd-side).
    His Anki note type "Chinese", as an editor that behaves like Anki's: every field takes anything (Cmd+B, Cmd+I, Cmd+U,
-   Cmd+Shift+H marks the word, which shows as a highlight and is <u> in Anki; on a phone a small bar comes up over a
+   Cmd+Shift+H marks the word as a highlight, <mark>, which his note types turn green and blank out on the sentence
+   card; on a phone a small bar comes up over a
    selection; pictures pasted, dropped or dragged in from anywhere, as many as he likes). Fields: Sentence, Word (shown
    while Option's extras are on, or once he has changed it), Picture, Notes; Pinyin is done for him from the sentence
    (src/cbp/cards.ts pinyin) and never shown; Audio is made on the server whenever a note is saved (cards.ts voiced),
@@ -103,10 +104,8 @@
   /** A sentence of the study card: one line per speaker ("- " in front), the word marked. */
   function fromSentence(s, w) {
     const zs = turnsOf(s.zh), ps = turnsOf(s.py);
-    const c = CD_ankiCopy(zs, w);
-    const tail = esc(w || '');
     const pre = zs.length > 1 ? '- ' : '';
-    return { chinese: tail && c.html.endsWith(tail) ? c.html.slice(0, -tail.length) : c.html, py: ps.map((p) => pre + strip(p)).join('\n') };
+    return { chinese: CD_sentCopy(zs, w).html, py: ps.map((p) => pre + strip(p)).join('\n') };
   }
   /** The card on screen for a word (its slot n): saved, a draft, or new from the study card. */
   function state(w, k = slotOf(w)) {
@@ -131,7 +130,7 @@
   }
 
   // ---------- pasted things, made safe (formatting and pictures stay, everything else becomes text) ----------
-  const KEEP = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'BR', 'DIV', 'P', 'SPAN', 'IMG', 'UL', 'OL', 'LI', 'SUB', 'SUP', 'FONT']);
+  const KEEP = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'MARK', 'BR', 'DIV', 'P', 'SPAN', 'IMG', 'UL', 'OL', 'LI', 'SUB', 'SUP', 'FONT']);
   const DROP = new Set(['SCRIPT', 'STYLE', 'META', 'LINK', 'TITLE', 'IFRAME', 'OBJECT', 'SVG', 'NOSCRIPT', 'TEMPLATE']);
   function clean(html) {
     const t = document.createElement('template');
@@ -159,7 +158,7 @@
         if (color) n.style.color = color;
         if (bg) n.style.backgroundColor = bg;
         if (fw && +fw >= 600) n.style.fontWeight = 'bold';
-        if (ul && n.tagName === 'SPAN') n.style.textDecoration = 'underline';
+        if (ul && n.tagName === 'SPAN') n.style.textDecoration = 'underline'; // the editor reads it as <u>
       }
     })(t.content);
     return t.innerHTML;
@@ -275,9 +274,9 @@
 
   // ---------- rich text in the fields, the way Ten Dollar Words does it (app/js/editor.js toggleStyle): the field is read
   // into styled characters, a style goes on (or, if every character already has it, off) over the selection, and the
-  // field is written back as clean HTML: <b>, <i>, <span style="text-decoration:underline">, and <u> for the word's mark
-  // (a highlight here; Anki's Chinese note type turns it green, and into the blank on card 3). No execCommand('bold'):
-  // browsers nest and restyle what it makes. The fields keep their own undo, so Cmd+Z steps back through typing and
+  // field is written back as clean HTML: <b>, <i>, <u>, and <mark> for the word's mark (a highlight here; his note
+  // types turn it green, and into the blank on the sentence card; cards.ts markWord moved the old <u> marks over).
+  // No execCommand('bold'): browsers nest and restyle what it makes. The fields keep their own undo, so Cmd+Z steps back through typing and
   // formatting alike. ----------
   const RT = (() => {
     const BIT = { b: 1, i: 2, ul: 4, hl: 8 };
@@ -303,7 +302,8 @@
               if (t === 'B' || t === 'STRONG' || +st?.fontWeight >= 600 || st?.fontWeight === 'bold') f2 |= BIT.b;
               if (t === 'I' || t === 'EM' || st?.fontStyle === 'italic') f2 |= BIT.i;
               if (/underline/.test(st?.textDecorationLine || st?.textDecoration || '')) f2 |= BIT.ul;
-              if (t === 'U') f2 |= BIT.hl;
+              if (t === 'U') f2 |= BIT.ul;
+              if (t === 'MARK') f2 |= BIT.hl;
               if (st?.color || st?.backgroundColor) s2 = [st.color && `color:${st.color}`, st.backgroundColor && `background-color:${st.backgroundColor}`].filter(Boolean).join(';');
               walk(n, f2, s2);
             }
@@ -330,8 +330,8 @@
           let t = '';
           for (; i < out.length && out[i].c != null && out[i].f === p.f && out[i].s === p.s; i++) t += out[i].c;
           t = escT(t);
-          if (p.f & BIT.hl) t = `<u>${t}</u>`;
-          if (p.f & BIT.ul) t = `<span style="text-decoration:underline">${t}</span>`;
+          if (p.f & BIT.hl) t = `<mark>${t}</mark>`;
+          if (p.f & BIT.ul) t = `<u>${t}</u>`;
           if (p.f & BIT.i) t = `<i>${t}</i>`;
           if (p.f & BIT.b) t = `<b>${t}</b>`;
           if (p.s) t = `<span style="${p.s}">${t}</span>`;

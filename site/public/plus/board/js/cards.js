@@ -310,20 +310,19 @@ function sentHTML(list,cls,w){
     const key=cls+n+':'+w, on=CD.py.has(key);
     // **bold** inside the Chinese is noise: the word is marked there anyway
     const zs=turnsOf(String(s.zh||'').replace(/\*\*/g,'')), ps=turnsOf(s.py), es=turnsOf(s.en);
-    CD.cp[key]=CD_ankiCopy(zs,w);
+    CD.cp[key]=CD_sentCopy(zs,w);
     return `<div class="cd-sent ${cls}${on?' py':''}" data-k="${esc(key)}" role="button" tabindex="0" aria-expanded="${on}">${zs.map((z,i)=>`<div class="cd-turnl"><p class="cd-szh zh" lang="zh-Hant">${(m=>m?`<i class="cd-sp">${m[1]}</i>${markTarget(zh(z.slice(m[0].length)),w)}`:markTarget(zh(z),w))(/^([AB])\s*[：:]\s*/.exec(z))}</p>${ps[i]?`<p class="cd-spy">${esc(ps[i].replace(/^[AB]\s*[：:]\s*/,''))}</p>`:''}${es[i]?`<p class="cd-sen">${inl(es[i].replace(/^[AB]\s*[：:]\s*/,''))}</p>`:''}</div>`).join('')}</div>`;}).join('');
 }
-/* ---------- copy for Anki: the Chinese only, the target word underlined, nothing else (no fonts, colours or spans,
-   so Anki's paste keeps just the underline). An exchange is one line per speaker, each starting "- "; a single sentence
-   loses its closing full stop. The word itself follows at the end, after a space, for him to cut into the next field. ---------- */
+/* ---------- a sentence, copied: the Chinese only, the word marked (<mark>), nothing else (no fonts, colours or spans).
+   An exchange is one line per speaker, each starting "- "; a single sentence loses its closing full stop. ---------- */
 CD.cp={};
-function CD_ankiCopy(zs,w){
+function CD_sentCopy(zs,w){
   let lines=zs.map(z=>String(z).replace(/^[AB]\s*[：:]\s*/,'').replace(/\*\*/g,'').trim()).filter(Boolean);
   if(lines.length===1) lines=[lines[0].replace(/[。．.]+$/,'').trim()];
-  const pre=lines.length>1?'- ':'', we=w?esc(w).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'):'', tail=w||'';
+  const pre=lines.length>1?'- ':'', we=w?esc(w).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'):'';
   return {
-    html:lines.map(l=>pre+(we?esc(l).replace(new RegExp(we,'g'),'<u>$&</u>'):esc(l))).join('<br>')+esc(tail),
-    text:lines.map(l=>pre+l).join('\n')+tail};
+    html:lines.map(l=>pre+(we?esc(l).replace(new RegExp(we,'g'),'<mark>$&</mark>'):esc(l))).join('<br>'),
+    text:lines.map(l=>pre+l).join('\n')};
 }
 async function CD_copy(sn){
   const c=CD.cp[sn.dataset.k]; if(!c) return;

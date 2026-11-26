@@ -19,9 +19,9 @@
 .rv-notes .rv-f{min-height:96px}
 .rv-picture .rv-f{min-height:166px;display:block;padding:8px 12px}
 .rv-picture .rv-f:empty::before{content:"Pick, paste or drop pictures";display:block;text-align:center;font:400 15px/150px var(--latin);color:var(--ink-4)}
-/* Cmd+U marks a word: the page's own highlighter yellow (essays.css --hl-rgb); Anki keeps it as <u> */
-.rv-f u{text-decoration:none;background:rgb(var(--hl-rgb,255 210 0) / var(--es-hl-a,.3));border-radius:3px;padding:0 1px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
-.rv-f u u{background:none;padding:0}
+/* Cmd+Shift+H marks the word, <mark>: the page's own highlighter yellow (essays.css --hl-rgb) */
+.rv-f mark{color:inherit;background:rgb(var(--hl-rgb,255 210 0) / var(--es-hl-a,.3));border-radius:3px;padding:0 1px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.rv-f mark mark{background:none;padding:0}
 .rv-f img{max-height:180px;max-width:100%;border-radius:8px;vertical-align:bottom;margin:2px 4px 2px 0;cursor:grab;
   -webkit-user-drag:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 /* a picture shows whole, at its own shape (a tall one stays tall), never cropped */
@@ -132,8 +132,8 @@ html.rv-dragging,html.rv-dragging *{cursor:grabbing!important;user-select:none;-
 .rv-slots .rv-slot-new{background:none;box-shadow:inset 0 0 0 1.5px var(--hair);color:var(--ink-2);font-size:var(--fs-l)}
 @media (hover:hover){.rv-slots button:not([aria-selected=true]):hover{background:var(--wash-2);color:var(--ink)}}
 
-/* Cmd+U: a real underline (the word's mark, <u>, is the highlight above) */
-.rv-f span[style*="underline"]{text-decoration-thickness:1.5px;text-underline-offset:.18em}
+/* Cmd+U: a plain underline */
+.rv-f u{text-decoration-thickness:1.5px;text-underline-offset:.18em}
 
 /* on a phone: B I U H under a selection in a field (review.js FMT) */
 .rv-fmt{position:fixed;z-index:40;display:flex;gap:2px;padding:4px;border-radius:14px;background:var(--ink);box-shadow:0 10px 30px -8px rgba(21,23,28,.45)}
