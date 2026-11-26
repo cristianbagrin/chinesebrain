@@ -1,68 +1,129 @@
-/* The shared parts (site/src/cbp/kit): the Settings panel, press and hold, pinyin over characters, keys. Owner: lead.
-   The panel's type is fixed at 16px+ (not scaled by --k), so it never gets small. */
+/* The shared parts (site/src/cbp/kit): the Settings window, press and hold, pinyin over characters, keys. Owner: lead.
+   Type comes from base.css's tokens; nothing here is smaller than --fs-s. */
 :root[data-text-size="larger"]{--k:1.05}
 
-/* ---------- Settings: a panel under the gear; on a phone it spans the screen ---------- */
-.settings{position:fixed;z-index:30;top:calc(env(safe-area-inset-top,0px) + var(--bar) + 6px);right:max(16px,env(safe-area-inset-right,0px),4vw);width:min(440px,calc(100vw - 32px));max-height:calc(100dvh - var(--bar) - 28px - env(safe-area-inset-top,0px));overflow:auto;overscroll-behavior:contain;background:var(--surface);border-radius:18px;box-shadow:0 18px 50px rgba(21,23,28,.16),0 0 0 1px var(--hair);animation:stin .2s var(--ease);transform-origin:top right}
-@media (max-width:520px){.settings{right:12px;left:12px;width:auto}}
-@keyframes stin{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){.settings{animation:none}}
-.st-in{padding:var(--s3) var(--s5) var(--s5)}
-@media (max-width:520px){.st-in{padding:var(--s3) var(--s4) var(--s4)}}
-.st-top{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:var(--s2);margin:0 calc(-1 * var(--s3)) 0 0;padding:var(--s2) 0;background:var(--surface)}
-.st-top b{margin-right:auto;font-weight:600;font-size:18px}
-.st-top .btn-q{font-size:16px}
-.st-back{margin-left:-14px}
-.st-x{width:36px;height:36px;border:0;border-radius:50%;background:none;font-size:24px;line-height:1;color:var(--ink-3);cursor:pointer}
-.st-x:hover{background:var(--wash);color:var(--ink)}
-/* groups: a heading each, no lines */
-.st-g{padding:var(--s3) 0 0}
-.st-g h3{margin:var(--s3) 0 var(--s1);font-size:16px;font-weight:500;color:var(--ink-3)}
-/* one line per choice: the label left, the options right */
-.st-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;padding:5px 0}
-.st-l{font-size:17px;line-height:1.3;color:var(--ink);min-width:0}
-button.st-row{width:100%;border:0;background:none;font:inherit;text-align:left;cursor:pointer;border-radius:10px;margin:0 -8px;padding:5px 8px;width:calc(100% + 16px)}
-button.st-row:hover{background:var(--bg)}
-.st-k{font-size:16px;color:var(--ink-3)}
-.st-k::after{content:" ›";color:var(--ink-4)}
-/* a switch, the board's: ink when on */
+/* ---------- Settings (kit/settings.ts): a window in the middle of the screen, a sheet from the bottom on a phone.
+   The pattern for every dialog in Plus: a native modal <dialog class="st">, a quiet dim behind, the page's ground inside,
+   white rounded groups of one-line rows with hairlines between, a title, the × top right. ---------- */
+dialog.st{padding:0;border:0;max-width:none;max-height:none;width:min(780px,calc(100vw - 48px));height:min(620px,calc(100dvh - 64px));border-radius:16px;background:var(--bg);color:var(--ink);overflow:hidden;box-shadow:0 24px 70px rgba(21,23,28,.20),0 0 0 1px var(--hair);
+  opacity:0;transform:translateY(8px) scale(.98);transition:opacity .18s var(--ease),transform .22s var(--ease)}
+dialog.st[open]{display:grid;grid-template-columns:200px minmax(0,1fr)}
+dialog.st.on{opacity:1;transform:none}
+dialog.st.out{opacity:0;transform:scale(.985);transition-duration:.15s;transition-timing-function:ease-in;pointer-events:none}
+dialog.st::backdrop{background:rgba(21,23,28,.22);opacity:0;transition:opacity .2s ease}
+dialog.st.on::backdrop{opacity:1}
+dialog.st:focus-visible{outline:none}
+:where(.st) button{font:inherit;color:inherit}
+.st :focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.st svg{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.st-grab{display:none}
+
+/* the sections */
+.st-side{display:flex;flex-direction:column;gap:var(--s3);min-height:0;overflow-y:auto;padding:20px 10px;border-right:1px solid var(--hair)}
+.st-side h2{margin:0 10px;font-size:var(--fs-m);font-weight:650;line-height:var(--lh-tight);letter-spacing:-.01em}
+.st-toc{display:flex;flex-direction:column;gap:2px}
+.st-ti{display:flex;align-items:center;gap:10px;flex:none;min-height:40px;padding:0 10px;border:0;border-radius:10px;background:none;color:var(--ink-2);font-size:var(--fs-s);font-weight:500;text-align:left;cursor:pointer;white-space:nowrap;transition:background .12s,color .12s,transform .1s}
+.st-ti:active{transform:scale(.98)}
+.st-ti[aria-current="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px var(--shade),0 0 0 1px var(--hair)}
+.st-gl{width:18px;height:18px;flex:none;color:var(--ink-3)}
+.st-ti[aria-current="true"] .st-gl{color:var(--ink)}
+
+/* one section */
+.st-main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.st-head{display:flex;align-items:center;gap:var(--s2);padding:16px 14px 10px 28px}
+.st-head h3{flex:1;margin:0;font-size:var(--fs-l);font-weight:600;line-height:var(--lh-tight);letter-spacing:-.015em}
+.st-reset{border:0;background:none;border-radius:8px;padding:6px 10px;font-size:var(--fs-s);color:var(--ink-3);cursor:pointer}
+.st-x{display:grid;place-items:center;width:36px;height:36px;flex:none;border:0;border-radius:50%;background:none;color:var(--ink-3);cursor:pointer;transition:background .12s,color .12s}
+.st-x svg{width:18px;height:18px}
+.st-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:4px 28px 28px}
+
+/* groups: white, rounded, a hairline between rows (from the label's edge) */
+.st-grp{background:var(--surface);border-radius:var(--r);box-shadow:0 0 0 1px var(--hair),0 1px 2px var(--shade)}
+.st-grp>*{position:relative}
+.st-grp>*+*::before{content:"";position:absolute;top:0;left:16px;right:0;border-top:1px solid var(--hair)}
+.st-grp>:first-child,.st-grp>:first-child>button.st-row:first-child{border-radius:var(--r) var(--r) 0 0}
+.st-grp>:last-child,.st-grp>:last-child>button.st-row:last-child{border-radius:0 0 var(--r) var(--r)}
+.st-cap{margin:22px 4px 8px;font-size:var(--fs-s);font-weight:600;line-height:var(--lh-tight);color:var(--ink-3)}
+.st-body>.st-cap:first-child{margin-top:4px}
+/* one line per choice: the label left, its control right */
+.st-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:50px;padding:6px 12px 6px 16px;margin:0}
+.st-l{font-size:var(--fs-s);line-height:var(--lh-snug);color:var(--ink);min-width:0}
+button.st-row{width:100%;border:0;background:none;text-align:left;cursor:pointer;transition:background .12s}
+button.st-row:active{background:var(--wash)}
+button.st-row:focus-visible{outline-offset:-2px}
+.st-k{font-size:var(--fs-s);color:var(--ink-3)}
+.st-k::after{content:"›";color:var(--ink-4);font-size:var(--fs-l);line-height:1}
+/* a switch: ink when on */
 .st-tg{position:relative;display:block;flex:none;width:46px;height:28px;border:0;box-sizing:border-box;overflow:hidden;border-radius:999px;background:var(--wash-2);padding:0;cursor:pointer;transition:background .2s}
 .st-tg i{position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--surface);box-shadow:0 1px 3px rgba(21,23,28,.25);transition:transform .28s var(--spring),width .15s}
 .st-tg[aria-checked="true"]{background:var(--ink)}
 .st-tg[aria-checked="true"] i{transform:translateX(18px)}
 .st-tg:active i{width:26px}
 .st-tg[aria-checked="true"]:active i{transform:translateX(14px)}
-.st-tg:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:999px}
-/* options side by side */
+.st-tg:focus-visible{border-radius:999px}
+.st-tg:disabled{opacity:.5}
+/* two or three options: a segmented control */
 .st-o{flex:none;display:inline-flex;gap:2px;padding:3px;border-radius:999px;background:var(--wash)}
-.st-o button{border:0;background:none;border-radius:999px;padding:7px 13px;font-size:16px;font-weight:500;color:var(--ink-3);cursor:pointer;transition:background .2s,color .2s}
-.st-o button[aria-checked="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px var(--shade)}
-.st-o button:hover:not([aria-checked="true"]){color:var(--ink-2)}
-@media (max-width:400px){.st-o button{padding:7px 10px}.st-l{font-size:16px}}
-.st-sz button{padding:5px 13px}
-.sz-normal{font-size:16px}
-.sz-larger{font-size:19px}
+.st-o button{border:0;background:none;border-radius:999px;padding:5px 12px;font-size:var(--fs-s);font-weight:500;line-height:var(--lh-snug);color:var(--ink-3);cursor:pointer;transition:background .15s,color .15s}
+.st-o button[aria-checked="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px var(--shade),0 0 0 .5px var(--hair)}
+.st-sz button{padding:3px 12px}
+.sz-normal{font-size:var(--fs-s)}
+.sz-larger{font-size:var(--fs-m)}
+/* more options: a compact menu */
+.st-selw{position:relative;flex:none;display:inline-flex}
+.st-selw::after{content:"";position:absolute;right:13px;top:50%;width:7px;height:7px;margin-top:-5px;border:solid var(--ink-3);border-width:0 1.6px 1.6px 0;transform:rotate(45deg);pointer-events:none}
+.st-sel{font:inherit;font-size:var(--fs-s);font-weight:500;color:var(--ink);background:var(--wash);border:0;border-radius:999px;padding:6px 30px 6px 14px;cursor:pointer;-webkit-appearance:none;appearance:none}
+.st-say{flex:none;font-size:var(--fs-s);color:var(--ink-3);text-align:right}
 /* rows the Reviews tab draws (review/main.ts) */
 .st-cust .st-row{flex-wrap:nowrap}
-.st-v{font-size:16px;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
-.st-step{flex:none;display:inline-flex;align-items:center;background:var(--wash);border-radius:999px;padding:3px}
-.st-step button{width:34px;height:34px;border:0;border-radius:50%;background:none;font-size:20px;line-height:1;color:var(--ink-2);cursor:pointer}
-.st-step button:hover{background:var(--surface)}
-.st-step input{width:3.2ch;border:0;background:none;text-align:center;font-size:17px;font-variant-numeric:tabular-nums;color:var(--ink);outline:none}
+.st-row.st-sub{min-height:0;padding:0 16px 10px;margin-top:-8px;justify-content:flex-end}
+.st-v{font-size:var(--fs-s);color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.st-step{flex:none;display:inline-flex;align-items:center;background:var(--wash);border-radius:999px;padding:2px}
+.st-step button{width:34px;height:34px;border:0;border-radius:50%;background:none;font-size:var(--fs-l);line-height:1;color:var(--ink-2);cursor:pointer}
+.st-step input{width:3.2ch;border:0;background:none;text-align:center;font:inherit;font-size:var(--fs-s);font-variant-numeric:tabular-nums;color:var(--ink);outline:none}
 .st-range{display:flex;align-items:center;gap:10px;flex:none}
-.st-range input{width:clamp(110px,30vw,170px);accent-color:var(--ink)}
-.st-btn{flex:none;border:0;border-radius:999px;background:var(--wash);color:var(--ink);font-size:16px;font-weight:500;padding:8px 16px;cursor:pointer;white-space:nowrap}
-.st-btn:hover{background:var(--wash-2)}
+.st-range input{width:clamp(110px,26vw,170px);accent-color:var(--ink)}
+.st-btn{flex:none;border:0;border-radius:999px;background:var(--wash);font-size:var(--fs-s);font-weight:500;padding:7px 14px;cursor:pointer;white-space:nowrap}
 .st-btn:disabled{opacity:.5;cursor:default}
-.st-msg{font-size:16px;color:var(--red);margin:4px 0 0}
+.st-msg{font-size:var(--fs-s);color:var(--red);margin:0;padding:0 16px 10px}
 .st-msg:empty{display:none}
 /* the shortcut list: the key is the button; pressed, it waits for the new one */
-.st-key{flex:none;display:inline-flex;gap:6px;border:0;background:none;padding:4px;border-radius:10px;cursor:pointer;font-size:16px;color:var(--ink-3)}
-.st-key kbd{font-family:var(--ui);font-size:16px;min-width:32px;padding:4px 9px;border-radius:8px;background:var(--wash);color:var(--ink);box-shadow:inset 0 -1px 0 var(--wash-2)}
-.st-key:hover kbd{background:var(--wash-2)}
+.st-key{flex:none;display:inline-flex;gap:6px;border:0;background:none;padding:3px;border-radius:10px;cursor:pointer;font-size:var(--fs-s);color:var(--ink-3)}
+.st-key kbd{font-family:var(--ui);font-size:var(--fs-s);min-width:30px;padding:3px 9px;border-radius:8px;background:var(--wash);color:var(--ink);box-shadow:inset 0 -1px 0 var(--wash-2);text-align:center}
 .st-key.mine kbd{background:var(--gold-wash);box-shadow:inset 0 -1px 0 var(--gold-edge)}
-.st-key.on{padding:8px 12px;background:var(--ink);color:var(--on-ink);animation:keywait 1.2s ease-in-out infinite}
+.st-key.on{padding:6px 12px;background:var(--ink);color:var(--on-ink);animation:keywait 1.2s ease-in-out infinite}
 @keyframes keywait{50%{opacity:.7}}
+@media (hover:hover) and (pointer:fine){
+  .st-ti:hover:not([aria-current="true"]),.st-reset:hover,.st-x:hover,button.st-row:hover,.st-step button:hover{background:var(--wash);color:var(--ink)}
+  .st-o button:hover:not([aria-checked="true"]){color:var(--ink-2)}
+  .st-sel:hover,.st-btn:hover,.st-key:hover kbd{background:var(--wash-2)}
+}
+
+/* a phone: a sheet from the bottom; the sections a strip under the title; drag the top down to send it away */
+@media (max-width:640px){
+  dialog.st{width:100%;height:92dvh;margin:auto 0 0;border-radius:18px 18px 0 0;box-shadow:0 -8px 40px rgba(21,23,28,.16);opacity:1;transform:translateY(100%);transition:transform .45s cubic-bezier(.32,.72,0,1)}
+  dialog.st[open]{display:flex;flex-direction:column}
+  dialog.st.on{transform:none}
+  dialog.st.out{opacity:1;transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1)}
+  dialog.st.drag{transition:none}
+  .st-main{display:contents}
+  .st-grab{display:block;order:0;flex:none;height:20px;touch-action:none;position:relative}
+  .st-grab::before{content:"";position:absolute;top:7px;left:50%;width:36px;height:5px;margin-left:-18px;border-radius:3px;background:var(--wash-2)}
+  .st-head{order:1;padding:0 8px 8px 16px;touch-action:none}
+  .st-side{order:2;flex:none;padding:0 0 12px;border:0;overflow:visible}
+  .st-side h2{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+  .st-toc{flex-direction:row;overflow-x:auto;scrollbar-width:none;padding:2px 16px;gap:4px}
+  .st-toc::-webkit-scrollbar{display:none}
+  .st-ti{min-height:36px;padding:0 14px;border-radius:999px}
+  .st-ti .st-gl{display:none}
+  .st-body{order:3;padding:0 16px calc(24px + env(safe-area-inset-bottom,0px))}
+  .st-row{padding:6px 10px 6px 14px}
+  .st-grp>*+*::before{left:14px}
+}
+@media (prefers-reduced-motion:reduce){
+  dialog.st,dialog.st.on,dialog.st.out{transform:none;transition:opacity .12s ease}
+  dialog.st:not(.on){opacity:0}
+}
 
 /* ---------- press and hold (kit/hold.ts): the button fills from the left while held ---------- */
 .hold{position:relative;overflow:hidden;isolation:isolate;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;touch-action:manipulation}
@@ -81,9 +142,3 @@ ruby{ruby-position:over;ruby-align:center;margin:0 .08em}
 rt{font-family:var(--ui);font-size:max(.45em,13px);font-weight:450;letter-spacing:0;color:var(--ink-3);opacity:.8;-webkit-text-stroke:0;line-height:1.1}
 .rb-on.rb-on{line-height:2.1}
 .rbw{white-space:nowrap}
-.st-row.st-sub{min-height:0;padding:0 0 6px;justify-content:flex-end;margin:-8px 0 0}
-/* Habit: a dropdown choice (the nudge's time), and the nudge's own row */
-.st-sel{flex:none;font:inherit;font-size:16px;font-weight:500;color:var(--ink);background:var(--wash);border:0;border-radius:999px;padding:8px 14px;cursor:pointer;-webkit-appearance:none;appearance:none;text-align:center}
-.st-sel:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-.st-say{flex:none;font-size:16px;color:var(--ink-3);text-align:right}
-/* (end Habit) */

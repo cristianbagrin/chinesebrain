@@ -271,7 +271,7 @@
   var RUBY = {
     on,
     off,
-    set: (el2, show) => show ? on(el2) : (off(el2), Promise.resolve()),
+    set: (el2, show2) => show2 ? on(el2) : (off(el2), Promise.resolve()),
     html: async (text) => frag(await load(), text),
     shown: () => LAB.get("pinyin") === "on",
     ready: load,
@@ -291,7 +291,9 @@
       ["go.today", "Today", "t"],
       ["go.cards", "Cards", "c"],
       ["go.reviews", "Reviews", "r"],
-      ["go.browse", "Browse", "b"]
+      ["go.browse", "Browse", "b"],
+      // Tutor: the pane from the right, open or away (tutor/main.ts)
+      ["tutor", "Tutor", "a"]
     ]),
     ...D("Reviews", void 0, [
       ["rv.show", "Show answer", "space enter"],
@@ -412,7 +414,8 @@
   LAB.define("tutor-model", "Tutor", M, "sonnet", "AI", A);
   var hm = (v) => `${+v.slice(0, 2) - 12}:${v.slice(3)} pm`;
   LAB.define("nudge", "Evening nudge", [["off", "Off"], ...Array.from({ length: 14 }, (_, i) => `${17 + (i >> 1)}:${i % 2 ? "30" : "00"}`).map((v) => [v, hm(v)])], "21:00", "Habit", A);
-  var ORDER = ["text-size", "pinyin", "autoplay", "card-model", "card-ahead", "pinyin-model", "idea-model", "draw-model", "deeper-model", "test-model", "grade-model", "essay-model", "tutor-model"], GROUPS = ["Everyday", "Reviews", "AI"], token = () => lsGet("cb-token") ?? "", acctIds = () => Object.values(LAB.defs).filter((d) => d.scope === "account").map((d) => d.id), pushT = 0;
+  var ORDER = ["text-size", "pinyin", "autoplay", "card-model", "card-ahead", "pinyin-model", "idea-model", "draw-model", "deeper-model", "test-model", "grade-model", "essay-model", "tutor-model"];
+  var token = () => lsGet("cb-token") ?? "", acctIds = () => Object.values(LAB.defs).filter((d) => d.scope === "account").map((d) => d.id), pushT = 0;
   LAB.push = () => {
     clearTimeout(pushT), pushT = window.setTimeout(() => {
       let values = Object.fromEntries(acctIds().map((id) => [id, LAB.get(id)]));
@@ -438,75 +441,119 @@
       }
       LAB.acct.keys = s.keys ?? {}, KEYS.load(LAB.acct.keys, (keys) => {
         LAB.acct.keys = keys, LAB.saveAcct(), LAB.push();
-      }), LAB.saveAcct(), mine2 && LAB.push(), document.getElementById("settings").hidden || draw();
+      }), LAB.saveAcct(), mine2 && LAB.push(), document.getElementById("settings")?.open && draw();
     } catch {
     }
   })();
-  var btn = document.getElementById("settingsbtn"), box = document.getElementById("settings");
+  var SECS = [
+    { id: "Everyday", label: "Everyday", icon: '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/>' },
+    { id: "Reviews", label: "Reviews", icon: '<rect x="4" y="5" width="13" height="15" rx="2"/><path d="M8 2.8h10a2 2 0 0 1 2 2V17"/>' },
+    { id: "Habit", label: "Habit", icon: '<path d="M4 12.5 9 17.5 20 6.5"/>' },
+    { id: "AI", label: "AI", icon: '<path d="M12 3.5c.6 4.4 4.1 7.9 8.5 8.5-4.4.6-7.9 4.1-8.5 8.5-.6-4.4-4.1-7.9-8.5-8.5 4.4-.6 7.9-4.1 8.5-8.5z"/>' },
+    { id: "Shortcuts", label: "Shortcuts", icon: '<rect x="3" y="6" width="18" height="12" rx="3"/><path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8"/>' }
+  ], glyph = (d) => `<svg class="st-gl" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`, X = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>', btn = document.getElementById("settingsbtn"), dlg = document.createElement("dialog");
+  dlg.id = "settings";
+  dlg.className = "st";
+  dlg.setAttribute("aria-labelledby", "st-title");
+  (document.getElementById("settings") ?? document.body.lastElementChild).replaceWith(dlg);
+  dlg.isConnected || document.body.append(dlg);
   btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>';
-  var page = "main", listening = "", isSwitch = (d) => d.options.length === 2 && d.options[0][0] === "on" && d.options[1][0] === "off", sw = (attr, on2, label) => `<div class="st-row"><span class="st-l">${esc(label)}</span><button type="button" role="switch" class="st-tg" aria-checked="${on2}" aria-label="${esc(label)}" ${attr}><i></i></button></div>`;
+  var sec = "Everyday", listening = "", isSwitch = (d) => d.options.length === 2 && d.options[0][0] === "on" && d.options[1][0] === "off", sw = (attr, on2, label) => `<div class="st-row"><span class="st-l">${esc(label)}</span><button type="button" role="switch" class="st-tg" aria-checked="${on2}" aria-label="${esc(label)}" ${attr}><i></i></button></div>`;
   function row(d) {
     if (isSwitch(d)) return sw(`data-x="${d.id}" data-v="${d.v === "on" ? "off" : "on"}"`, d.v === "on", d.label);
-    if (d.options.length > 6) return `<div class="st-row"><label class="st-l" for="st-${d.id}">${esc(d.label)}</label><select class="st-sel" id="st-${d.id}" data-xs="${d.id}">${d.options.map(([v, l]) => `<option value="${esc(v)}"${d.v === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></div>`;
+    if (d.options.length > 3) return `<div class="st-row"><label class="st-l" for="st-${d.id}">${esc(d.label)}</label><span class="st-selw"><select class="st-sel" id="st-${d.id}" data-xs="${d.id}">${d.options.map(([v, l]) => `<option value="${esc(v)}"${d.v === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></span></div>`;
     let big = d.id === "text-size";
     return `<div class="st-row"><span class="st-l">${esc(d.label)}</span><span class="st-o${big ? " st-sz" : ""}" role="radiogroup" aria-label="${esc(d.label)}">${d.options.map(([v, l]) => `<button type="button" role="radio" aria-checked="${d.v === v}" data-x="${d.id}" data-v="${esc(v)}"${big ? ` aria-label="${esc(l)}"` : ""}>${big ? `<span class="sz-${esc(v)}">Aa <span class="zh">\u4E2D\u6587</span></span>` : esc(l)}</button>`).join("")}</span></div>`;
   }
-  function mainHTML() {
+  function rowsBy() {
     let ids = [...ORDER.filter((id) => LAB.defs[id]), ...LAB.order.filter((id) => !ORDER.includes(id))], by = {};
     for (let id of ids) (by[LAB.defs[id].group] ??= []).push(row(LAB.defs[id]));
-    for (let r of Object.values(LAB.rows)) (by[r.group] ??= []).push(`<div class="st-cust" data-row="${r.id}">${r.html()}</div>`);
-    return by.Everyday?.unshift(sw("data-sound", SND.on, "Sound")), `<div class="st-top"><b>Settings</b><button class="btn-q" type="button" id="st-reset">Reset</button><button class="st-x" type="button" id="st-close" aria-label="Close">\xD7</button></div>
-    ${[...GROUPS, ...Object.keys(by).filter((g) => !GROUPS.includes(g))].filter((g) => by[g]).map((g) => `<section class="st-g"><h3>${esc(g)}</h3>${by[g].join("")}</section>`).join("")}
-    <section class="st-g"><h3>Shortcuts</h3><button type="button" class="st-row st-go" data-page="keys"><span class="st-l">All shortcuts</span><span class="st-k">${esc(KEYS.label("shortcuts"))}</span></button></section>`;
+    for (let r of Object.values(LAB.rows)) {
+      let h = r.html();
+      h && (by[r.group] ??= []).push(`<div class="st-cust" data-row="${r.id}">${h}</div>`);
+    }
+    return (by.Everyday ??= []).unshift(sw("data-sound", SND.on, "Sound")), by;
   }
+  function sections(by) {
+    let extra = Object.keys(by).filter((g) => !SECS.some((s) => s.id === g)).map((g) => ({ id: g, label: g, icon: SECS[0].icon }));
+    return [...SECS.filter((s) => s.id === "Shortcuts" || by[s.id]), ...extra].sort((a, b) => a.id === "Shortcuts" ? 1 : b.id === "Shortcuts" ? -1 : 0);
+  }
+  var changed = (s) => s === "Shortcuts" ? KEYS.defs.some((d) => KEYS.changed(d.id)) : LAB.order.some((id) => LAB.defs[id].group === s && LAB.get(id) !== LAB.defs[id].def);
   function keysHTML() {
     let groups = {};
     for (let d of KEYS.defs) (groups[d.group] ??= []).push(d);
-    return `<div class="st-top"><button type="button" class="btn-q st-back" data-page="main">\u2039 Settings</button><b></b><button class="btn-q" type="button" id="st-kreset">Reset</button><button class="st-x" type="button" id="st-close" aria-label="Close">\xD7</button></div>
-    ${Object.entries(groups).map(
-      ([g, ds]) => `<section class="st-g"><h3>${esc(g)}</h3>${ds.map((d) => `<div class="st-row"><span class="st-l">${esc(d.label)}</span><button type="button" class="st-key${listening === d.id ? " on" : ""}${KEYS.changed(d.id) ? " mine" : ""}" data-key="${d.id}">${listening === d.id ? "Press a key" : KEYS.keys(d.id).map((k) => `<kbd>${esc(KEYS.pretty(k))}</kbd>`).join("") || "\u2014"}</button></div>`).join("")}</section>`
-    ).join("")}`;
+    return Object.entries(groups).map(
+      ([g, ds]) => `<h4 class="st-cap">${esc(g)}</h4><div class="st-grp">${ds.map((d) => `<div class="st-row"><span class="st-l">${esc(d.label)}</span><button type="button" class="st-key${listening === d.id ? " on" : ""}${KEYS.changed(d.id) ? " mine" : ""}" data-key="${d.id}" aria-label="${esc(d.label)}">${listening === d.id ? "Press a key" : KEYS.keys(d.id).map((k) => `<kbd>${esc(KEYS.pretty(k))}</kbd>`).join("") || "\u2014"}</button></div>`).join("")}</div>`
+    ).join("");
   }
   function draw() {
-    let a = document.activeElement, keep = a && box.contains(a) ? a.dataset.x ?? a.dataset.key ?? (a.dataset.sound != null ? "sound" : a.dataset.page ?? "") : "", top = box.scrollTop;
-    if (box.innerHTML = `<div class="st-in" role="dialog" aria-label="Settings">${page === "main" ? mainHTML() : keysHTML()}</div>`, page === "main") for (let r of Object.values(LAB.rows)) r.bind(box.querySelector(`[data-row="${r.id}"]`));
-    box.scrollTop = top, keep && (box.querySelector(`[data-x="${keep}"][aria-checked="true"],[data-x="${keep}"],[data-key="${keep}"],[data-page="${keep}"]`) ?? (keep === "sound" ? box.querySelector("[data-sound]") : null))?.focus({ preventScroll: !0 });
+    let a = document.activeElement, keep = a && dlg.contains(a) ? a.dataset.x ?? a.dataset.key ?? a.dataset.sec ?? a.dataset.xs ?? (a.dataset.sound != null ? "sound" : a.id) : "", top = dlg.querySelector(".st-body")?.scrollTop ?? 0, by = rowsBy(), list = sections(by);
+    list.some((s) => s.id === sec) || (sec = list[0].id);
+    let cur = list.find((s) => s.id === sec);
+    dlg.innerHTML = `<div class="st-grab" aria-hidden="true"></div>
+    <nav class="st-side" aria-label="Sections"><h2 id="st-title">Settings</h2><div class="st-toc">${list.map((s) => `<button type="button" class="st-ti" data-sec="${esc(s.id)}" aria-current="${s.id === sec}">${glyph(s.icon)}<span>${esc(s.label)}</span></button>`).join("")}</div></nav>
+    <div class="st-main">
+      <div class="st-head"><h3>${esc(cur.label)}</h3>${changed(sec) ? '<button type="button" class="st-reset" id="st-reset">Reset</button>' : ""}<button type="button" class="st-x" id="st-close" aria-label="Close">${X}</button></div>
+      <div class="st-body">${sec === "Shortcuts" ? keysHTML() : `<div class="st-grp">${by[sec].join("")}</div>`}</div>
+    </div>`;
+    for (let r of Object.values(LAB.rows)) {
+      let el2 = dlg.querySelector(`[data-row="${r.id}"]`);
+      el2 && r.bind(el2);
+    }
+    let nb = dlg.querySelector(".st-body");
+    if (nb.scrollTop = top, keep) {
+      let q = `[data-x="${keep}"][aria-checked="true"],[data-x="${keep}"],[data-key="${keep}"],[data-sec="${keep}"],[data-xs="${keep}"]`;
+      (dlg.querySelector(q) ?? (keep === "sound" ? dlg.querySelector("[data-sound]") : keep ? dlg.querySelector("#" + CSS.escape(keep)) : null) ?? dlg.querySelector(".st-x"))?.focus({ preventScroll: !0 });
+    }
+    dlg.querySelector('.st-ti[aria-current="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
-  function open(on2, to) {
-    listening = "", on2 && (page = to ?? (box.hidden ? "main" : page)), box.hidden = !on2, btn.setAttribute("aria-expanded", String(on2)), on2 && (draw(), box.scrollTop = 0, (box.querySelector('[aria-checked="true"],.st-key') ?? box.querySelector("button"))?.focus({ preventScroll: !0 }));
+  var REDUCED = matchMedia("(prefers-reduced-motion: reduce)"), closing = 0;
+  function show(to) {
+    listening = "", to === "keys" ? sec = "Shortcuts" : to && to !== "main" && (sec = to), clearTimeout(closing), dlg.classList.remove("out"), dlg.style.transform = "", draw(), dlg.open || (dlg.showModal(), dlg.querySelector(".st-body").scrollTop = 0, requestAnimationFrame(() => dlg.classList.add("on"))), btn.setAttribute("aria-expanded", "true"), (dlg.querySelector('.st-ti[aria-current="true"]') ?? dlg.querySelector("button"))?.focus({ preventScroll: !0 });
+  }
+  function hide() {
+    !dlg.open || dlg.classList.contains("out") || (listening = "", dlg.classList.remove("on"), dlg.classList.add("out"), btn.setAttribute("aria-expanded", "false"), closing = window.setTimeout(() => {
+      dlg.classList.remove("out"), dlg.style.transform = "", dlg.close(), btn.focus({ preventScroll: !0 });
+    }, REDUCED.matches ? 120 : 200));
   }
   btn.onclick = (e) => {
-    e.stopPropagation(), sfx("tap"), open(box.hidden);
+    e.stopPropagation(), sfx("tap"), dlg.open && !dlg.classList.contains("out") ? hide() : show();
   };
-  box.addEventListener("click", (e) => {
-    e.stopPropagation();
-    let t = e.target, b = t.closest("[data-x]");
+  dlg.addEventListener("cancel", (e) => {
+    e.preventDefault(), hide();
+  });
+  dlg.addEventListener("click", (e) => {
+    let t = e.target;
+    if (t === dlg) {
+      let r = dlg.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return hide();
+    }
+    let b = t.closest("[data-x]");
     if (b)
       return LAB.set(b.dataset.x, b.dataset.v), sfx(b.getAttribute("role") === "switch" ? b.dataset.v === "on" ? "stamp-known" : "unstamp" : "tap"), draw();
     if (t.closest("[data-sound]"))
       return document.getElementById("snd").click(), SND.on && setTimeout(() => sfx("stamp-known"), 60), draw();
-    let pg = t.closest("[data-page]");
-    if (pg)
-      return sfx("tap"), page = pg.dataset.page, listening = "", box.scrollTop = 0, draw();
+    let s = t.closest("[data-sec]");
+    if (s)
+      return s.dataset.sec === sec ? void 0 : (sfx("tap"), sec = s.dataset.sec, listening = "", dlg.querySelector(".st-body").scrollTop = 0, draw());
     let k = t.closest("[data-key]");
     if (k)
       return listening = listening === k.dataset.key ? "" : k.dataset.key, sfx("tap"), draw();
-    if (t.id === "st-close") return sfx("tap"), open(!1), btn.focus();
-    if (t.id === "st-reset") {
-      for (let id of LAB.order) LAB.set(id, LAB.defs[id].def);
+    if (t.closest("#st-close")) return sfx("tap"), hide();
+    if (t.closest("#st-reset")) {
+      if (sec === "Shortcuts") KEYS.reset();
+      else for (let id of LAB.order) LAB.defs[id].group === sec && LAB.set(id, LAB.defs[id].def);
       return sfx("swish"), draw();
     }
-    if (t.id === "st-kreset")
-      return KEYS.reset(), sfx("swish"), draw();
   });
-  box.addEventListener("change", (e) => {
+  dlg.addEventListener("change", (e) => {
     let s = e.target.closest("select[data-xs]");
-    s && (LAB.set(s.dataset.xs, s.value), sfx("tap"));
+    s && (LAB.set(s.dataset.xs, s.value), sfx("tap"), draw());
   });
   addEventListener(
     "keydown",
     (e) => {
-      if (!listening || box.hidden || KEYS.isModifier(e)) return;
+      if (!listening || !dlg.open || KEYS.isModifier(e)) return;
       e.preventDefault(), e.stopImmediatePropagation();
       let id = listening;
       listening = "", e.key !== "Escape" && (KEYS.bind(id, KEYS.combo(e)), sfx("stamp")), draw();
@@ -514,15 +561,35 @@
     !0
   );
   document.addEventListener("keydown", (e) => {
+    let up = dlg.open && !dlg.classList.contains("out");
     if (KEYS.is(e, "shortcuts"))
-      return e.preventDefault(), sfx("tap"), open(box.hidden || page !== "keys", "keys");
+      return e.preventDefault(), sfx("tap"), up && sec === "Shortcuts" ? hide() : show("keys");
     if (KEYS.is(e, "settings"))
-      return e.preventDefault(), sfx("tap"), open(box.hidden, "main"), box.hidden && btn.focus();
-    e.key === "Escape" && !box.hidden && (open(!1), btn.focus());
+      return e.preventDefault(), sfx("tap"), up ? hide() : show();
+    let ti = e.target.closest?.(".st-ti");
+    if (up && ti && /^Arrow(Up|Down|Left|Right)$/.test(e.key)) {
+      e.preventDefault();
+      let all = [...dlg.querySelectorAll(".st-ti")], i = all.indexOf(ti) + (/Up|Left/.test(e.key) ? -1 : 1);
+      sec = all[(i + all.length) % all.length].dataset.sec, sfx("tap"), draw(), dlg.querySelector(`[data-sec="${CSS.escape(sec)}"]`)?.focus();
+    }
   });
-  document.addEventListener("pointerdown", (e) => !box.hidden && !box.contains(e.target) && !btn.contains(e.target) && open(!1), !0);
-  BUS.on("lab", () => !box.hidden && page === "main" && draw());
-  var SETTINGS = { open: (to) => open(!0, to), close: () => open(!1), redraw: () => !box.hidden && draw() };
+  BUS.on("lab", () => dlg.open && draw());
+  var PHONE = matchMedia("(max-width: 640px)");
+  dlg.addEventListener("pointerdown", (e) => {
+    if (!PHONE.matches || e.button !== 0 || !e.target.closest(".st-grab,.st-head") || e.target.closest("button")) return;
+    let y0 = e.clientY, h = dlg.offsetHeight, dy = 0, last = { y: y0, t: e.timeStamp }, v = 0;
+    dlg.setPointerCapture(e.pointerId), dlg.classList.add("drag");
+    let move = (m) => {
+      let d = m.clientY - y0;
+      dy = d > 0 ? d : -Math.sqrt(-d) * 2, dlg.style.transform = `translateY(${dy}px)`;
+      let dt = m.timeStamp - last.t;
+      dt > 0 && (v = (m.clientY - last.y) / dt), last = { y: m.clientY, t: m.timeStamp };
+    }, up = () => {
+      dlg.removeEventListener("pointermove", move), dlg.classList.remove("drag"), dy > h / 3 || v > 0.5 ? (dlg.style.transform = "", hide()) : dlg.style.transform = "";
+    };
+    dlg.addEventListener("pointermove", move), dlg.addEventListener("pointerup", up, { once: !0 }), dlg.addEventListener("pointercancel", up, { once: !0 });
+  });
+  var SETTINGS = { open: (to) => show(to), close: () => hide(), redraw: () => dlg.open && draw() };
 
   // site/src/cbp/kit/go.ts
   var TO = [
@@ -599,10 +666,10 @@
         mark2(due, Math.min(until, today));
       }
     }
-    let open2 = /* @__PURE__ */ new Set(), ks = [...diff.keys()].sort((a, b) => a - b), run = 0;
+    let open = /* @__PURE__ */ new Set(), ks = [...diff.keys()].sort((a, b) => a - b), run = 0;
     for (let i = 0; i < ks.length - 1; i++)
-      if (run += diff.get(ks[i]), run > 0) for (let x = ks[i]; x < ks[i + 1]; x++) open2.add(x);
-    return { count, open: open2 };
+      if (run += diff.get(ks[i]), run > 0) for (let x = ks[i]; x < ks[i + 1]; x++) open.add(x);
+    return { count, open };
   }
   function merge(a, b) {
     let x = { ...blank(), cleared: !1, ...a ?? {} }, y = { ...blank(), cleared: !1, ...b ?? {} };
