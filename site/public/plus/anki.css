@@ -76,12 +76,12 @@
 
 /* missed three times: five minutes on it */
 .deeper{max-width:640px;margin:8vh auto 0;text-align:center}
-.dw{font-size:var(--fs-3xl);margin:0;line-height:1.2}
+.dw{font-size:var(--fs-3xl);margin:0;line-height:var(--lh-tight)}
 .dsub{color:var(--ink-3);margin:var(--s2) 0 var(--s5)}
 .dact{display:flex;justify-content:center;flex-wrap:wrap;gap:var(--s2)}
 .dbody{text-align:left}
 .dtimer{text-align:center;font-size:var(--fs-xl);font-variant-numeric:tabular-nums;color:var(--ink-3);margin-bottom:var(--s4)}
-.dtext{font-family:var(--zh);font-size:var(--fs-l);line-height:1.75;margin-bottom:var(--s5)}
+.dtext{font-family:var(--zh);font-size:var(--fs-l);line-height:var(--lh-zh);margin-bottom:var(--s5)}
 .dnote{min-height:88px;border-radius:var(--r);background:var(--surface);box-shadow:inset 0 0 0 1px var(--hair);padding:var(--s3) var(--s4);font-family:var(--zh);font-size:var(--fs-l);margin-bottom:var(--s4);outline:0}
 .dnote:focus{box-shadow:inset 0 0 0 1.5px var(--ink-2)}
 .dnote:empty::before{content:attr(data-ph);color:var(--ink-4);font-family:var(--latin);font-size:var(--fs-m)}
@@ -90,7 +90,7 @@
 .ed{display:flex;flex-direction:column;gap:var(--s4)}
 .ef{display:flex;flex-direction:column;gap:6px}
 .ef>span{font-size:var(--fs-s);color:var(--ink-3)}
-.fv{min-height:46px;border-radius:12px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--hair);padding:10px 14px;font-size:var(--fs-m);line-height:1.5;outline:0;overflow-wrap:anywhere;transition:box-shadow .15s}
+.fv{min-height:46px;border-radius:12px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--hair);padding:10px 14px;font-size:var(--fs-m);line-height:var(--lh);outline:0;overflow-wrap:anywhere;transition:box-shadow .15s}
 .fv.zh{font-family:var(--zh);font-size:var(--fs-l)}
 .fv:focus{box-shadow:inset 0 0 0 1.5px var(--ink-2)}
 .fv.busy{animation:rx-pulse 1s ease-in-out infinite alternate}
@@ -184,7 +184,7 @@
 .br-side .fv{background:var(--bg)}
 .br-side .fv img{max-height:110px;max-width:calc(50% - 6px);margin:2px}
 .sd-top{display:flex;align-items:center;justify-content:space-between;gap:var(--s2)}
-.sd-w{font-size:var(--fs-2xl);line-height:1.2}
+.sd-w{font-size:var(--fs-2xl);line-height:var(--lh-tight)}
 .sd-sub{display:flex;flex-wrap:wrap;gap:4px var(--s4);margin:var(--s1) 0 var(--s4);font-size:var(--fs-s);color:var(--ink-3)}
 .sd-st{color:var(--ink-2)}
 .sd-face{border-radius:14px;background:var(--bg);padding:var(--s2) var(--s3) var(--s3);margin-bottom:var(--s4)}
@@ -257,3 +257,7 @@
   .bar-in>#tabs button{flex:none}
   .bar-in>.bar-r{flex:none}
 }
+
+/* text rhythm (base.css tokens): paragraph gap larger than the line gap */
+.br-none p+p,.deeper p+p{margin-top:var(--para)}
+.rw-later{line-height:var(--lh-snug)}
