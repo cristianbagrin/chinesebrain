@@ -1369,7 +1369,10 @@ async function paintSel() {
   const side = $('.br-side', app);
   const row = rows.length === 1 ? rows[0] : null;
   // a word's panel shows one of its cards at a time (the one he picks; first, the row's own)
-  const sib = row && !perCard() ? cardsOf(row.nid).filter((c) => typeOf(S.notes.get(c.nid)!)) : [];
+  // every card of the word, across its notes (a word with a second card has two notes)
+  const rowWord = row ? wordOfCard(row) : '';
+  const sibNids = !row || perCard() ? [] : rowWord ? [...S.notes.values()].filter((n) => wordOfNote(n) === rowWord).map((n) => n.id).sort((a, b) => a - b) : [row.nid];
+  const sib = sibNids.flatMap((nid) => cardsOf(nid)).filter((c) => typeOf(S.notes.get(c.nid)!));
   const focus = row && BR.pick && sib.some((c) => c.id === BR.pick) ? S.cards.get(BR.pick)! : row;
   if (!focus) {
     if (!side.hidden) await closeSide();
@@ -1400,7 +1403,7 @@ async function paintSel() {
   ).filter(([, v]) => v);
   side.innerHTML = `<div class="sd-top"><span class="sd-w zh">${esc(x.word)}</span><button type="button" class="dlg-x" aria-label="Close">${XICON}</button></div>
     <p class="sd-sub"><span class="sd-st st-${x.state}"><i class="sdot"></i>${STATE_NAME[x.state]}</span>${sib.length > 1 ? '' : `<span>${esc(x.tmpl)}</span>`}</p>
-    ${sib.length > 1 ? `<div class="sd-seg sd-cards" role="radiogroup" aria-label="Card">${sib.map((c) => `<button type="button" role="radio" data-pc="${c.id}" aria-checked="${c.id === focus.id}">${esc(typeOf(note)?.templates.find((t) => t.ord === c.ord)?.name ?? '')}</button>`).join('')}</div>` : ''}
+    ${sib.length > 1 ? `<div class="sd-seg sd-cards" role="radiogroup" aria-label="Card">${sib.map((c) => `<button type="button" role="radio" data-pc="${c.id}" aria-checked="${c.id === focus.id}">${esc(typeOf(S.notes.get(c.nid)!)?.templates.find((t) => t.ord === c.ord)?.name ?? '')}${sibNids.length > 1 ? ` ${sibNids.indexOf(c.nid) + 1}` : ''}</button>`).join('')}</div>` : ''}
     <div class="sd-face"><div class="sd-seg" role="radiogroup" aria-label="Side"><button type="button" role="radio" data-face="q" aria-checked="${BR.face === 'q'}">Front</button><button type="button" role="radio" data-face="a" aria-checked="${BR.face === 'a'}">Back</button></div><div class="host sd-host"></div></div>
     <dl class="sd-facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
     <div class="sd-act"><button type="button" class="btn-q" data-s="susp">${focus.queue === -1 ? 'Unsuspend' : 'Suspend'}</button><button type="button" class="btn-q${f === 1 ? ' on' : ''}" data-s="red"><i class="fd fd1"></i>Red</button><button type="button" class="btn-q${f === 3 ? ' on' : ''}" data-s="green"><i class="fd fd3"></i>Green</button></div>

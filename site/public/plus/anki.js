@@ -535,12 +535,12 @@
   function byWord(items2) {
     let by = /* @__PURE__ */ new Map();
     for (let x of items2) {
-      let l = by.get(x.note.id);
-      l ? l.push(x) : by.set(x.note.id, [x]);
+      let k = x.word ? "w:" + x.word : "n:" + x.note.id, l = by.get(k);
+      l ? l.push(x) : by.set(k, [x]);
     }
     let min = (xs) => xs.reduce((a, b) => b == null ? a : a == null ? b : Math.min(a, b), null), out = [];
     for (let l of by.values()) {
-      if (l.sort((a, b) => a.card.ord - b.card.ord), l.length === 1) {
+      if (l.sort((a, b) => a.note.id - b.note.id || a.card.ord - b.card.ord), l.length === 1) {
         out.push({ ...l[0], cards: l });
         continue;
       }
@@ -1586,7 +1586,7 @@ ${p.word} is too easy for him now. Write a harder card for it. word: ${p.word} (
       let anySusp = sel.some((c) => c.queue === -1);
       bulk.innerHTML = `<span class="bk-n">${rows.length} ${perCard() ? "cards" : "words"}</span><button type="button" class="btn-q" data-b="${anySusp ? "unsusp" : "susp"}">${anySusp ? "Unsuspend" : "Suspend"}</button><button type="button" class="btn-q" data-b="red"><i class="fd fd1"></i>Red</button><button type="button" class="btn-q" data-b="green"><i class="fd fd3"></i>Green</button><button type="button" class="btn-q bk-del" data-b="del">Delete</button><button type="button" class="dlg-x" data-b="none" aria-label="Clear selection">${XICON}</button>`, bulk.querySelectorAll("[data-b]").forEach((b) => b.onclick = () => bulkAct(b.dataset.b, sel));
     }
-    let side = $(".br-side", app), row = rows.length === 1 ? rows[0] : null, sib = row && !perCard() ? cardsOf(row.nid).filter((c) => typeOf(S.notes.get(c.nid))) : [], focus = row && BR.pick && sib.some((c) => c.id === BR.pick) ? S.cards.get(BR.pick) : row;
+    let side = $(".br-side", app), row = rows.length === 1 ? rows[0] : null, rowWord = row ? wordOfCard(row) : "", sibNids = !row || perCard() ? [] : rowWord ? [...S.notes.values()].filter((n) => wordOfNote(n) === rowWord).map((n) => n.id).sort((a, b) => a - b) : [row.nid], sib = sibNids.flatMap((nid) => cardsOf(nid)).filter((c) => typeOf(S.notes.get(c.nid))), focus = row && BR.pick && sib.some((c) => c.id === BR.pick) ? S.cards.get(BR.pick) : row;
     if (!focus) {
       side.hidden || await closeSide();
       return;
@@ -1607,7 +1607,7 @@ ${p.word} is too easy for him now. Write a harder card for it. word: ${p.word} (
     ].filter(([, v]) => v);
     side.innerHTML = `<div class="sd-top"><span class="sd-w zh">${esc2(x.word)}</span><button type="button" class="dlg-x" aria-label="Close">${XICON}</button></div>
     <p class="sd-sub"><span class="sd-st st-${x.state}"><i class="sdot"></i>${STATE_NAME[x.state]}</span>${sib.length > 1 ? "" : `<span>${esc2(x.tmpl)}</span>`}</p>
-    ${sib.length > 1 ? `<div class="sd-seg sd-cards" role="radiogroup" aria-label="Card">${sib.map((c) => `<button type="button" role="radio" data-pc="${c.id}" aria-checked="${c.id === focus.id}">${esc2(typeOf(note)?.templates.find((t) => t.ord === c.ord)?.name ?? "")}</button>`).join("")}</div>` : ""}
+    ${sib.length > 1 ? `<div class="sd-seg sd-cards" role="radiogroup" aria-label="Card">${sib.map((c) => `<button type="button" role="radio" data-pc="${c.id}" aria-checked="${c.id === focus.id}">${esc2(typeOf(S.notes.get(c.nid))?.templates.find((t) => t.ord === c.ord)?.name ?? "")}${sibNids.length > 1 ? ` ${sibNids.indexOf(c.nid) + 1}` : ""}</button>`).join("")}</div>` : ""}
     <div class="sd-face"><div class="sd-seg" role="radiogroup" aria-label="Side"><button type="button" role="radio" data-face="q" aria-checked="${BR.face === "q"}">Front</button><button type="button" role="radio" data-face="a" aria-checked="${BR.face === "a"}">Back</button></div><div class="host sd-host"></div></div>
     <dl class="sd-facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>
     <div class="sd-act"><button type="button" class="btn-q" data-s="susp">${focus.queue === -1 ? "Unsuspend" : "Suspend"}</button><button type="button" class="btn-q${f === 1 ? " on" : ""}" data-s="red"><i class="fd fd1"></i>Red</button><button type="button" class="btn-q${f === 3 ? " on" : ""}" data-s="green"><i class="fd fd3"></i>Green</button></div>

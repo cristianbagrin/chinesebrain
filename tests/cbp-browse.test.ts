@@ -212,3 +212,13 @@ test('ease: too easy and too hard filter cards; hard wins in a word\'s row', () 
   assert.equal(byWord(judged).find((x) => x.note.id === n3)!.ease, 'hard');
   assert.equal(active({ ...blank(), ease: ['easy'] }), 1);
 });
+
+test('a word with two notes (a second card for it) is still one row', () => {
+  const all = apply(ITEMS, blank(), ck);
+  const [a, b] = [all.find((x) => x.note.id === n3)!, all.find((x) => x.note.id !== n3)!];
+  const twin = all.filter((x) => x.note.id === b.note.id).map((x) => ({ ...x, word: a.word }));
+  const rows = byWord([...all.filter((x) => x.note.id !== b.note.id), ...twin]);
+  const r = rows.filter((x) => x.word === a.word);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].n, all.filter((x) => x.note.id === n3).length + twin.length);
+});

@@ -284,16 +284,19 @@ export function sortBy(items: Item[], by: Sort, desc: boolean): Item[] {
  *  (soonest due, shortest interval, lowest recall, most lapses), so a sort or a glance finds the word that needs him.
  *  Hard wins over easy; red over green. */
 export function byWord(items: Item[]): Item[] {
-  const by = new Map<number, Item[]>();
+  // one row per word, even when a word has more than one note (a second card for it, Cards page "2"); a note with no
+  // word keeps a row of its own
+  const by = new Map<string, Item[]>();
   for (const x of items) {
-    const l = by.get(x.note.id);
+    const k = x.word ? 'w:' + x.word : 'n:' + x.note.id;
+    const l = by.get(k);
     if (l) l.push(x);
-    else by.set(x.note.id, [x]);
+    else by.set(k, [x]);
   }
   const min = (xs: (number | null)[]) => xs.reduce<number | null>((a, b) => (b == null ? a : a == null ? b : Math.min(a, b)), null);
   const out: Item[] = [];
   for (const l of by.values()) {
-    l.sort((a, b) => a.card.ord - b.card.ord);
+    l.sort((a, b) => a.note.id - b.note.id || a.card.ord - b.card.ord);
     if (l.length === 1) {
       out.push({ ...l[0], cards: l });
       continue;
