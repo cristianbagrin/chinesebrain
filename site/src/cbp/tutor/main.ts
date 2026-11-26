@@ -2,7 +2,8 @@
 // "the pane" below). plus.js loads this before the board's boot.js. A scene that needs this week's words, he answers first, the tutor challenges after
 // (src/cbp/tutor.ts on the server). Any ⟦word⟧ the tutor gives, or any Chinese he selects in the chat, becomes a
 // card with one tap: the Cards page's card maker opens on it. Conversations are kept in the database (`tutor`).
-declare const KEYS: { is(e: KeyboardEvent, id: string): boolean };
+declare const KEYS: { is(e: KeyboardEvent, id: string): boolean; free(e: KeyboardEvent): boolean };
+declare const SETTINGS: { close(now?: boolean): void };
 declare function setView(v: string, first?: boolean): void;
 declare function openCard(word: string, src: string, opt?: Record<string, unknown>): void;
 declare function sfx(k: string): void;
@@ -33,7 +34,7 @@ async function api(path: string, body?: unknown) {
 /* Laptop: the bottom-right corner is a hot corner. The pointer there shows a small round button; a click slides the
    Tutor in from the right, over the page (the page stays usable). A click elsewhere sends it away, unless it's pinned.
    Phone: a swipe left from the right edge pulls it in, full height. Either way a swipe right (finger, mouse drag on its
-   top bar, or two fingers on a trackpad), Escape or × sends it away, and the KEYS 'tutor' shortcut toggles it. Hidden,
+   top bar, or two fingers on a trackpad), Escape or × sends it away, and the KEYS 'page.tutor' shortcut (Shift+A) toggles it. Hidden,
    it keeps everything: the conversation, the mode, what he was typing. */
 const PANE = document.createElement('aside');
 PANE.className = 'tu-pane';
@@ -177,12 +178,12 @@ document.addEventListener('keydown', (e) => {
     closePane();
   }
 });
-// the shortcut (KEYS 'tutor'), like the go-to keys: not while typing elsewhere, not over a dialog, not for a key a page used
+// the shortcut (KEYS 'page.tutor', Shift+A), like the page keys (kit/go.ts): not while typing (its own box included), not
+// over a dialog other than Settings (which closes for it), not for a key a page used
 addEventListener('keydown', (e) => {
-  if (e.defaultPrevented || e.isComposing || e.repeat || !KEYS.is(e, 'tutor')) return;
-  const t = e.target instanceof Element ? e.target : null;
-  if (t?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])') || document.querySelector('dialog[open]')) return;
+  if (!KEYS.is(e, 'page.tutor') || !KEYS.free(e)) return;
   e.preventDefault();
+  SETTINGS.close(true);
   toggle();
 });
 
@@ -322,8 +323,23 @@ function rich(t: string) {
     .map((l) => `<p>${l}</p>`)
     .join('');
 }
+/* Nothing said yet (Ask before his question, a scene while its first lines come): no big empty page, the composer sits in
+   the middle with the Scene/Ask switch over it; with the first line they go to their places (the switch to the top bar,
+   the composer to the foot), the composer sliding there. */
+const MODE = $('.tu-mode', PANE), TOP = $('.tu-top', PANE), DOCK = $('.tu-dock', PANE);
+function blank(on: boolean) {
+  if (PANE.classList.contains('blank') === on) return;
+  const y0 = FORM.getBoundingClientRect().top;
+  PANE.classList.toggle('blank', on);
+  if (on) DOCK.prepend(MODE);
+  else TOP.prepend(MODE);
+  const dy = y0 - FORM.getBoundingClientRect().top;
+  if (!dy || REDUCED.matches || !isOpen()) return;
+  FORM.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], { duration: 450, easing: 'cubic-bezier(.32,.72,0,1)' });
+}
 function paint() {
   const msgs = talk?.msgs ?? [];
+  blank(!msgs.length);
   LOG.innerHTML = msgs.map((m) => `<div class="tu-m ${m.role === 'user' ? 'me' : 'them'}">${m.role === 'user' ? `<p class="zh pen">${esc(m.content).replace(/\n/g, '<br>')}</p>` : rich(m.content)}</div>`).join('') + (busy ? '<div class="tu-m them tu-wait"><p>…</p></div>' : '');
   // Settings › Pinyin shown: the pinyin above the characters (kit/ruby.ts)
   if (RUBY.shown()) LOG.querySelectorAll('.tu-m.them').forEach((m) => void RUBY.on(m));

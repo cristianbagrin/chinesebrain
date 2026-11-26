@@ -27,7 +27,7 @@ declare const KEYS: { is(e: KeyboardEvent, id: string): boolean; label(id: strin
 declare const RUBY: { set(el: Element | ShadowRoot | null | undefined, on: boolean): Promise<void>; shown(): boolean; CSS: string };
 import type { EDITOR as EDITOR_ } from '../kit/editor.ts';
 declare const EDITOR: typeof EDITOR_;
-declare const SETTINGS: { open(to?: string): void; close(): void; redraw(): void };
+declare const SETTINGS: { open(to?: string): void; close(): void; redraw(): void; page(title: string, render: (host: HTMLElement) => void, leave?: () => void): void };
 declare const FUN: { celebrate(kind: string, o?: { x?: number; y?: number }): void } | undefined;
 // the Cards page's (board/js/cards.js), for a combined card
 declare const CD: { docs: Record<string, { dropped?: unknown; carded?: unknown } | undefined> } | undefined;
@@ -1580,9 +1580,13 @@ LAB.row('rv-designs', 'Reviews', {
     if (b)
       b.onclick = () => {
         sfx('tap');
-        SETTINGS.close();
-        setView('reviews');
-        go('designs');
+        // Polish: Card designs open inside the Settings window, as a page of its own with a way back (kit/settings.ts)
+        SETTINGS.page(
+          'Card designs',
+          (host) => ((TY_HOST = host), showDesigns()),
+          () => (TY_HOST = null),
+        );
+        // (end Polish)
       };
   },
 });
@@ -1646,14 +1650,22 @@ async function tune(now = false) {
 // ================= Card designs: fields, card types, styling =================
 let TY = { id: 0, tab: 'fields' as 'fields' | 'cards' | 'css', tmpl: 0, side: 'qfmt' as 'qfmt' | 'afmt' };
 const USED = ['Chinese', 'Chinese phrases', 'Chinese radicals'];
+// Polish: where Card designs draw: inside Settings (SETTINGS.page) when it's open there, else the tab's own page
+let TY_HOST: HTMLElement | null = null;
+const RX_APP = app;
+// (end Polish)
 function showDesigns() {
+  // Polish
+  const app = TY_HOST?.isConnected ? TY_HOST : RX_APP;
+  // (end Polish)
   const types = [...S.types.values()].filter((t) => USED.includes(t.name) || [...S.notes.values()].some((n) => n.mid === t.id));
   if (!S.types.has(TY.id)) TY.id = col().notetype;
   const t = S.types.get(TY.id)!;
-  app.innerHTML = `<section class="ty"><div class="ty-top"><button type="button" class="btn-q ty-back" aria-label="Back to settings">‹ Settings</button>
+  app.innerHTML = `<section class="ty"><div class="ty-top">${app === RX_APP ? '<button type="button" class="btn-q ty-back" aria-label="Back to settings">‹ Settings</button>' : ''}
     <div class="br-f" role="radiogroup" aria-label="Note type">${types.map((x) => `<button type="button" role="radio" data-ty="${x.id}" aria-checked="${x.id === t.id}">${esc(x.name.replace(/^Chinese /, '').replace(/^Chinese$/, 'Words'))}</button>`).join('')}</div>
     <div class="br-f" role="radiogroup" aria-label="Part">${(['fields', 'cards', 'css'] as const).map((k) => `<button type="button" role="radio" data-tab="${k}" aria-checked="${TY.tab === k}">${k === 'fields' ? 'Fields' : k === 'cards' ? 'Front and back' : 'Styling'}</button>`).join('')}</div></div><div class="ty-body"></div></section>`;
-  $('.ty-back', app).onclick = () => (go('review'), SETTINGS.open());
+  const tb = app.querySelector<HTMLElement>('.ty-back');
+  if (tb) tb.onclick = () => (go('review'), SETTINGS.open());
   app.querySelectorAll<HTMLElement>('[data-ty]').forEach((b) => (b.onclick = () => ((TY.id = Number(b.dataset.ty)), (TY.tmpl = 0), showDesigns())));
   app.querySelectorAll<HTMLElement>('[data-tab]').forEach((b) => (b.onclick = () => ((TY.tab = b.dataset.tab as typeof TY.tab), showDesigns())));
   const body = $('.ty-body', app);
@@ -1734,6 +1746,13 @@ async function addField(t: NoteType) {
 addEventListener(
   'keydown',
   (e) => {
+    // Polish: Card designs inside Settings (any page): Cmd+Z / Shift+Cmd+Z are theirs there
+    if (TY_HOST?.isConnected && !e.isComposing && (KEYS.is(e, 'undo') || KEYS.is(e, 'redo')) && !(e.target as HTMLElement).closest?.('input, textarea, select, [contenteditable="true"]')) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return void (KEYS.is(e, 'redo') ? redo() : undo()).then(() => TY_HOST?.isConnected && showDesigns());
+    }
+    // (end Polish)
     if (VIEW !== 'reviews' || e.isComposing) return;
     const t = e.target as HTMLElement;
     const typing = !!t.closest?.('input, textarea, select, [contenteditable="true"]');

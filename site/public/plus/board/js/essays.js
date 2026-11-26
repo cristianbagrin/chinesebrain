@@ -91,14 +91,20 @@ function ES_segHTML(s){
   return `<span class="es-c ${s.t}" data-k="${s.id}" data-i="${s.i}"><s class="x-out">${mix(s.mine)}</s><span class="es-n" tabindex="0" role="button" style="${ES_messy(s.id)}">${ES_hlHTML(s)}</span></span>`;
 }
 // editing shows his own words; the spots Claude corrected keep a faint mark until he changes them
+// a past day open to edit: one block per paragraph, as Today's box (write.js PARA_*), the corrected spots still marked
+// (a mark that runs over a paragraph's end isn't shown while he edits)
 function ES_editHTML(e){
-  const text=norm(e.text), rv=ES.reviews[e.day];
-  let h='',pos=0;
-  ES_anchor(text,rv&&rv.marks).forEach(m=>{
-    if(m.i<pos||m.t==='good'||!m.nat) return;
-    h+=esc(text.slice(pos,m.i))+`<span class="es-was ${m.t}" data-mine="${esc(m.mine)}" style="${ES_messy(e.day+'-'+m.k)}">${esc(m.mine)}</span>`; pos=m.j;
-  });
-  return h+esc(text.slice(pos));
+  const text=norm(e.text), rv=ES.reviews[e.day], ms=[];
+  let pos=0;
+  ES_anchor(text,rv&&rv.marks).forEach(m=>{if(m.i<pos||m.t==='good'||!m.nat)return;ms.push(m);pos=m.j;});
+  let off=0;
+  return text?text.split('\n').map(l=>{
+    const a=off,b=a+l.length; off=b+1;
+    let h='',p=a;
+    for(const m of ms){if(m.i<a||m.j>b)continue;h+=esc(text.slice(p,m.i))+`<span class="es-was ${m.t}" data-mine="${esc(m.mine)}" style="${ES_messy(e.day+'-'+m.k)}">${esc(m.mine)}</span>`;p=m.j;}
+    h+=esc(text.slice(p,b));
+    return `<div>${h||'<br>'}</div>`;
+  }).join(''):'';
 }
 
 /* weeks: "Week N" (Week 1 = the Mon–Sun week of DAY 1) and seven dots, Monday to Sunday; green = a written day,
@@ -518,11 +524,11 @@ function ES_startEdit(day,offset){
   if(!e||!box) return;
   ES.editDay=day; ES.editBefore=e.text||'';
   box.innerHTML=ES_editHTML(e);
-  editable(box); box.spellcheck=false;
+  PARA_attach(box); box.spellcheck=false;
   box.setAttribute('role','textbox'); box.setAttribute('aria-multiline','true'); box.setAttribute('aria-label','Day '+day);
   art.classList.add('editing');
   box.focus({preventScroll:true});
-  placeCaret(box,offset==null?null:Math.max(0,Math.min(offset,norm(e.text).length)));
+  PARA_caret(box,offset==null?null:Math.max(0,Math.min(offset,norm(e.text).length)));
 }
 function ES_stopEdit(){
   const day=ES.editDay; if(day==null) return;
@@ -540,10 +546,9 @@ function ES_stopEdit(){
 ES_D.addEventListener('input',ev=>{
   const box=ev.target.closest&&ev.target.closest('.es-text'); if(!box||+box.dataset.day!==ES.editDay) return;
   const e=ES.essays.find(x=>x.day===ES.editDay); if(!e) return;
-  if(!getText(box)&&box.innerHTML) box.innerHTML='';
   // a corrected spot he has rewritten loses its mark (the correction drops when he leaves)
   box.querySelectorAll('.es-was').forEach(s=>s.classList.toggle('gone',s.textContent!==s.dataset.mine));
-  scheduleSave(e.day,e.date,getText(box));
+  scheduleSave(e.day,e.date,PARA_text(box));
 });
 ES_D.addEventListener('focusout',ev=>{
   const box=ev.target.closest&&ev.target.closest('.es-text'); if(!box||+box.dataset.day!==ES.editDay) return;

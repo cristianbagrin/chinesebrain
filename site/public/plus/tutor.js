@@ -118,7 +118,7 @@
     (PANE.contains(a) || !a || a === document.body) && (e.preventDefault(), closePane());
   });
   addEventListener("keydown", (e) => {
-    e.defaultPrevented || e.isComposing || e.repeat || !KEYS.is(e, "tutor") || (e.target instanceof Element ? e.target : null)?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])') || document.querySelector("dialog[open]") || (e.preventDefault(), toggle());
+    !KEYS.is(e, "page.tutor") || !KEYS.free(e) || (e.preventDefault(), SETTINGS.close(!0), toggle());
   });
   var REDUCED = matchMedia("(prefers-reduced-motion: reduce)"), swiping = !1, paneW = () => PANE.offsetWidth + 24;
   function at(x) {
@@ -203,9 +203,17 @@
       }).join("")
     ).map((l) => `<p>${l}</p>`).join("");
   }
+  var MODE = $(".tu-mode", PANE), TOP = $(".tu-top", PANE), DOCK = $(".tu-dock", PANE);
+  function blank(on) {
+    if (PANE.classList.contains("blank") === on) return;
+    let y0 = FORM.getBoundingClientRect().top;
+    PANE.classList.toggle("blank", on), on ? DOCK.prepend(MODE) : TOP.prepend(MODE);
+    let dy = y0 - FORM.getBoundingClientRect().top;
+    !dy || REDUCED.matches || !isOpen() || FORM.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], { duration: 450, easing: "cubic-bezier(.32,.72,0,1)" });
+  }
   function paint() {
     let msgs = talk?.msgs ?? [];
-    LOG.innerHTML = msgs.map((m) => `<div class="tu-m ${m.role === "user" ? "me" : "them"}">${m.role === "user" ? `<p class="zh pen">${esc(m.content).replace(/\n/g, "<br>")}</p>` : rich(m.content)}</div>`).join("") + (busy ? '<div class="tu-m them tu-wait"><p>\u2026</p></div>' : ""), RUBY.shown() && LOG.querySelectorAll(".tu-m.them").forEach((m) => void RUBY.on(m)), SCROLL.scrollTo({ top: SCROLL.scrollHeight, behavior: REDUCED.matches ? "auto" : "smooth" }), BOX.disabled = busy || !talk, FORM.classList.toggle("off", busy || !talk);
+    blank(!msgs.length), LOG.innerHTML = msgs.map((m) => `<div class="tu-m ${m.role === "user" ? "me" : "them"}">${m.role === "user" ? `<p class="zh pen">${esc(m.content).replace(/\n/g, "<br>")}</p>` : rich(m.content)}</div>`).join("") + (busy ? '<div class="tu-m them tu-wait"><p>\u2026</p></div>' : ""), RUBY.shown() && LOG.querySelectorAll(".tu-m.them").forEach((m) => void RUBY.on(m)), SCROLL.scrollTo({ top: SCROLL.scrollHeight, behavior: REDUCED.matches ? "auto" : "smooth" }), BOX.disabled = busy || !talk, FORM.classList.toggle("off", busy || !talk);
   }
   async function save() {
     talk && await api("db", { col: "tutor", id: talk.id, op: "set", data: talk }).catch(() => null);
