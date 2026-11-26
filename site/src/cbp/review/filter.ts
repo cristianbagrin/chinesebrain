@@ -1,4 +1,4 @@
-// Browse's index and filters: one row per card, everything a filter or a column asks worked out once per change of the
+// Browse's index and filters: one item per card (byWord makes them one row per word, as Browse shows them), everything a filter or a column asks worked out once per change of the
 // collection (index), so typing and clicking chips only walk a flat list (apply). Pure: the tests feed it hand-made
 // collections (tests/cbp-browse.test.ts).
 //
@@ -15,6 +15,7 @@ import type { Card, Clock } from '../sched.ts';
 import { Fsrs } from '../fsrs.ts';
 import { search, strip, wordOf, sortText, fieldIndex, type Row } from './render.ts';
 import type { Note, NoteType } from './store.ts';
+import type { Ease, Verdict } from './triage.ts';
 
 export type State = 'new' | 'learning' | 'young' | 'mature' | 'suspended' | 'buried';
 export const STATES: State[] = ['new', 'learning', 'young', 'mature', 'suspended', 'buried'];
@@ -44,6 +45,12 @@ export type Item = Row & {
   /** 0 none, 1 red, 2 orange, 3 green, … */
   flag: number;
   leech: boolean;
+  /** too easy or too hard (triage.ts), null when neither */
+  ease: Ease | null;
+  /** how many cards this row stands for (1 for a card; a word's row: those of its cards that match) */
+  n: number;
+  /** a word's row: its cards that match, in card order */
+  cards?: Item[];
   /** right uses in situations (test day, essay, tutor chat), for a word he is still learning; null otherwise */
   uses: number | null;
   /** search text: Chinese (word, sentence, notes), pinyin without tones or spaces, Latin text lowercased */
@@ -80,7 +87,7 @@ export function dueOf(c: Card, ck: Clock): number | null {
 
 /** Every card of a note that exists, with what Browse shows and filters on. `uses` is the board's word → situations
  *  (STATE.uses: words still learning only). `w` is the deck's FSRS weights. */
-export function index(cards: Iterable<Card>, noteOf: (nid: number) => Note | undefined, typeOf: (n: Note) => NoteType | undefined, ck: Clock, w: number[], uses: Record<string, number> = {}): Item[] {
+export function index(cards: Iterable<Card>, noteOf: (nid: number) => Note | undefined, typeOf: (n: Note) => NoteType | undefined, ck: Clock, w: number[], uses: Record<string, number> = {}, judge?: (c: Card, n: Note) => Verdict): Item[] {
   const f = new Fsrs(w);
   const out: Item[] = [];
   for (const card of cards) {
@@ -120,6 +127,8 @@ export function index(cards: Iterable<Card>, noteOf: (nid: number) => Note | und
       audio: /\[sound:/i.test(all),
       flag: card.flags & 7,
       leech: note.tags.some((t) => /^leech$/i.test(t)),
+      ease: judge?.(card, note)?.ease ?? null,
+      n: 1,
       uses: Object.prototype.hasOwnProperty.call(uses, word) ? uses[word] : null,
       zh: [word, fld('Chinese'), fld('Mnemonic'), fld('Notes')].map(strip).join('\n'),
       py: toneless(fld('Pinyin')),
@@ -145,6 +154,8 @@ export type Filters = {
   /** flags, any of these: 0 none, 1 red, 3 green */
   flag: number[];
   leech: boolean;
+  /** too easy, too hard: any of these */
+  ease: Ease[];
   pic: '' | 'yes' | 'no';
   audio: '' | 'yes' | 'no';
   /** right uses so far, any of these (0, 1, 2) */
@@ -160,7 +171,7 @@ export type Filters = {
   /** reviewed within the last N days (1 = today), or never */
   rev: number | 'never' | null;
 };
-export const EMPTY: Filters = { q: '', state: [], due: '', dueR: [null, null], card: [], flag: [], leech: false, pic: '', audio: '', uses: [], ivl: [null, null], s: [null, null], d: [null, null], r: [null, null], lapses: [null, null], added: null, rev: null };
+export const EMPTY: Filters = { q: '', state: [], due: '', dueR: [null, null], card: [], flag: [], leech: false, ease: [], pic: '', audio: '', uses: [], ivl: [null, null], s: [null, null], d: [null, null], r: [null, null], lapses: [null, null], added: null, rev: null };
 export const blank = (): Filters => JSON.parse(JSON.stringify(EMPTY));
 
 const open = (r: Range) => r[0] == null && r[1] == null;
@@ -173,6 +184,7 @@ export function active(f: Filters) {
   if (f.due) n++;
   if (f.card.length) n++;
   if (f.flag.length || f.leech) n++;
+  if (f.ease.length) n++;
   if (f.pic || f.audio) n++;
   if (f.uses.length) n++;
   for (const r of [f.ivl, f.s, f.d, f.r, f.lapses]) if (!open(r)) n++;
@@ -213,6 +225,7 @@ export function apply(items: Item[], f: Filters, ck: Clock): Item[] {
   const cards = f.card.length ? new Set(f.card) : null;
   const flags = f.flag.length ? new Set(f.flag) : null;
   const uses = f.uses.length ? new Set(f.uses) : null;
+  const ease = f.ease?.length ? new Set(f.ease) : null;
   const due: Range | null = f.due === 'overdue' ? [null, -1] : f.due === 'today' ? [0, 0] : f.due === 'week' ? [0, 6] : f.due === 'range' ? f.dueR : null;
   return items.filter(
     (x) =>
@@ -221,6 +234,7 @@ export function apply(items: Item[], f: Filters, ck: Clock): Item[] {
       (!cards || cards.has(x.tmpl)) &&
       (!flags || flags.has(x.flag)) &&
       (!f.leech || x.leech) &&
+      (!ease || (x.ease != null && ease.has(x.ease))) &&
       (!f.pic || x.pic === (f.pic === 'yes')) &&
       (!f.audio || x.audio === (f.audio === 'yes')) &&
       (!uses || (x.uses != null && uses.has(x.uses))) &&
@@ -262,4 +276,51 @@ export function sortBy(items: Item[], by: Sort, desc: boolean): Item[] {
       return (desc ? -o : o) || y.note.id - x.note.id || x.card.ord - y.card.ord;
     })
     .map(([, x]) => x);
+}
+
+// ---------- one row per word ----------
+/** Browse shows a word once (his notes make three cards each). A word's row is its matching cards together: the card
+ *  shown first is the one due soonest (else the first that isn't suspended); the numbers are the weakest card's
+ *  (soonest due, shortest interval, lowest recall, most lapses), so a sort or a glance finds the word that needs him.
+ *  Hard wins over easy; red over green. */
+export function byWord(items: Item[]): Item[] {
+  const by = new Map<number, Item[]>();
+  for (const x of items) {
+    const l = by.get(x.note.id);
+    if (l) l.push(x);
+    else by.set(x.note.id, [x]);
+  }
+  const min = (xs: (number | null)[]) => xs.reduce<number | null>((a, b) => (b == null ? a : a == null ? b : Math.min(a, b)), null);
+  const out: Item[] = [];
+  for (const l of by.values()) {
+    l.sort((a, b) => a.card.ord - b.card.ord);
+    if (l.length === 1) {
+      out.push({ ...l[0], cards: l });
+      continue;
+    }
+    const soon = l.filter((x) => x.due != null).sort((a, b) => a.due! - b.due!)[0];
+    const lead = soon ?? l.find((x) => x.state !== 'suspended') ?? l[0];
+    const flags = l.map((x) => x.flag);
+    out.push({
+      ...lead,
+      tmpl: `${l.length} cards`,
+      n: l.length,
+      cards: l,
+      due: min(l.map((x) => x.due)),
+      ivl: min(l.map((x) => x.ivl)),
+      s: min(l.map((x) => x.s)),
+      r: min(l.map((x) => x.r)),
+      d: l.reduce<number | null>((a, x) => (x.d == null ? a : a == null ? x.d : Math.max(a, x.d)), null),
+      lapses: Math.max(...l.map((x) => x.lapses)),
+      reps: l.reduce((a, x) => a + x.reps, 0),
+      added: Math.min(...l.map((x) => x.added)),
+      last: min(l.map((x) => x.last)),
+      pic: l.some((x) => x.pic),
+      audio: l.some((x) => x.audio),
+      flag: flags.includes(1) ? 1 : flags.find((f) => f) ?? 0,
+      leech: l.some((x) => x.leech),
+      ease: l.some((x) => x.ease === 'hard') ? 'hard' : l.some((x) => x.ease === 'easy') ? 'easy' : null,
+    });
+  }
+  return out;
 }

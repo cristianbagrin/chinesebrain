@@ -6,10 +6,11 @@
 // Adding cards happens on the Cards page only (plus/review.js, its note goes into the collection: src/cbp/anki.ts).
 import { S, load, put, putMany, sync, api, onChange, type Note, type NoteType, type ColMeta } from './store.ts';
 import { render, strip, wordOf, sortText, fieldIndex, showable, type Row } from './render.ts';
-import { index, apply as filterBy, sortBy, blank, active, STATES, type Item, type Filters, type Range, type Sort, type State, type Due } from './filter.ts';
+import { index, apply as filterBy, sortBy, byWord, blank, active, STATES, type Item, type Filters, type Range, type Sort, type State, type Due } from './filter.ts';
 import { answer, clock, queue, label, missed3, right3, historyOf, type Card, type Conf, type Rev } from '../sched.ts';
 import { Fsrs, optimize, loss } from '../fsrs.ts';
 import { exportAnki } from './export.ts';
+import { triage, verdict, type Ease, type Flagged } from './triage.ts';
 
 // the board's own globals (site/public/plus/board/js/core.js, cards.js)
 declare const VIEWS: string[];
@@ -311,6 +312,7 @@ VIEW_EL.querySelectorAll<HTMLElement>('[data-v]').forEach(
     (b.onclick = () => {
       const v = b.dataset.v as View;
       sfx('tap');
+      if (v === 'browse' && view === 'browse') return resetBrowse();
       go(v);
     }),
 );
@@ -318,7 +320,7 @@ VIEW_EL.querySelectorAll<HTMLElement>('[data-v]').forEach(
 // ================= Review =================
 /** A sitting: from the first card on screen until he leaves the tab (BUS 'reviews:start'). */
 let sitting = false;
-const RV = { cur: null as Card | null, shown: false, py: false, t0: 0, sinceNew: 0, panel: '' as '' | 'deeper', merge: null as null | [number, number], deeperFor: 0, flags: false };
+const RV = { cur: null as Card | null, shown: false, py: false, t0: 0, sinceNew: 0, panel: '' as '' | 'deeper', deeperFor: 0, flags: false };
 
 function pick(): Card | null {
   const { k, q } = todayQueue();
@@ -356,7 +358,8 @@ function showReview(): void {
     const anyNew = live().some((x) => x.queue === 0);
     app.innerHTML = `${prog}<section class="rw rw-end"><p class="rw-done zh">今天複習完了</p>
       ${nextLearn ? `<p class="rw-later">One more at ${new Date(nextLearn.due * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>` : ''}
-      <div class="rw-again">${anyNew ? '<button type="button" class="btn-q" data-more="new">Ten more new</button>' : ''}${ahead() ? '<button type="button" class="btn-q" data-more="ahead">Review ahead</button>' : ''}</div></section>`;
+      <div class="rw-again">${anyNew ? '<button type="button" class="btn-q" data-more="new">Ten more new</button>' : ''}${ahead() ? '<button type="button" class="btn-q" data-more="ahead">Review ahead</button>' : ''}</div>${triageHtml()}</section>`;
+    bindTriage(app, () => showReview());
     app.querySelectorAll<HTMLElement>('[data-more]').forEach(
       (b) =>
         (b.onclick = () => {
@@ -373,7 +376,6 @@ function showReview(): void {
   const r = rowOf(c)!;
   const flag = c.flags & 7;
   app.innerHTML = `${prog}<section class="rw${flag ? ' fl' + flag : ''}">
-    ${RV.merge ? mergeBanner() : ''}
     <div class="rw-card"><div class="host${RV.py ? ' py' : ''}"></div></div>
     <div class="rw-foot"><div class="rw-bar">${RV.shown ? `<div class="rw-g">${['Again', 'Hard', 'Good', 'Easy'].map((x, i) => `<button type="button" class="rw-a rw-a${i + 1}" data-g="${i + 1}">${x}</button>`).join('')}</div>` : `<button type="button" class="rw-show" data-a="show">Show answer</button>`}</div>
     <div class="rw-more rx-opt">
@@ -426,7 +428,6 @@ function bindReview() {
   app.querySelectorAll<HTMLElement>('[data-a]').forEach((b) => (b.onclick = () => act(b.dataset.a!)));
   app.querySelectorAll<HTMLElement>('[data-g]').forEach((b) => (b.onclick = () => grade(Number(b.dataset.g))));
   app.querySelectorAll<HTMLElement>('[data-f]').forEach((b) => (b.onclick = () => flagIt(Number(b.dataset.f))));
-  app.querySelectorAll<HTMLElement>('[data-m]').forEach((b) => (b.onclick = () => mergeAct(b.dataset.m!)));
 }
 
 /** Today's reviews just ran out, after he answered (or suspended, or deleted) one here: BUS 'reviews:done', once a day,
@@ -470,9 +471,6 @@ async function grade(g: number) {
   if (g === 1 && missed3(a.card)) {
     RV.panel = 'deeper';
     RV.deeperFor = a.card.id;
-  } else if (g >= 3 && right3(a.card)) {
-    const other = related(a.card);
-    if (other) RV.merge = [a.card.nid, other];
   }
   showReview();
 }
@@ -507,7 +505,7 @@ async function act(a: string) {
   }
 }
 
-// ---------- flags: red (too hard, needs changing) and green (combine it with another card) ----------
+// ---------- flags: red (too hard) and green (too easy), his way of putting a card on the end screen's list by hand ----------
 const FLAG_NAME: Record<number, string> = { 1: 'Red', 3: 'Green' };
 function flagPicker(c: Card) {
   const f = c.flags & 7;
@@ -537,7 +535,7 @@ async function flagIt(f: number, cards?: Card[]) {
   if (!cards && RV.cur) RV.cur = S.cards.get(RV.cur.id)!;
   if (view === 'review') showReview();
   else paintBrowse();
-  if (to === 3 && !cards) toast(`Green: <span class="zh">${esc(wordOfCard(list[0]))}</span> waits in Browse for a partner`, true);
+  if (to && !cards) toast(`${to === 1 ? 'Too hard' : 'Too easy'}: <span class="zh">${esc(wordOfCard(list[0]))}</span>`, true);
 }
 
 // ---------- missed three times in a row: five minutes of going deeper, or delete it ----------
@@ -571,6 +569,8 @@ function showDeeper(): void {
             flds[i] = flds[i] ? `${flds[i]}<br>${mine}` : mine;
             await change('Note added', [['note', r.note.id, { ...r.note, flds }]]);
           }
+          // five minutes on it: off the Too hard list until it slips again
+          await keep(r.note.id, true);
           return endDeeper();
         }
         // Claude's take, and five minutes on the clock
@@ -618,49 +618,15 @@ function nearNotes(note: Note) {
 }
 const nearWords = (note: Note) => nearNotes(note).map((n) => wordOfNote(n));
 
-// ---------- right three times in a row next to a related card: one card about the difference ----------
+// ---------- a partner for a word that's too easy: one card about the difference ----------
 const mergeNo = () => new Set<string>((S.meta.get('mergeNo')?.pairs as string[]) ?? []);
 const pairKey = (a: number, b: number) => [a, b].sort().join('-');
-/** A note sharing a character with this card's word, also right three times running and seen in the last day. A note he
- *  flagged green (wants to combine) comes first. */
-function related(c: Card): number | null {
-  const note = S.notes.get(c.nid);
-  if (!note) return null;
-  const w = wordOfNote(note), chars = new Set([...w].filter((x) => HAN.test(x)));
-  if (!chars.size) return null;
-  const no = mergeNo(), k = ck();
-  let best: [number, number] | null = null;
-  for (const o of live()) {
-    if (o.nid === c.nid || o.queue < 0 || no.has(pairKey(c.nid, o.nid))) continue;
-    const last = o.revs[o.revs.length - 1];
-    if (!last || k.today - k.dayOf(last[0]) > 1 || !right3(o)) continue;
-    const ow = wordOfCard(o);
-    if (!ow || ow === w || ![...ow].some((x) => chars.has(x))) continue;
-    const score = (o.flags & 7) === 3 ? 2 : 1;
-    if (!best || score > best[1]) best = [o.nid, score];
-  }
-  return best?.[0] ?? null;
-}
-function mergeBanner() {
-  const [a, b] = RV.merge!.map((id) => S.notes.get(id));
-  if (!a || !b) return '';
-  return `<div class="rw-merge"><span><b class="zh">${esc(wordOfNote(a))}</b> and <b class="zh">${esc(wordOfNote(b))}</b> are both easy now. One harder card about the difference?</span>
-    <span class="mact"><button type="button" class="btn" data-m="write">Write it</button><button type="button" class="btn-q" data-m="no">Not these</button></span></div>`;
-}
-async function mergeAct(m: string) {
-  if (!RV.merge) return;
-  const [x, y] = RV.merge;
-  RV.merge = null;
-  if (m === 'no') {
-    await put('meta', 'mergeNo', { pairs: [...mergeNo(), pairKey(x, y)] });
-    return showReview();
-  }
-  combine(x, y);
-}
 /** One card about the difference: Claude writes it on the Cards page and he makes the note there, as with any card. Once
  *  that note reaches the collection, the two old cards rest (suspended; Undo brings them back). If he drops the card
  *  instead, or never makes it, nothing was suspended. */
-type Pair = { words: string; nids: [number, number]; at: number };
+/** A pair (kind absent: "A、B", two notes) or one word written again ('hard': simpler; 'easy': harder; key "word ↻").
+ *  Either way the new note's arrival rests the old cards. */
+type Pair = { words: string; nids: number[]; at: number; kind?: Ease; word?: string };
 const pairs = (): Pair[] => (S.meta.get('combine')?.list as Pair[]) ?? [];
 async function combine(x: number, y: number) {
   const [a, b] = [S.notes.get(x), S.notes.get(y)];
@@ -679,20 +645,21 @@ async function settlePairs() {
   if (!ready || settling || !list.length) return;
   settling = true;
   try {
-    const keep: Pair[] = [];
+    const wait: Pair[] = [];
     for (const p of list) {
       const parts = p.words.split('、');
-      const made = [...S.notes.values()].find((n) => n.id > p.at - 60e3 && !p.nids.includes(n.id) && parts.every((w) => wordOfNote(n).includes(w)));
+      const made = [...S.notes.values()].find((n) => n.id > p.at - 60e3 && !p.nids.includes(n.id) && (p.kind ? wordOfNote(n) === p.word : parts.every((w) => wordOfNote(n).includes(w))));
       const doc = typeof CD !== 'undefined' && typeof cardId === 'function' ? CD.docs[cardId(p.words)] : undefined;
       if (made) {
-        const old = [...cardsOf(p.nids[0]), ...cardsOf(p.nids[1])].filter((c) => c.queue >= 0);
+        const old = p.nids.flatMap(cardsOf).filter((c) => c.queue >= 0 || c.flags & 7);
         if (old.length) {
-          await change('Combine', old.map((c) => ['card', c.id, { ...c, queue: -1, flags: (c.flags & 7) === 3 ? c.flags & ~7 : c.flags }]));
-          if (VIEW === 'reviews') toast(`<span class="zh">${esc(p.words)}</span>: the old cards rest`, true);
+          await change(p.kind ? 'Rewrite' : 'Combine', old.map((c) => ['card', c.id, { ...c, queue: -1, flags: c.flags & ~7 }]));
+          if (VIEW === 'reviews') toast(`<span class="zh">${esc(p.kind ? p.word : p.words)}</span>: the old cards rest`, true);
         }
-      } else if (!doc?.dropped && Date.now() - p.at < 14 * 864e5) keep.push(p);
+        await keep(p.nids, false);
+      } else if (!doc?.dropped && Date.now() - p.at < 14 * 864e5) wait.push(p);
     }
-    if (keep.length !== list.length) await put('meta', 'combine', { list: keep });
+    if (wait.length !== list.length) await put('meta', 'combine', { list: wait });
   } finally {
     settling = false;
   }
@@ -703,12 +670,166 @@ if (typeof cardPrompt === 'function') {
   cardPrompt = (kit, word) => {
     const p = pairs().find((x) => x.words === word);
     if (!p) return base(kit, word);
+    if (p.kind) return `${base(kit, word)}\n\n${remakePrompt(p)}`;
     const [a, b] = p.words.split('、');
     return `${base(kit, word)}
 
 === A PAIR ===
 ${a} and ${b} are both easy for him now. This card replaces their two cards: it is about the difference between them, the one thing he could still mix up. word: ${word}. pinyin: both readings. meaning: the difference, in a few words. ex: exactly two sentences, one where only ${a} fits and one where only ${b} fits. know: 2 or 3 points on when a Taiwanese person reaches for which. One char: line per distinct character, no how: lines, no second: line.`;
   };
+}
+
+// ================= too easy, too hard (triage.ts): on the end screen and in Browse, one tap to act on each word =================
+const TH = () => conf().leechThreshold ?? 8;
+/** Words he waved off (Keep, five minutes on it, a rewrite that landed): nid → when. They come back only for something new. */
+const seenMap = (): Record<string, number> => (S.meta.get('triage')?.seen as Record<string, number>) ?? {};
+const onTheWay = () => new Set(pairs().flatMap((p) => p.nids));
+const tagsOf = (nid: number) => S.notes.get(nid)?.tags;
+function flaggedList(): Flagged[] {
+  return triage(live(), tagsOf, TH(), seenMap(), onTheWay());
+}
+/** Off the list: the flags he set go (an undo step) when `unflag`, and the word is seen as of now. */
+async function keep(nids: number | number[], unflag: boolean) {
+  const ids = Array.isArray(nids) ? nids : [nids];
+  const flagged = ids.flatMap(cardsOf).filter((c) => c.flags & 7);
+  if (flagged.length && unflag) await change('Keep', flagged.map((c) => ['card', c.id, { ...c, flags: c.flags & ~7 }]));
+  const seen = { ...seenMap() };
+  for (const id of ids) seen[id] = Date.now();
+  await put('meta', 'triage', { seen });
+}
+/** The best partner for a word that's too easy: one of his notes sharing a character with it, itself too easy, or right
+ *  three times running, or all grown up (21 days+). Never a pair he turned down before, nor one already being combined. */
+function partner(f: Flagged, list: Flagged[]): number | null {
+  const note = S.notes.get(f.nid);
+  if (!note) return null;
+  const no = mergeNo(), way = onTheWay(), easy = new Set(list.filter((x) => x.ease === 'easy').map((x) => x.nid));
+  let best: [number, number] | null = null;
+  for (const n of nearNotes(note)) {
+    if (no.has(pairKey(note.id, n.id)) || way.has(n.id)) continue;
+    const cs = cardsOf(n.id).filter((c) => c.queue >= 0);
+    if (!cs.length) continue;
+    const score = easy.has(n.id) ? 3 : cs.some(right3) ? 2 : cs.every((c) => c.type === 2 && c.ivl >= 21) ? 1 : 0;
+    if (score && (!best || score > best[1])) best = [n.id, score];
+  }
+  return best?.[0] ?? null;
+}
+/** A word's quick actions. Too hard: Rewrite (a simpler card on the Cards page) or five minutes on it. Too easy: one card
+ *  about it and its partner, else Retire (its easy cards rest). Keep takes it off the list. */
+function quickActs(f: Flagged, list: Flagged[]) {
+  const b = (q: string, text: string, main = false) => `<button type="button" class="btn-q${main ? ' tg-go' : ''}" data-q="${q}">${text}</button>`;
+  let h: string;
+  if (f.ease === 'hard') h = b('rewrite', 'Rewrite', true) + b('deeper', 'Five minutes');
+  else {
+    const p = partner(f, list), pw = p ? wordOfNote(S.notes.get(p)!) : '';
+    h = p ? b(`pair:${p}`, `Combine with <span class="zh">${esc(pw)}</span>`, true) + b('retire', 'Retire') : b('retire', 'Retire', true) + b('harder', 'Harder');
+  }
+  return `<span class="tg-a" data-t="${f.nid}">${h}${b('keep', 'Keep')}</span>`;
+}
+const LIST_N = 4;
+/** The end screen's list: Too hard, then Too easy, the newest first; the rest one tap away in Browse. */
+function triageHtml() {
+  const list = flaggedList();
+  const part = (e: Ease, name: string) => {
+    const l = list.filter((f) => f.ease === e);
+    if (!l.length) return '';
+    return `<div class="tg"><p class="side-h tg-h">${name}<span class="tg-n">${l.length}</span></p>${l
+      .slice(0, LIST_N)
+      .map((f) => `<div class="tg-r"><button type="button" class="tg-w zh" data-open="${f.nid}">${esc(wordOfNote(S.notes.get(f.nid)!))}</button>${quickActs(f, list)}</div>`)
+      .join('')}${l.length > LIST_N ? `<button type="button" class="btn-q tg-more" data-all="${e}">All ${l.length}</button>` : ''}</div>`;
+  };
+  const h = part('hard', 'Too hard') + part('easy', 'Too easy');
+  return h ? `<div class="tgs">${h}</div>` : '';
+}
+/** The quick actions under `root` (the end screen, Browse's panel); `after` draws that place again. */
+function bindTriage(root: ParentNode, after: () => void) {
+  root.querySelectorAll<HTMLElement>('[data-q]').forEach(
+    (b) =>
+      (b.onclick = async () => {
+        const nid = Number(b.closest<HTMLElement>('[data-t]')!.dataset.t);
+        const f = flaggedList().find((x) => x.nid === nid);
+        if (!f) return after();
+        if ((await quickAct(f, b.dataset.q!)) !== false) after();
+      }),
+  );
+  root.querySelectorAll<HTMLElement>('[data-all]').forEach(
+    (b) =>
+      (b.onclick = () => {
+        sfx('tap');
+        BR.f = blank();
+        BR.f.ease = [b.dataset.all as Ease];
+        BR.sel = new Set();
+        saveBR();
+        go('browse');
+      }),
+  );
+  root.querySelectorAll<HTMLElement>('[data-open]').forEach(
+    (b) =>
+      (b.onclick = () => {
+        // the word itself: its row in Browse, opened
+        const nid = Number(b.dataset.open), c = cardsOf(nid)[0];
+        if (!c) return;
+        sfx('tap');
+        BR.f = blank();
+        BR.f.q = wordOfNote(S.notes.get(nid)!);
+        BR.sel = new Set([results().find((x) => x.note.id === nid)?.card.id ?? c.id]);
+        BR.pick = (flaggedList().find((x) => x.nid === nid)?.cards[0] ?? c).id;
+        go('browse');
+      }),
+  );
+}
+/** One tap. Returns false when it moved him elsewhere (the Cards page, five minutes on the word), so nothing is redrawn. */
+async function quickAct(f: Flagged, q: string): Promise<boolean | void> {
+  const w = wordOfNote(S.notes.get(f.nid)!);
+  if (q === 'keep') {
+    await keep(f.nid, true);
+    sfx('unstamp');
+    return;
+  }
+  if (q === 'retire') {
+    const cs = f.cards.map((c) => S.cards.get(c.id)!).filter(Boolean);
+    await change(`Retire ${w}`, cs.map((c) => ['card', c.id, { ...c, queue: -1, flags: c.flags & ~7 }]));
+    sfx('drop');
+    acted = true;
+    toast(`Retired <span class="zh">${esc(w)}</span>`, true);
+    return;
+  }
+  if (q === 'deeper') {
+    RV.panel = 'deeper';
+    RV.deeperFor = f.cards[0].id;
+    sfx('tap');
+    if (view !== 'review') go('review');
+    else showReview();
+    return false;
+  }
+  if (q === 'rewrite' || q === 'harder') {
+    await remake(f.nid, q === 'rewrite' ? 'hard' : 'easy');
+    return false;
+  }
+  if (q.startsWith('pair:')) {
+    await combine(f.nid, Number(q.slice(5)));
+    return false;
+  }
+}
+/** The word written again on the Cards page; once he cards it, its old cards rest (settlePairs). */
+async function remake(nid: number, kind: Ease) {
+  const n = S.notes.get(nid);
+  if (!n) return;
+  const word = wordOfNote(n), key = `${word} ↻`;
+  await put('meta', 'combine', { list: [...pairs().filter((p) => p.words !== key), { words: key, nids: [nid], at: Date.now(), kind, word }] });
+  try {
+    openCard(key, 'any');
+  } catch {}
+}
+function remakePrompt(p: Pair) {
+  const n = S.notes.get(p.nids[0]), t = n && typeOf(n);
+  const fld = (name: string) => (n && t ? strip(n.flds[fieldIndex(t, name)] ?? '') : '');
+  const lapses = Math.max(0, ...p.nids.flatMap(cardsOf).map((c) => c.lapses));
+  const old = `His card now: sentence: ${fld('Chinese') || 'none'}. mnemonic: ${fld('Mnemonic') || 'none'}. notes: ${fld('Notes') || 'none'}.`;
+  if (p.kind === 'hard')
+    return `=== WRITTEN AGAIN: TOO HARD ===
+His card for ${p.word} keeps slipping (${lapses} lapses). Write it again so it sticks. word: ${p.word} (exactly this). A shorter, plainer sentence made of words he knows; a fresh how: story for each character new to him, unlike the old one; if the card tests two things at once, write it for the harder one and put the other on a second: line. ${old}`;
+  return `=== WRITTEN AGAIN: TOO EASY ===
+${p.word} is too easy for him now. Write a harder card for it. word: ${p.word} (exactly this). ex: sentences where it does real work the way a Taiwanese adult uses it (at work, arguing a point, telling a story), with a pattern or partner word he hasn't used yet; know: its finer points (register, collocations, the near-synonym people mix it up with). No how: lines for characters he knows. ${old}`;
 }
 
 // ================= the editor: his fields, and a quiet delete =================
@@ -899,10 +1020,14 @@ async function deleteNote(nid: number, quiet = false) {
   if (!quiet) toast(`Deleted <span class="zh">${esc(w)}</span>`, true);
 }
 
-// ================= Browse: one row per card; filters as chips, each opening its own tray (filter.ts) =================
-const BR_V = 1;
-const BR = { f: blank(), sort: 'added' as Sort, desc: true, tray: '', sel: new Set<number>(), last: 0, limit: 300, close: null as null | (() => Promise<void>), face: 'a' as 'q' | 'a', note: false };
-// his filters and sort stay between visits (not the search text); a newer shape of them starts clean (BR_V)
+// ================= Browse: one row per word (every card once the Card filter is on); filters as chips (filter.ts) =================
+const BR_V = 2;
+// sel: the rows picked (a word's row is its first card's id); pick: the card the panel shows of that word
+const BR = { f: blank(), sort: 'added' as Sort, desc: true, tray: '', sel: new Set<number>(), last: 0, limit: 300, close: null as null | (() => Promise<void>), face: 'a' as 'q' | 'a', note: false, pick: 0 };
+/** Every card, not one row per word: when he asks for card types. */
+const perCard = () => BR.f.card.length > 0;
+// his filters and sort stay between visits (not the search text); a newer shape of them starts clean (BR_V).
+// A second click on Browse (or its key) while in it is back to all this: newest first, nothing picked (resetBrowse).
 try {
   const j = JSON.parse(localStorage.getItem('cbp-browse') || 'null');
   if (j?.v === BR_V) Object.assign(BR, { f: { ...blank(), ...j.f, q: '' }, sort: j.sort ?? 'added', desc: j.desc ?? true });
@@ -926,7 +1051,8 @@ const usesMap = () => {
 function items() {
   const k = ck();
   if (!IX || IXday !== k.today) {
-    IX = index(S.cards.values(), (id) => S.notes.get(id), typeOf, k, conf().w, usesMap());
+    const seen = seenMap(), way = onTheWay(), th = TH();
+    IX = index(S.cards.values(), (id) => S.notes.get(id), typeOf, k, conf().w, usesMap(), (c, n) => (way.has(n.id) ? null : verdict(c, n.tags, th, seen[n.id] ?? 0)));
     IXday = k.today;
   }
   return IX;
@@ -938,6 +1064,7 @@ BUS.on('data', () => {
 });
 
 const STATE_NAME: Record<State, string> = { new: 'New', learning: 'Learning', young: 'Young', mature: 'Mature', suspended: 'Suspended', buried: 'Buried' };
+const EASE_NAME: Record<Ease, string> = { hard: 'Too hard', easy: 'Too easy' };
 const DUE_NAME: Record<string, string> = { overdue: 'Overdue', today: 'Today', week: '7 days' };
 const DOTS = (n: number) => `<span class="dots" aria-label="${n} of 3">${'●'.repeat(n)}${'○'.repeat(3 - n)}</span>`;
 const fmtN = (n: number) => n.toLocaleString('en-US');
@@ -962,7 +1089,7 @@ const FACETS: { id: string; name: string; on: () => boolean; text: () => string;
   { id: 'state', name: 'State', on: () => !!BR.f.state.length, text: () => BR.f.state.map((s) => STATE_NAME[s]).join(', '), clear: () => (BR.f.state = []) },
   { id: 'due', name: 'Due', on: () => !!BR.f.due && (BR.f.due !== 'range' || !isOpen(BR.f.dueR)), text: () => (BR.f.due === 'range' ? `Due in ${fmtRange(BR.f.dueR, 'd')}` : DUE_NAME[BR.f.due]), clear: () => ((BR.f.due = ''), (BR.f.dueR = [null, null])) },
   { id: 'card', name: 'Card', on: () => !!BR.f.card.length, text: () => BR.f.card.join(', '), clear: () => (BR.f.card = []) },
-  { id: 'flag', name: 'Flag', on: () => !!BR.f.flag.length || BR.f.leech, text: () => [...BR.f.flag.map((f) => (f === 1 ? 'Red' : f === 3 ? 'Green' : 'No flag')), ...(BR.f.leech ? ['Leech'] : [])].join(', '), clear: () => ((BR.f.flag = []), (BR.f.leech = false)) },
+  { id: 'ease', name: 'Ease', on: () => !!BR.f.ease.length, text: () => BR.f.ease.map((e) => EASE_NAME[e]).join(', '), clear: () => (BR.f.ease = []) },
   { id: 'media', name: 'Media', on: () => !!(BR.f.pic || BR.f.audio), text: () => [BR.f.pic && (BR.f.pic === 'yes' ? 'Picture' : 'No picture'), BR.f.audio && (BR.f.audio === 'yes' ? 'Audio' : 'No audio')].filter(Boolean).join(', '), clear: () => ((BR.f.pic = ''), (BR.f.audio = '')) },
   { id: 'uses', name: 'Uses', on: () => !!BR.f.uses.length, text: () => BR.f.uses.map((n) => `${n}/3`).join(', '), clear: () => (BR.f.uses = []), show: () => !!Object.keys(usesMap()).length },
   {
@@ -1004,8 +1131,32 @@ function showBrowse() {
   paintBrowse();
 }
 function results() {
-  return sortBy(filterBy(items(), BR.f, ck()), BR.sort, BR.desc);
+  const rows = filterBy(items(), BR.f, ck());
+  return sortBy(perCard() ? rows : byWord(rows), BR.sort, BR.desc);
 }
+const words = (l: Item[]) => new Set(l.map((x) => x.note.id)).size;
+/** Back to how Browse opens the first time: no search, no filters, newest added first, nothing open. */
+async function resetBrowse() {
+  Object.assign(BR, { f: blank(), sort: 'added', desc: true, tray: '', sel: new Set(), last: 0, limit: 300, pick: 0, face: 'a' });
+  saveBR();
+  await closeSide();
+  if (view !== 'browse') return;
+  showBrowse();
+  scrollTo({ top: 0 });
+  takeKeys();
+}
+// its key (B) while in Browse: the same as a second click. Before kit/go.ts sees it (it leaves an open page alone).
+addEventListener(
+  'keydown',
+  (e) => {
+    if (e.repeat || e.isComposing || !ready || VIEW !== 'reviews' || view !== 'browse' || !KEYS.is(e, 'go.browse')) return;
+    const t = e.target as HTMLElement | null;
+    if (t?.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])') || document.querySelector('dialog[open]')) return;
+    sfx('tap');
+    void resetBrowse();
+  },
+  true,
+);
 const COLS: [Sort, string][] = [
   ['word', 'Word'],
   ['card', 'Card'],
@@ -1019,7 +1170,8 @@ const pct = (r: number | null) => (r == null ? '' : `${Math.round(r * 100)}%`);
 function paintBrowse() {
   if (view !== 'browse' || !$('.br', app)) return;
   const k = ck(), all = items(), rows = results(), shown = rows.slice(0, BR.limit);
-  $('.br-n', app).innerHTML = rows.length === all.length ? `${fmtN(all.length)} cards` : `<b>${fmtN(rows.length)}</b> of ${fmtN(all.length)}`;
+  const total = perCard() ? all.length : words(all), unit = perCard() ? 'cards' : 'words';
+  $('.br-n', app).innerHTML = rows.length === total ? `${fmtN(total)} ${unit}` : `<b>${fmtN(rows.length)}</b> of ${fmtN(total)}`;
   paintChips();
   paintTrayCounts();
   const tbl = $('.br-tbl', app);
@@ -1055,6 +1207,7 @@ function paintBrowse() {
         else if (BR.sel.size === 1 && BR.sel.has(id)) BR.sel = new Set(); // the open one again: the panel closes
         else BR.sel = new Set([id]);
         BR.last = id;
+        BR.pick = 0;
         paintSel();
       }),
   );
@@ -1126,7 +1279,7 @@ function paintTray() {
   else if (BR.tray === 'due')
     h = `<div class="trw">${(['overdue', 'today', 'week'] as const).map((d) => opt('due', d, DUE_NAME[d], f.due === d)).join('')}</div>${rangeRow('dueR', 'In', f.due === 'range' ? f.dueR : [null, null], 'd')}`;
   else if (BR.tray === 'card') h = `<div class="trw">${tmplNames().map((t) => opt('card', esc(t), esc(t), f.card.includes(t))).join('')}</div>`;
-  else if (BR.tray === 'flag') h = `<div class="trw">${opt('flag', 1, '<i class="fd fd1"></i>Red', f.flag.includes(1))}${opt('flag', 3, '<i class="fd fd3"></i>Green', f.flag.includes(3))}${opt('flag', 0, 'No flag', f.flag.includes(0))}${opt('leech', 1, 'Leech', f.leech)}</div>`;
+  else if (BR.tray === 'ease') h = `<div class="trw">${(['hard', 'easy'] as Ease[]).map((e) => opt('ease', e, EASE_NAME[e], f.ease.includes(e))).join('')}</div>`;
   else if (BR.tray === 'media')
     h = `<div class="trw"><span class="trl">Picture</span>${opt('pic', 'yes', 'With', f.pic === 'yes')}${opt('pic', 'no', 'Without', f.pic === 'no')}</div><div class="trw"><span class="trl">Audio</span>${opt('audio', 'yes', 'With', f.audio === 'yes')}${opt('audio', 'no', 'Without', f.audio === 'no')}</div>`;
   else if (BR.tray === 'uses') h = `<div class="trw">${[0, 1, 2].map((n) => opt('uses', n, DOTS(n), f.uses.includes(n))).join('')}</div>`;
@@ -1164,8 +1317,7 @@ function pick1(k: string, v: string) {
   const flip = <T>(list: T[], x: T) => (list.includes(x) ? list.filter((y) => y !== x) : [...list, x]);
   if (k === 'state') f.state = flip(f.state, v as State);
   else if (k === 'card') f.card = flip(f.card, tmplNames().find((t) => esc(t) === v) ?? v);
-  else if (k === 'flag') f.flag = flip(f.flag, Number(v));
-  else if (k === 'leech') f.leech = !f.leech;
+  else if (k === 'ease') f.ease = flip(f.ease, v as Ease);
   else if (k === 'uses') f.uses = flip(f.uses, Number(v));
   else if (k === 'due') ((f.due = f.due === v ? '' : (v as Due)), (f.dueR = [null, null]));
   else if (k === 'pic' || k === 'audio') f[k] = f[k] === v ? '' : (v as 'yes' | 'no');
@@ -1185,14 +1337,13 @@ function paintTrayCounts() {
     const f: Filters = { ...BR.f };
     if (kind === 'state') f.state = [v as State];
     else if (kind === 'card') f.card = [tmplNames().find((t) => esc(t) === v) ?? v];
-    else if (kind === 'flag') ((f.flag = [Number(v)]), (f.leech = false));
-    else if (kind === 'leech') ((f.flag = []), (f.leech = true));
+    else if (kind === 'ease') f.ease = [v as Ease];
     else if (kind === 'uses') f.uses = [Number(v)];
     else if (kind === 'due') ((f.due = v as Due), (f.dueR = [null, null]));
     else if (kind === 'pic' || kind === 'audio') f[kind] = v as 'yes' | 'no';
     else if (kind === 'added') f.added = Number(v);
     else if (kind === 'rev') f.rev = v === 'never' ? 'never' : Number(v);
-    const n = filterBy(all, f, k).length;
+    const hit = filterBy(all, f, k), n = perCard() ? hit.length : words(hit);
     b.querySelector('.tn')!.textContent = fmtN(n);
     b.classList.toggle('none', !n);
   });
@@ -1200,21 +1351,26 @@ function paintTrayCounts() {
 
 // ---------- the selection: one card opens beside the list (its note one click further), several get bulk actions ----------
 async function paintSel() {
-  const sel = [...BR.sel].map((id) => S.cards.get(id)).filter((c): c is Card => !!c && S.notes.has(c.nid));
+  const rows = [...BR.sel].map((id) => S.cards.get(id)).filter((c): c is Card => !!c && S.notes.has(c.nid));
+  // a word's row stands for all its cards: what's done to the row is done to them
+  const sel = perCard() ? rows : rows.flatMap((c) => cardsOf(c.nid));
   app.querySelectorAll<HTMLElement>('.tr[data-c]').forEach((tr) => {
     const on = BR.sel.has(Number(tr.dataset.c));
     tr.classList.toggle('sel', on);
     tr.setAttribute('aria-selected', String(on));
   });
   const bulk = $('.br-bulk', app);
-  bulk.hidden = sel.length < 2;
-  if (sel.length >= 2) {
+  bulk.hidden = rows.length < 2;
+  if (rows.length >= 2) {
     const anySusp = sel.some((c) => c.queue === -1);
-    bulk.innerHTML = `<span class="bk-n">${sel.length} cards</span><button type="button" class="btn-q" data-b="${anySusp ? 'unsusp' : 'susp'}">${anySusp ? 'Unsuspend' : 'Suspend'}</button><button type="button" class="btn-q" data-b="red"><i class="fd fd1"></i>Red</button><button type="button" class="btn-q" data-b="green"><i class="fd fd3"></i>Green</button><button type="button" class="btn-q bk-del" data-b="del">Delete</button><button type="button" class="dlg-x" data-b="none" aria-label="Clear selection">${XICON}</button>`;
+    bulk.innerHTML = `<span class="bk-n">${rows.length} ${perCard() ? 'cards' : 'words'}</span><button type="button" class="btn-q" data-b="${anySusp ? 'unsusp' : 'susp'}">${anySusp ? 'Unsuspend' : 'Suspend'}</button><button type="button" class="btn-q" data-b="red"><i class="fd fd1"></i>Red</button><button type="button" class="btn-q" data-b="green"><i class="fd fd3"></i>Green</button><button type="button" class="btn-q bk-del" data-b="del">Delete</button><button type="button" class="dlg-x" data-b="none" aria-label="Clear selection">${XICON}</button>`;
     bulk.querySelectorAll<HTMLElement>('[data-b]').forEach((b) => (b.onclick = () => bulkAct(b.dataset.b!, sel)));
   }
   const side = $('.br-side', app);
-  const focus = sel.length === 1 ? sel[0] : null;
+  const row = rows.length === 1 ? rows[0] : null;
+  // a word's panel shows one of its cards at a time (the one he picks; first, the row's own)
+  const sib = row && !perCard() ? cardsOf(row.nid).filter((c) => typeOf(S.notes.get(c.nid)!)) : [];
+  const focus = row && BR.pick && sib.some((c) => c.id === BR.pick) ? S.cards.get(BR.pick)! : row;
   if (!focus) {
     if (!side.hidden) await closeSide();
     return;
@@ -1243,11 +1399,12 @@ async function paintSel() {
     ] as [string, string][]
   ).filter(([, v]) => v);
   side.innerHTML = `<div class="sd-top"><span class="sd-w zh">${esc(x.word)}</span><button type="button" class="dlg-x" aria-label="Close">${XICON}</button></div>
-    <p class="sd-sub"><span class="sd-st st-${x.state}"><i class="sdot"></i>${STATE_NAME[x.state]}</span><span>${esc(x.tmpl)}</span></p>
+    <p class="sd-sub"><span class="sd-st st-${x.state}"><i class="sdot"></i>${STATE_NAME[x.state]}</span>${sib.length > 1 ? '' : `<span>${esc(x.tmpl)}</span>`}</p>
+    ${sib.length > 1 ? `<div class="sd-seg sd-cards" role="radiogroup" aria-label="Card">${sib.map((c) => `<button type="button" role="radio" data-pc="${c.id}" aria-checked="${c.id === focus.id}">${esc(typeOf(note)?.templates.find((t) => t.ord === c.ord)?.name ?? '')}</button>`).join('')}</div>` : ''}
     <div class="sd-face"><div class="sd-seg" role="radiogroup" aria-label="Side"><button type="button" role="radio" data-face="q" aria-checked="${BR.face === 'q'}">Front</button><button type="button" role="radio" data-face="a" aria-checked="${BR.face === 'a'}">Back</button></div><div class="host sd-host"></div></div>
     <dl class="sd-facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
     <div class="sd-act"><button type="button" class="btn-q" data-s="susp">${focus.queue === -1 ? 'Unsuspend' : 'Suspend'}</button><button type="button" class="btn-q${f === 1 ? ' on' : ''}" data-s="red"><i class="fd fd1"></i>Red</button><button type="button" class="btn-q${f === 3 ? ' on' : ''}" data-s="green"><i class="fd fd3"></i>Green</button></div>
-    ${f === 3 ? greenHelp(note) : ''}${f === 1 ? `<div class="sd-help"><button type="button" class="btn-q" data-s="deeper">Five minutes on it</button></div>` : ''}
+    ${quickHelp(note.id)}
     <button type="button" class="sd-note" aria-expanded="${BR.note}"><span>Note</span><i aria-hidden="true"></i></button>
     <div class="sd-ed"${BR.note ? '' : ' hidden'}></div>`;
   const face = () => {
@@ -1258,6 +1415,16 @@ async function paintSel() {
     host.onclick = loud ? () => playAll(root) : null;
   };
   face();
+  side.querySelectorAll<HTMLElement>('[data-pc]').forEach(
+    (b) =>
+      (b.onclick = () => {
+        BR.pick = Number(b.dataset.pc);
+        sfx('tap');
+        delete side.dataset.c;
+        void paintSel();
+      }),
+  );
+  bindTriage(side, reopen);
   side.querySelectorAll<HTMLElement>('[data-face]').forEach(
     (b) =>
       (b.onclick = () => {
@@ -1293,12 +1460,6 @@ async function paintSel() {
         const s = b.dataset.s!, c = S.cards.get(focus.id)!;
         if (s === 'susp') await change(c.queue === -1 ? 'Unsuspend' : 'Suspend', [['card', c.id, { ...c, queue: c.queue === -1 ? unsuspended(c) : -1 }]]);
         if (s === 'red' || s === 'green') return flagIt(s === 'red' ? 1 : 3, [c]).then(reopen);
-        if (s === 'deeper') {
-          RV.panel = 'deeper';
-          RV.deeperFor = c.id;
-          return go('review');
-        }
-        if (s.startsWith('pair:')) return combine(note.id, Number(s.slice(5)));
         reopen();
       }),
   );
@@ -1308,11 +1469,10 @@ const reopen = () => {
   if (side) delete side.dataset.c;
   paintBrowse();
 };
-/** A green card: his notes that share a character with it, each one click from a card about the two. */
-function greenHelp(note: Note) {
-  const near = nearNotes(note).slice(0, 8);
-  if (!near.length) return '';
-  return `<div class="sd-help"><span class="sd-hl">Combine with</span>${near.map((n) => `<button type="button" class="chipb zh" data-s="pair:${n.id}">${esc(wordOfNote(n))}</button>`).join('')}</div>`;
+/** The word's quick actions in its panel, when it's too easy or too hard. */
+function quickHelp(nid: number) {
+  const list = flaggedList(), f = list.find((x) => x.nid === nid);
+  return f ? `<div class="sd-help"><span class="sd-hl">${EASE_NAME[f.ease]}</span>${quickActs(f, list)}</div>` : '';
 }
 async function closeSide() {
   const side = app.querySelector<HTMLElement>('.br-side');

@@ -443,7 +443,7 @@
   function dueOf(c, ck2) {
     return c.queue === 1 ? ck2.dayOf(c.due * 1e3) - ck2.today : c.queue === 2 || c.queue === 3 ? c.due - ck2.today : null;
   }
-  function index(cards, noteOf, typeOf2, ck2, w, uses = {}) {
+  function index(cards, noteOf, typeOf2, ck2, w, uses = {}, judge) {
     let f = new Fsrs(w), out = [];
     for (let card of cards) {
       let note = noteOf(card.nid);
@@ -472,6 +472,8 @@
         audio: /\[sound:/i.test(all2),
         flag: card.flags & 7,
         leech: note.tags.some((t) => /^leech$/i.test(t)),
+        ease: judge?.(card, note)?.ease ?? null,
+        n: 1,
         uses: Object.prototype.hasOwnProperty.call(uses, word) ? uses[word] : null,
         zh: [word, fld("Chinese"), fld("Mnemonic"), fld("Notes")].map(strip).join(`
 `),
@@ -481,10 +483,10 @@
     }
     return out;
   }
-  var EMPTY = { q: "", state: [], due: "", dueR: [null, null], card: [], flag: [], leech: !1, pic: "", audio: "", uses: [], ivl: [null, null], s: [null, null], d: [null, null], r: [null, null], lapses: [null, null], added: null, rev: null }, blank = () => JSON.parse(JSON.stringify(EMPTY)), open = (r) => r[0] == null && r[1] == null, inRange = (v, r) => v != null && (r[0] == null || v >= r[0]) && (r[1] == null || v <= r[1]);
+  var EMPTY = { q: "", state: [], due: "", dueR: [null, null], card: [], flag: [], leech: !1, ease: [], pic: "", audio: "", uses: [], ivl: [null, null], s: [null, null], d: [null, null], r: [null, null], lapses: [null, null], added: null, rev: null }, blank = () => JSON.parse(JSON.stringify(EMPTY)), open = (r) => r[0] == null && r[1] == null, inRange = (v, r) => v != null && (r[0] == null || v >= r[0]) && (r[1] == null || v <= r[1]);
   function active(f) {
     let n = 0;
-    f.state.length && n++, f.due && n++, f.card.length && n++, (f.flag.length || f.leech) && n++, (f.pic || f.audio) && n++, f.uses.length && n++;
+    f.state.length && n++, f.due && n++, f.card.length && n++, (f.flag.length || f.leech) && n++, f.ease.length && n++, (f.pic || f.audio) && n++, f.uses.length && n++;
     for (let r of [f.ivl, f.s, f.d, f.r, f.lapses]) open(r) || n++;
     return f.added != null && n++, f.rev != null && n++, n;
   }
@@ -505,9 +507,9 @@
     return (x) => tests.every((t) => t(x));
   }
   function apply(items2, f, ck2) {
-    let text = f.q.trim() ? textTest(f.q, ck2) : null, st = f.state.length ? new Set(f.state) : null, cards = f.card.length ? new Set(f.card) : null, flags = f.flag.length ? new Set(f.flag) : null, uses = f.uses.length ? new Set(f.uses) : null, due = f.due === "overdue" ? [null, -1] : f.due === "today" ? [0, 0] : f.due === "week" ? [0, 6] : f.due === "range" ? f.dueR : null;
+    let text = f.q.trim() ? textTest(f.q, ck2) : null, st = f.state.length ? new Set(f.state) : null, cards = f.card.length ? new Set(f.card) : null, flags = f.flag.length ? new Set(f.flag) : null, uses = f.uses.length ? new Set(f.uses) : null, ease = f.ease?.length ? new Set(f.ease) : null, due = f.due === "overdue" ? [null, -1] : f.due === "today" ? [0, 0] : f.due === "week" ? [0, 6] : f.due === "range" ? f.dueR : null;
     return items2.filter(
-      (x) => (!st || st.has(x.state)) && (!due || inRange(x.due, due)) && (!cards || cards.has(x.tmpl)) && (!flags || flags.has(x.flag)) && (!f.leech || x.leech) && (!f.pic || x.pic === (f.pic === "yes")) && (!f.audio || x.audio === (f.audio === "yes")) && (!uses || x.uses != null && uses.has(x.uses)) && (open(f.ivl) || inRange(x.ivl, f.ivl)) && (open(f.s) || inRange(x.s, f.s)) && (open(f.d) || inRange(x.d, f.d)) && (open(f.r) || inRange(x.r == null ? null : x.r * 100, f.r)) && (open(f.lapses) || inRange(x.lapses, f.lapses)) && (f.added == null || x.added < f.added) && (f.rev == null || (f.rev === "never" ? x.last == null : x.last != null && x.last < f.rev)) && (!text || text(x))
+      (x) => (!st || st.has(x.state)) && (!due || inRange(x.due, due)) && (!cards || cards.has(x.tmpl)) && (!flags || flags.has(x.flag)) && (!f.leech || x.leech) && (!ease || x.ease != null && ease.has(x.ease)) && (!f.pic || x.pic === (f.pic === "yes")) && (!f.audio || x.audio === (f.audio === "yes")) && (!uses || x.uses != null && uses.has(x.uses)) && (open(f.ivl) || inRange(x.ivl, f.ivl)) && (open(f.s) || inRange(x.s, f.s)) && (open(f.d) || inRange(x.d, f.d)) && (open(f.r) || inRange(x.r == null ? null : x.r * 100, f.r)) && (open(f.lapses) || inRange(x.lapses, f.lapses)) && (f.added == null || x.added < f.added) && (f.rev == null || (f.rev === "never" ? x.last == null : x.last != null && x.last < f.rev)) && (!text || text(x))
     );
   }
   var ORDER = { new: 0, learning: 1, young: 2, mature: 3, suspended: 4, buried: 5 }, KEY = {
@@ -529,6 +531,42 @@
       let o = typeof a == "number" ? a - b : coll.compare(a, b);
       return (desc ? -o : o) || y.note.id - x.note.id || x.card.ord - y.card.ord;
     }).map(([, x]) => x);
+  }
+  function byWord(items2) {
+    let by = /* @__PURE__ */ new Map();
+    for (let x of items2) {
+      let l = by.get(x.note.id);
+      l ? l.push(x) : by.set(x.note.id, [x]);
+    }
+    let min = (xs) => xs.reduce((a, b) => b == null ? a : a == null ? b : Math.min(a, b), null), out = [];
+    for (let l of by.values()) {
+      if (l.sort((a, b) => a.card.ord - b.card.ord), l.length === 1) {
+        out.push({ ...l[0], cards: l });
+        continue;
+      }
+      let lead = l.filter((x) => x.due != null).sort((a, b) => a.due - b.due)[0] ?? l.find((x) => x.state !== "suspended") ?? l[0], flags = l.map((x) => x.flag);
+      out.push({
+        ...lead,
+        tmpl: `${l.length} cards`,
+        n: l.length,
+        cards: l,
+        due: min(l.map((x) => x.due)),
+        ivl: min(l.map((x) => x.ivl)),
+        s: min(l.map((x) => x.s)),
+        r: min(l.map((x) => x.r)),
+        d: l.reduce((a, x) => x.d == null ? a : a == null ? x.d : Math.max(a, x.d), null),
+        lapses: Math.max(...l.map((x) => x.lapses)),
+        reps: l.reduce((a, x) => a + x.reps, 0),
+        added: Math.min(...l.map((x) => x.added)),
+        last: min(l.map((x) => x.last)),
+        pic: l.some((x) => x.pic),
+        audio: l.some((x) => x.audio),
+        flag: flags.includes(1) ? 1 : flags.find((f) => f) ?? 0,
+        leech: l.some((x) => x.leech),
+        ease: l.some((x) => x.ease === "hard") ? "hard" : l.some((x) => x.ease === "easy") ? "easy" : null
+      });
+    }
+    return out;
   }
 
   // site/src/cbp/review/export.ts
@@ -736,6 +774,31 @@ CREATE INDEX ix_cards_sched ON cards (did, queue, due);
 CREATE INDEX ix_revlog_cid ON revlog (cid);
 CREATE INDEX ix_notes_csum ON notes (csum);`;
 
+  // site/src/cbp/review/triage.ts
+  var answers = (c, since = 0) => c.revs.filter((r) => r[1] >= 1 && r[1] <= 4 && r[6] !== 4 && r[6] !== 5 && r[0] > since), lapsedSince = (c, since) => c.revs.some((r) => r[6] === 1 && r[1] === 1 && r[0] > since);
+  function verdict(c, tags, th = 8, seen = 0) {
+    let flag = c.flags & 7;
+    if (flag === 1) return { ease: "hard", why: "red" };
+    let leechy = th > 0 && c.lapses >= th || c.lapses >= 2 && tags.some((t) => /^leech$/i.test(t));
+    if (c.queue === -1) return leechy && lapsedSince(c, seen) ? { ease: "hard", why: "leech" } : null;
+    if (leechy && lapsedSince(c, seen)) return { ease: "hard", why: "leech" };
+    let g = answers(c, seen).map((r) => r[1]), last = (n) => g.slice(-n);
+    return g.length >= 3 && last(3).every((x) => x === 1) ? { ease: "hard", why: "again" } : c.lapses >= 3 && g.length >= 2 && last(4).filter((x) => x === 1).length >= 2 ? { ease: "hard", why: "again" } : flag === 3 ? { ease: "easy", why: "green" } : c.type === 2 && g.length >= 3 && last(3).every((x) => x === 4) ? { ease: "easy", why: "easy3" } : null;
+  }
+  function triage(cards, tagsOf2, th, seen = {}, skip = /* @__PURE__ */ new Set()) {
+    let by = /* @__PURE__ */ new Map();
+    for (let c of cards) {
+      if (skip.has(c.nid)) continue;
+      let tags = tagsOf2(c.nid);
+      if (!tags) continue;
+      let v = verdict(c, tags, th, seen[c.nid] ?? 0);
+      if (!v) continue;
+      let at = Math.max(c.revs.length ? c.revs[c.revs.length - 1][0] : 0, (c.mod < 1e12 ? c.mod * 1e3 : c.mod) || 0), f = by.get(c.nid);
+      f ? f.ease === "easy" && v.ease === "hard" ? by.set(c.nid, { nid: c.nid, ease: "hard", why: [v.why], cards: [c], at: Math.max(f.at, at) }) : f.ease === v.ease && (f.cards.push(c), f.why.includes(v.why) || f.why.push(v.why), f.at = Math.max(f.at, at)) : by.set(c.nid, { nid: c.nid, ease: v.ease, why: [v.why], cards: [c], at });
+    }
+    return [...by.values()].sort((a, b) => b.at - a.at);
+  }
+
   // site/src/cbp/review/main.ts
   var $ = (s, el = document) => el.querySelector(s), esc2 = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]), TOUCH = matchMedia("(hover: none)").matches, TAB = document.createElement("button");
   TAB.type = "button";
@@ -889,10 +952,11 @@ img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!imp
   VIEW_EL.querySelectorAll("[data-v]").forEach(
     (b) => b.onclick = () => {
       let v = b.dataset.v;
-      sfx("tap"), go(v);
+      if (sfx("tap"), v === "browse" && view === "browse") return resetBrowse();
+      go(v);
     }
   );
-  var sitting = !1, RV = { cur: null, shown: !1, py: !1, t0: 0, sinceNew: 0, panel: "", merge: null, deeperFor: 0, flags: !1 };
+  var sitting = !1, RV = { cur: null, shown: !1, py: !1, t0: 0, sinceNew: 0, panel: "", deeperFor: 0, flags: !1 };
   function pick() {
     let { k, q } = todayQueue(), now = q.learn.filter((c) => c.due * 1e3 <= k.now);
     if (now.length) return now[0];
@@ -912,7 +976,7 @@ img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!imp
       let nextLearn = live().filter((x) => x.queue === 1).sort((a, b) => a.due - b.due)[0], anyNew = live().some((x) => x.queue === 0);
       app.innerHTML = `${prog}<section class="rw rw-end"><p class="rw-done zh">\u4ECA\u5929\u8907\u7FD2\u5B8C\u4E86</p>
       ${nextLearn ? `<p class="rw-later">One more at ${new Date(nextLearn.due * 1e3).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>` : ""}
-      <div class="rw-again">${anyNew ? '<button type="button" class="btn-q" data-more="new">Ten more new</button>' : ""}${ahead() ? '<button type="button" class="btn-q" data-more="ahead">Review ahead</button>' : ""}</div></section>`, app.querySelectorAll("[data-more]").forEach(
+      <div class="rw-again">${anyNew ? '<button type="button" class="btn-q" data-more="new">Ten more new</button>' : ""}${ahead() ? '<button type="button" class="btn-q" data-more="ahead">Review ahead</button>' : ""}</div>${triageHtml()}</section>`, bindTriage(app, () => showReview()), app.querySelectorAll("[data-more]").forEach(
         (b) => b.onclick = () => {
           let m = more();
           b.dataset.more === "new" ? m.fresh += 10 : m.ahead = !0, sfx("tap"), showReview();
@@ -922,7 +986,6 @@ img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!imp
     }
     let r = rowOf(c), flag = c.flags & 7;
     app.innerHTML = `${prog}<section class="rw${flag ? " fl" + flag : ""}">
-    ${RV.merge ? mergeBanner() : ""}
     <div class="rw-card"><div class="host${RV.py ? " py" : ""}"></div></div>
     <div class="rw-foot"><div class="rw-bar">${RV.shown ? `<div class="rw-g">${["Again", "Hard", "Good", "Easy"].map((x, i) => `<button type="button" class="rw-a rw-a${i + 1}" data-g="${i + 1}">${x}</button>`).join("")}</div>` : '<button type="button" class="rw-show" data-a="show">Show answer</button>'}</div>
     <div class="rw-more rx-opt">
@@ -947,7 +1010,7 @@ img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!imp
     a && a !== document.body && a.matches('button, a, [role="tab"], [role="button"]') && !a.matches(":focus-visible") && a.blur(), (!document.activeElement || document.activeElement === document.body) && app.focus({ preventScroll: !0 });
   }
   function bindReview() {
-    app.querySelectorAll("[data-a]").forEach((b) => b.onclick = () => act(b.dataset.a)), app.querySelectorAll("[data-g]").forEach((b) => b.onclick = () => grade(Number(b.dataset.g))), app.querySelectorAll("[data-f]").forEach((b) => b.onclick = () => flagIt(Number(b.dataset.f))), app.querySelectorAll("[data-m]").forEach((b) => b.onclick = () => mergeAct(b.dataset.m));
+    app.querySelectorAll("[data-a]").forEach((b) => b.onclick = () => act(b.dataset.a)), app.querySelectorAll("[data-g]").forEach((b) => b.onclick = () => grade(Number(b.dataset.g))), app.querySelectorAll("[data-f]").forEach((b) => b.onclick = () => flagIt(Number(b.dataset.f)));
   }
   var acted = !1, doneDay = "";
   function doneToday() {
@@ -974,13 +1037,7 @@ img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!imp
     let c = RV.cur;
     if (!c || !RV.shown) return;
     let r = rowOf(c), a = answer(c, g, conf(), ck(), Date.now() - RV.t0), rows = [["card", c.id, a.card]];
-    if (a.leech && !r.note.tags.includes("leech") && rows.push(["note", r.note.id, { ...r.note, tags: [...r.note.tags, "leech"] }]), await change(["Again", "Hard", "Good", "Easy"][g - 1], rows, c.id), acted = !0, BUS.emit("reviews:card", { grade: g, card: c.id, word: wordOfNote(r.note), left: left() }), RV.sinceNew = c.type === 0 ? 0 : RV.sinceNew + 1, RV.cur = null, RV.flags = !1, g === 1 && missed3(a.card))
-      RV.panel = "deeper", RV.deeperFor = a.card.id;
-    else if (g >= 3 && right3(a.card)) {
-      let other = related(a.card);
-      other && (RV.merge = [a.card.nid, other]);
-    }
-    showReview();
+    a.leech && !r.note.tags.includes("leech") && rows.push(["note", r.note.id, { ...r.note, tags: [...r.note.tags, "leech"] }]), await change(["Again", "Hard", "Good", "Easy"][g - 1], rows, c.id), acted = !0, BUS.emit("reviews:card", { grade: g, card: c.id, word: wordOfNote(r.note), left: left() }), RV.sinceNew = c.type === 0 ? 0 : RV.sinceNew + 1, RV.cur = null, RV.flags = !1, g === 1 && missed3(a.card) && (RV.panel = "deeper", RV.deeperFor = a.card.id), showReview();
   }
   async function act(a) {
     let c = RV.cur;
@@ -1017,7 +1074,7 @@ img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!imp
     let list = cards ?? (RV.cur ? [RV.cur] : []);
     if (!list.length) return;
     let to = list.every((c) => (c.flags & 7) === f) ? 0 : f;
-    await change(to ? `${FLAG_NAME[to]} flag` : "Flag off", list.map((c) => ["card", c.id, { ...c, flags: c.flags & -8 | to }])), sfx(to ? "stamp" : "unstamp"), RV.flags = !1, !cards && RV.cur && (RV.cur = S.cards.get(RV.cur.id)), view === "review" ? showReview() : paintBrowse(), to === 3 && !cards && toast(`Green: <span class="zh">${esc2(wordOfCard(list[0]))}</span> waits in Browse for a partner`, !0);
+    await change(to ? `${FLAG_NAME[to]} flag` : "Flag off", list.map((c) => ["card", c.id, { ...c, flags: c.flags & -8 | to }])), sfx(to ? "stamp" : "unstamp"), RV.flags = !1, !cards && RV.cur && (RV.cur = S.cards.get(RV.cur.id)), view === "review" ? showReview() : paintBrowse(), to && !cards && toast(`${to === 1 ? "Too hard" : "Too easy"}: <span class="zh">${esc2(wordOfCard(list[0]))}</span>`, !0);
   }
   var deeperTimer;
   function showDeeper() {
@@ -1044,7 +1101,7 @@ img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!imp
             let flds = [...r.note.flds];
             flds[i] = flds[i] ? `${flds[i]}<br>${mine}` : mine, await change("Note added", [["note", r.note.id, { ...r.note, flds }]]);
           }
-          return endDeeper();
+          return await keep(r.note.id, !0), endDeeper();
         }
         $(".dact", app).hidden = !0, body.hidden = !1;
         let end = Date.now() + 5 * 6e4, tick = () => {
@@ -1076,44 +1133,14 @@ img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!imp
     }
     return [...out.values()];
   }
-  var nearWords = (note) => nearNotes(note).map((n) => wordOfNote(n)), mergeNo = () => new Set(S.meta.get("mergeNo")?.pairs ?? []), pairKey = (a, b) => [a, b].sort().join("-");
-  function related(c) {
-    let note = S.notes.get(c.nid);
-    if (!note) return null;
-    let w = wordOfNote(note), chars = new Set([...w].filter((x) => HAN2.test(x)));
-    if (!chars.size) return null;
-    let no = mergeNo(), k = ck(), best = null;
-    for (let o of live()) {
-      if (o.nid === c.nid || o.queue < 0 || no.has(pairKey(c.nid, o.nid))) continue;
-      let last = o.revs[o.revs.length - 1];
-      if (!last || k.today - k.dayOf(last[0]) > 1 || !right3(o)) continue;
-      let ow = wordOfCard(o);
-      if (!ow || ow === w || ![...ow].some((x) => chars.has(x))) continue;
-      let score = (o.flags & 7) === 3 ? 2 : 1;
-      (!best || score > best[1]) && (best = [o.nid, score]);
-    }
-    return best?.[0] ?? null;
-  }
-  function mergeBanner() {
-    let [a, b] = RV.merge.map((id) => S.notes.get(id));
-    return !a || !b ? "" : `<div class="rw-merge"><span><b class="zh">${esc2(wordOfNote(a))}</b> and <b class="zh">${esc2(wordOfNote(b))}</b> are both easy now. One harder card about the difference?</span>
-    <span class="mact"><button type="button" class="btn" data-m="write">Write it</button><button type="button" class="btn-q" data-m="no">Not these</button></span></div>`;
-  }
-  async function mergeAct(m) {
-    if (!RV.merge) return;
-    let [x, y] = RV.merge;
-    if (RV.merge = null, m === "no")
-      return await put("meta", "mergeNo", { pairs: [...mergeNo(), pairKey(x, y)] }), showReview();
-    combine(x, y);
-  }
-  var pairs = () => S.meta.get("combine")?.list ?? [];
+  var nearWords = (note) => nearNotes(note).map((n) => wordOfNote(n)), mergeNo = () => new Set(S.meta.get("mergeNo")?.pairs ?? []), pairKey = (a, b) => [a, b].sort().join("-"), pairs = () => S.meta.get("combine")?.list ?? [];
   async function combine(x, y) {
     let [a, b] = [S.notes.get(x), S.notes.get(y)];
     if (!a || !b) return;
-    let words = `${wordOfNote(a)}\u3001${wordOfNote(b)}`;
-    await put("meta", "combine", { list: [...pairs().filter((p) => p.words !== words), { words, nids: [x, y], at: Date.now() }] });
+    let words2 = `${wordOfNote(a)}\u3001${wordOfNote(b)}`;
+    await put("meta", "combine", { list: [...pairs().filter((p) => p.words !== words2), { words: words2, nids: [x, y], at: Date.now() }] });
     try {
-      openCard(words, "any");
+      openCard(words2, "any");
     } catch {
     }
   }
@@ -1123,15 +1150,15 @@ img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!imp
     if (!(!ready || settling || !list.length)) {
       settling = !0;
       try {
-        let keep = [];
+        let wait = [];
         for (let p of list) {
-          let parts = p.words.split("\u3001"), made = [...S.notes.values()].find((n) => n.id > p.at - 6e4 && !p.nids.includes(n.id) && parts.every((w) => wordOfNote(n).includes(w))), doc = typeof CD < "u" && typeof cardId == "function" ? CD.docs[cardId(p.words)] : void 0;
+          let parts = p.words.split("\u3001"), made = [...S.notes.values()].find((n) => n.id > p.at - 6e4 && !p.nids.includes(n.id) && (p.kind ? wordOfNote(n) === p.word : parts.every((w) => wordOfNote(n).includes(w)))), doc = typeof CD < "u" && typeof cardId == "function" ? CD.docs[cardId(p.words)] : void 0;
           if (made) {
-            let old = [...cardsOf(p.nids[0]), ...cardsOf(p.nids[1])].filter((c) => c.queue >= 0);
-            old.length && (await change("Combine", old.map((c) => ["card", c.id, { ...c, queue: -1, flags: (c.flags & 7) === 3 ? c.flags & -8 : c.flags }])), VIEW === "reviews" && toast(`<span class="zh">${esc2(p.words)}</span>: the old cards rest`, !0));
-          } else !doc?.dropped && Date.now() - p.at < 14 * 864e5 && keep.push(p);
+            let old = p.nids.flatMap(cardsOf).filter((c) => c.queue >= 0 || c.flags & 7);
+            old.length && (await change(p.kind ? "Rewrite" : "Combine", old.map((c) => ["card", c.id, { ...c, queue: -1, flags: c.flags & -8 }])), VIEW === "reviews" && toast(`<span class="zh">${esc2(p.kind ? p.word : p.words)}</span>: the old cards rest`, !0)), await keep(p.nids, !1);
+          } else !doc?.dropped && Date.now() - p.at < 14 * 864e5 && wait.push(p);
         }
-        keep.length !== list.length && await put("meta", "combine", { list: keep });
+        wait.length !== list.length && await put("meta", "combine", { list: wait });
       } finally {
         settling = !1;
       }
@@ -1142,12 +1169,108 @@ img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!imp
     cardPrompt = (kit, word) => {
       let p = pairs().find((x) => x.words === word);
       if (!p) return base(kit, word);
+      if (p.kind) return `${base(kit, word)}
+
+${remakePrompt(p)}`;
       let [a, b] = p.words.split("\u3001");
       return `${base(kit, word)}
 
 === A PAIR ===
 ${a} and ${b} are both easy for him now. This card replaces their two cards: it is about the difference between them, the one thing he could still mix up. word: ${word}. pinyin: both readings. meaning: the difference, in a few words. ex: exactly two sentences, one where only ${a} fits and one where only ${b} fits. know: 2 or 3 points on when a Taiwanese person reaches for which. One char: line per distinct character, no how: lines, no second: line.`;
     };
+  }
+  var TH = () => conf().leechThreshold ?? 8, seenMap = () => S.meta.get("triage")?.seen ?? {}, onTheWay = () => new Set(pairs().flatMap((p) => p.nids)), tagsOf = (nid) => S.notes.get(nid)?.tags;
+  function flaggedList() {
+    return triage(live(), tagsOf, TH(), seenMap(), onTheWay());
+  }
+  async function keep(nids, unflag) {
+    let ids = Array.isArray(nids) ? nids : [nids], flagged = ids.flatMap(cardsOf).filter((c) => c.flags & 7);
+    flagged.length && unflag && await change("Keep", flagged.map((c) => ["card", c.id, { ...c, flags: c.flags & -8 }]));
+    let seen = { ...seenMap() };
+    for (let id of ids) seen[id] = Date.now();
+    await put("meta", "triage", { seen });
+  }
+  function partner(f, list) {
+    let note = S.notes.get(f.nid);
+    if (!note) return null;
+    let no = mergeNo(), way = onTheWay(), easy = new Set(list.filter((x) => x.ease === "easy").map((x) => x.nid)), best = null;
+    for (let n of nearNotes(note)) {
+      if (no.has(pairKey(note.id, n.id)) || way.has(n.id)) continue;
+      let cs = cardsOf(n.id).filter((c) => c.queue >= 0);
+      if (!cs.length) continue;
+      let score = easy.has(n.id) ? 3 : cs.some(right3) ? 2 : cs.every((c) => c.type === 2 && c.ivl >= 21) ? 1 : 0;
+      score && (!best || score > best[1]) && (best = [n.id, score]);
+    }
+    return best?.[0] ?? null;
+  }
+  function quickActs(f, list) {
+    let b = (q, text, main = !1) => `<button type="button" class="btn-q${main ? " tg-go" : ""}" data-q="${q}">${text}</button>`, h;
+    if (f.ease === "hard") h = b("rewrite", "Rewrite", !0) + b("deeper", "Five minutes");
+    else {
+      let p = partner(f, list), pw = p ? wordOfNote(S.notes.get(p)) : "";
+      h = p ? b(`pair:${p}`, `Combine with <span class="zh">${esc2(pw)}</span>`, !0) + b("retire", "Retire") : b("retire", "Retire", !0) + b("harder", "Harder");
+    }
+    return `<span class="tg-a" data-t="${f.nid}">${h}${b("keep", "Keep")}</span>`;
+  }
+  var LIST_N = 4;
+  function triageHtml() {
+    let list = flaggedList(), part = (e, name) => {
+      let l = list.filter((f) => f.ease === e);
+      return l.length ? `<div class="tg"><p class="side-h tg-h">${name}<span class="tg-n">${l.length}</span></p>${l.slice(0, LIST_N).map((f) => `<div class="tg-r"><button type="button" class="tg-w zh" data-open="${f.nid}">${esc2(wordOfNote(S.notes.get(f.nid)))}</button>${quickActs(f, list)}</div>`).join("")}${l.length > LIST_N ? `<button type="button" class="btn-q tg-more" data-all="${e}">All ${l.length}</button>` : ""}</div>` : "";
+    }, h = part("hard", "Too hard") + part("easy", "Too easy");
+    return h ? `<div class="tgs">${h}</div>` : "";
+  }
+  function bindTriage(root, after) {
+    root.querySelectorAll("[data-q]").forEach(
+      (b) => b.onclick = async () => {
+        let nid = Number(b.closest("[data-t]").dataset.t), f = flaggedList().find((x) => x.nid === nid);
+        if (!f) return after();
+        await quickAct(f, b.dataset.q) !== !1 && after();
+      }
+    ), root.querySelectorAll("[data-all]").forEach(
+      (b) => b.onclick = () => {
+        sfx("tap"), BR.f = blank(), BR.f.ease = [b.dataset.all], BR.sel = /* @__PURE__ */ new Set(), saveBR(), go("browse");
+      }
+    ), root.querySelectorAll("[data-open]").forEach(
+      (b) => b.onclick = () => {
+        let nid = Number(b.dataset.open), c = cardsOf(nid)[0];
+        c && (sfx("tap"), BR.f = blank(), BR.f.q = wordOfNote(S.notes.get(nid)), BR.sel = /* @__PURE__ */ new Set([results().find((x) => x.note.id === nid)?.card.id ?? c.id]), BR.pick = (flaggedList().find((x) => x.nid === nid)?.cards[0] ?? c).id, go("browse"));
+      }
+    );
+  }
+  async function quickAct(f, q) {
+    let w = wordOfNote(S.notes.get(f.nid));
+    if (q === "keep") {
+      await keep(f.nid, !0), sfx("unstamp");
+      return;
+    }
+    if (q === "retire") {
+      let cs = f.cards.map((c) => S.cards.get(c.id)).filter(Boolean);
+      await change(`Retire ${w}`, cs.map((c) => ["card", c.id, { ...c, queue: -1, flags: c.flags & -8 }])), sfx("drop"), acted = !0, toast(`Retired <span class="zh">${esc2(w)}</span>`, !0);
+      return;
+    }
+    if (q === "deeper")
+      return RV.panel = "deeper", RV.deeperFor = f.cards[0].id, sfx("tap"), view !== "review" ? go("review") : showReview(), !1;
+    if (q === "rewrite" || q === "harder")
+      return await remake(f.nid, q === "rewrite" ? "hard" : "easy"), !1;
+    if (q.startsWith("pair:"))
+      return await combine(f.nid, Number(q.slice(5))), !1;
+  }
+  async function remake(nid, kind) {
+    let n = S.notes.get(nid);
+    if (!n) return;
+    let word = wordOfNote(n), key = `${word} \u21BB`;
+    await put("meta", "combine", { list: [...pairs().filter((p) => p.words !== key), { words: key, nids: [nid], at: Date.now(), kind, word }] });
+    try {
+      openCard(key, "any");
+    } catch {
+    }
+  }
+  function remakePrompt(p) {
+    let n = S.notes.get(p.nids[0]), t = n && typeOf(n), fld = (name) => n && t ? strip(n.flds[fieldIndex(t, name)] ?? "") : "", lapses = Math.max(0, ...p.nids.flatMap(cardsOf).map((c) => c.lapses)), old = `His card now: sentence: ${fld("Chinese") || "none"}. mnemonic: ${fld("Mnemonic") || "none"}. notes: ${fld("Notes") || "none"}.`;
+    return p.kind === "hard" ? `=== WRITTEN AGAIN: TOO HARD ===
+His card for ${p.word} keeps slipping (${lapses} lapses). Write it again so it sticks. word: ${p.word} (exactly this). A shorter, plainer sentence made of words he knows; a fresh how: story for each character new to him, unlike the old one; if the card tests two things at once, write it for the harder one and put the other on a second: line. ${old}` : `=== WRITTEN AGAIN: TOO EASY ===
+${p.word} is too easy for him now. Write a harder card for it. word: ${p.word} (exactly this). ex: sentences where it does real work the way a Taiwanese adult uses it (at work, arguing a point, telling a story), with a pattern or partner word he hasn't used yet; know: its finer points (register, collocations, the near-synonym people mix it up with). No how: lines for characters he knows. ${old}`;
   }
   var ED_ORDER = ["chinese", "word", "mnemonic", "picture", "notes"], edKey = (name) => name.toLowerCase();
   function edLabel(t, name) {
@@ -1260,7 +1383,7 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
     let w = wordOfNote(n);
     await change(`Delete ${w}`, [["note", nid, null], ...cardsOf(nid).map((c) => ["card", c.id, null])]), sfx("drop"), quiet || toast(`Deleted <span class="zh">${esc2(w)}</span>`, !0);
   }
-  var BR_V = 1, BR = { f: blank(), sort: "added", desc: !0, tray: "", sel: /* @__PURE__ */ new Set(), last: 0, limit: 300, close: null, face: "a", note: !1 };
+  var BR_V = 2, BR = { f: blank(), sort: "added", desc: !0, tray: "", sel: /* @__PURE__ */ new Set(), last: 0, limit: 300, close: null, face: "a", note: !1, pick: 0 }, perCard = () => BR.f.card.length > 0;
   try {
     let j = JSON.parse(localStorage.getItem("cbp-browse") || "null");
     j?.v === BR_V && Object.assign(BR, { f: { ...blank(), ...j.f, q: "" }, sort: j.sort ?? "added", desc: j.desc ?? !0 });
@@ -1281,13 +1404,17 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
   };
   function items() {
     let k = ck();
-    return (!IX || IXday !== k.today) && (IX = index(S.cards.values(), (id) => S.notes.get(id), typeOf, k, conf().w, usesMap()), IXday = k.today), IX;
+    if (!IX || IXday !== k.today) {
+      let seen = seenMap(), way = onTheWay(), th = TH();
+      IX = index(S.cards.values(), (id) => S.notes.get(id), typeOf, k, conf().w, usesMap(), (c, n) => way.has(n.id) ? null : verdict(c, n.tags, th, seen[n.id] ?? 0)), IXday = k.today;
+    }
+    return IX;
   }
   onChange((what) => what !== "sync" && (IX = null));
   BUS.on("data", () => {
     IX = null, VIEW === "reviews" && view === "browse" && paintBrowse();
   });
-  var STATE_NAME = { new: "New", learning: "Learning", young: "Young", mature: "Mature", suspended: "Suspended", buried: "Buried" }, DUE_NAME = { overdue: "Overdue", today: "Today", week: "7 days" }, DOTS = (n) => `<span class="dots" aria-label="${n} of 3">${"\u25CF".repeat(n)}${"\u25CB".repeat(3 - n)}</span>`, fmtN = (n) => n.toLocaleString("en-US"), fmtRange = (r, unit = "") => r[0] != null && r[1] != null ? r[0] === r[1] ? `${r[0]}${unit}` : `${r[0]}\u2013${r[1]}${unit}` : r[0] != null ? `${r[0]}${unit}+` : `\u2264 ${r[1]}${unit}`, isOpen = (r) => r[0] == null && r[1] == null, MEM = [
+  var STATE_NAME = { new: "New", learning: "Learning", young: "Young", mature: "Mature", suspended: "Suspended", buried: "Buried" }, EASE_NAME = { hard: "Too hard", easy: "Too easy" }, DUE_NAME = { overdue: "Overdue", today: "Today", week: "7 days" }, DOTS = (n) => `<span class="dots" aria-label="${n} of 3">${"\u25CF".repeat(n)}${"\u25CB".repeat(3 - n)}</span>`, fmtN = (n) => n.toLocaleString("en-US"), fmtRange = (r, unit = "") => r[0] != null && r[1] != null ? r[0] === r[1] ? `${r[0]}${unit}` : `${r[0]}\u2013${r[1]}${unit}` : r[0] != null ? `${r[0]}${unit}+` : `\u2264 ${r[1]}${unit}`, isOpen = (r) => r[0] == null && r[1] == null, MEM = [
     ["ivl", "Interval", "d"],
     ["s", "Stability", "d"],
     ["d", "Difficulty", ""],
@@ -1301,7 +1428,7 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
     { id: "state", name: "State", on: () => !!BR.f.state.length, text: () => BR.f.state.map((s) => STATE_NAME[s]).join(", "), clear: () => BR.f.state = [] },
     { id: "due", name: "Due", on: () => !!BR.f.due && (BR.f.due !== "range" || !isOpen(BR.f.dueR)), text: () => BR.f.due === "range" ? `Due in ${fmtRange(BR.f.dueR, "d")}` : DUE_NAME[BR.f.due], clear: () => (BR.f.due = "", BR.f.dueR = [null, null]) },
     { id: "card", name: "Card", on: () => !!BR.f.card.length, text: () => BR.f.card.join(", "), clear: () => BR.f.card = [] },
-    { id: "flag", name: "Flag", on: () => !!BR.f.flag.length || BR.f.leech, text: () => [...BR.f.flag.map((f) => f === 1 ? "Red" : f === 3 ? "Green" : "No flag"), ...BR.f.leech ? ["Leech"] : []].join(", "), clear: () => (BR.f.flag = [], BR.f.leech = !1) },
+    { id: "ease", name: "Ease", on: () => !!BR.f.ease.length, text: () => BR.f.ease.map((e) => EASE_NAME[e]).join(", "), clear: () => BR.f.ease = [] },
     { id: "media", name: "Media", on: () => !!(BR.f.pic || BR.f.audio), text: () => [BR.f.pic && (BR.f.pic === "yes" ? "Picture" : "No picture"), BR.f.audio && (BR.f.audio === "yes" ? "Audio" : "No audio")].filter(Boolean).join(", "), clear: () => (BR.f.pic = "", BR.f.audio = "") },
     { id: "uses", name: "Uses", on: () => !!BR.f.uses.length, text: () => BR.f.uses.map((n) => `${n}/3`).join(", "), clear: () => BR.f.uses = [], show: () => !!Object.keys(usesMap()).length },
     {
@@ -1332,8 +1459,20 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
     }, paintBrowse();
   }
   function results() {
-    return sortBy(apply(items(), BR.f, ck()), BR.sort, BR.desc);
+    let rows = apply(items(), BR.f, ck());
+    return sortBy(perCard() ? rows : byWord(rows), BR.sort, BR.desc);
   }
+  var words = (l) => new Set(l.map((x) => x.note.id)).size;
+  async function resetBrowse() {
+    Object.assign(BR, { f: blank(), sort: "added", desc: !0, tray: "", sel: /* @__PURE__ */ new Set(), last: 0, limit: 300, pick: 0, face: "a" }), saveBR(), await closeSide(), view === "browse" && (showBrowse(), scrollTo({ top: 0 }), takeKeys());
+  }
+  addEventListener(
+    "keydown",
+    (e) => {
+      e.repeat || e.isComposing || !ready || VIEW !== "reviews" || view !== "browse" || !KEYS.is(e, "go.browse") || e.target?.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])') || document.querySelector("dialog[open]") || (sfx("tap"), resetBrowse());
+    },
+    !0
+  );
   var COLS = [
     ["word", "Word"],
     ["card", "Card"],
@@ -1345,8 +1484,8 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
   ], pct = (r) => r == null ? "" : `${Math.round(r * 100)}%`;
   function paintBrowse() {
     if (view !== "browse" || !$(".br", app)) return;
-    let k = ck(), all2 = items(), rows = results(), shown = rows.slice(0, BR.limit);
-    $(".br-n", app).innerHTML = rows.length === all2.length ? `${fmtN(all2.length)} cards` : `<b>${fmtN(rows.length)}</b> of ${fmtN(all2.length)}`, paintChips(), paintTrayCounts();
+    let k = ck(), all2 = items(), rows = results(), shown = rows.slice(0, BR.limit), total = perCard() ? all2.length : words(all2), unit = perCard() ? "cards" : "words";
+    $(".br-n", app).innerHTML = rows.length === total ? `${fmtN(total)} ${unit}` : `<b>${fmtN(rows.length)}</b> of ${fmtN(total)}`, paintChips(), paintTrayCounts();
     let tbl = $(".br-tbl", app);
     tbl.innerHTML = `<div class="tr th" role="row">${COLS.map(([key, name]) => `<button type="button" role="columnheader" class="td c-${key}${BR.sort === key ? BR.desc ? " desc" : " asc" : ""}" data-sort="${key}" aria-sort="${BR.sort === key ? BR.desc ? "descending" : "ascending" : "none"}">${name}</button>`).join("")}</div>
     ${shown.map(
@@ -1364,7 +1503,7 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
           let ids = shown.map((r) => r.card.id), a = ids.indexOf(BR.last), b = ids.indexOf(id);
           ids.slice(Math.min(a, b), Math.max(a, b) + 1).forEach((x) => BR.sel.add(x));
         } else e.metaKey || e.ctrlKey ? BR.sel.has(id) ? BR.sel.delete(id) : BR.sel.add(id) : BR.sel.size === 1 && BR.sel.has(id) ? BR.sel = /* @__PURE__ */ new Set() : BR.sel = /* @__PURE__ */ new Set([id]);
-        BR.last = id, paintSel();
+        BR.last = id, BR.pick = 0, paintSel();
       }
     ), paintSel();
   }
@@ -1400,7 +1539,7 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
     if (!el) return;
     if (el.hidden = !BR.tray, !BR.tray) return void (el.innerHTML = "");
     let f = BR.f, h = "";
-    BR.tray === "state" ? h = `<div class="trw">${STATES.map((s) => opt("state", s, `<i class="sdot sd-${s}"></i>${STATE_NAME[s]}`, f.state.includes(s))).join("")}</div>` : BR.tray === "due" ? h = `<div class="trw">${["overdue", "today", "week"].map((d) => opt("due", d, DUE_NAME[d], f.due === d)).join("")}</div>${rangeRow("dueR", "In", f.due === "range" ? f.dueR : [null, null], "d")}` : BR.tray === "card" ? h = `<div class="trw">${tmplNames().map((t) => opt("card", esc2(t), esc2(t), f.card.includes(t))).join("")}</div>` : BR.tray === "flag" ? h = `<div class="trw">${opt("flag", 1, '<i class="fd fd1"></i>Red', f.flag.includes(1))}${opt("flag", 3, '<i class="fd fd3"></i>Green', f.flag.includes(3))}${opt("flag", 0, "No flag", f.flag.includes(0))}${opt("leech", 1, "Leech", f.leech)}</div>` : BR.tray === "media" ? h = `<div class="trw"><span class="trl">Picture</span>${opt("pic", "yes", "With", f.pic === "yes")}${opt("pic", "no", "Without", f.pic === "no")}</div><div class="trw"><span class="trl">Audio</span>${opt("audio", "yes", "With", f.audio === "yes")}${opt("audio", "no", "Without", f.audio === "no")}</div>` : BR.tray === "uses" ? h = `<div class="trw">${[0, 1, 2].map((n) => opt("uses", n, DOTS(n), f.uses.includes(n))).join("")}</div>` : BR.tray === "mem" ? h = MEM.map(([k, n, u]) => rangeRow(k, n, f[k], u)).join("") : BR.tray === "dates" && (h = `<div class="trw"><span class="trl">Added</span>${DAYS.map(([d, t]) => opt("added", d, t, f.added === d)).join("")}</div><div class="trw"><span class="trl">Reviewed</span>${DAYS.map(([d, t]) => opt("rev", d, t, f.rev === d)).join("")}${opt("rev", "never", "Never", f.rev === "never")}</div>`), el.innerHTML = h, el.querySelectorAll("[data-k]").forEach(
+    BR.tray === "state" ? h = `<div class="trw">${STATES.map((s) => opt("state", s, `<i class="sdot sd-${s}"></i>${STATE_NAME[s]}`, f.state.includes(s))).join("")}</div>` : BR.tray === "due" ? h = `<div class="trw">${["overdue", "today", "week"].map((d) => opt("due", d, DUE_NAME[d], f.due === d)).join("")}</div>${rangeRow("dueR", "In", f.due === "range" ? f.dueR : [null, null], "d")}` : BR.tray === "card" ? h = `<div class="trw">${tmplNames().map((t) => opt("card", esc2(t), esc2(t), f.card.includes(t))).join("")}</div>` : BR.tray === "ease" ? h = `<div class="trw">${["hard", "easy"].map((e) => opt("ease", e, EASE_NAME[e], f.ease.includes(e))).join("")}</div>` : BR.tray === "media" ? h = `<div class="trw"><span class="trl">Picture</span>${opt("pic", "yes", "With", f.pic === "yes")}${opt("pic", "no", "Without", f.pic === "no")}</div><div class="trw"><span class="trl">Audio</span>${opt("audio", "yes", "With", f.audio === "yes")}${opt("audio", "no", "Without", f.audio === "no")}</div>` : BR.tray === "uses" ? h = `<div class="trw">${[0, 1, 2].map((n) => opt("uses", n, DOTS(n), f.uses.includes(n))).join("")}</div>` : BR.tray === "mem" ? h = MEM.map(([k, n, u]) => rangeRow(k, n, f[k], u)).join("") : BR.tray === "dates" && (h = `<div class="trw"><span class="trl">Added</span>${DAYS.map(([d, t]) => opt("added", d, t, f.added === d)).join("")}</div><div class="trw"><span class="trl">Reviewed</span>${DAYS.map(([d, t]) => opt("rev", d, t, f.rev === d)).join("")}${opt("rev", "never", "Never", f.rev === "never")}</div>`), el.innerHTML = h, el.querySelectorAll("[data-k]").forEach(
       (b) => b.onclick = () => {
         pick1(b.dataset.k, b.dataset.v), changed(!0);
       }
@@ -1415,8 +1554,7 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
     let f = BR.f, flip = (list, x) => list.includes(x) ? list.filter((y) => y !== x) : [...list, x];
     if (k === "state") f.state = flip(f.state, v);
     else if (k === "card") f.card = flip(f.card, tmplNames().find((t) => esc2(t) === v) ?? v);
-    else if (k === "flag") f.flag = flip(f.flag, Number(v));
-    else if (k === "leech") f.leech = !f.leech;
+    else if (k === "ease") f.ease = flip(f.ease, v);
     else if (k === "uses") f.uses = flip(f.uses, Number(v));
     else if (k === "due") f.due = f.due === v ? "" : v, f.dueR = [null, null];
     else if (k === "pic" || k === "audio") f[k] = f[k] === v ? "" : v;
@@ -1432,23 +1570,23 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
     let k = ck(), all2 = items();
     el.querySelectorAll("[data-k]").forEach((b) => {
       let kind = b.dataset.k, v = b.dataset.v, f = { ...BR.f };
-      kind === "state" ? f.state = [v] : kind === "card" ? f.card = [tmplNames().find((t) => esc2(t) === v) ?? v] : kind === "flag" ? (f.flag = [Number(v)], f.leech = !1) : kind === "leech" ? (f.flag = [], f.leech = !0) : kind === "uses" ? f.uses = [Number(v)] : kind === "due" ? (f.due = v, f.dueR = [null, null]) : kind === "pic" || kind === "audio" ? f[kind] = v : kind === "added" ? f.added = Number(v) : kind === "rev" && (f.rev = v === "never" ? "never" : Number(v));
-      let n = apply(all2, f, k).length;
+      kind === "state" ? f.state = [v] : kind === "card" ? f.card = [tmplNames().find((t) => esc2(t) === v) ?? v] : kind === "ease" ? f.ease = [v] : kind === "uses" ? f.uses = [Number(v)] : kind === "due" ? (f.due = v, f.dueR = [null, null]) : kind === "pic" || kind === "audio" ? f[kind] = v : kind === "added" ? f.added = Number(v) : kind === "rev" && (f.rev = v === "never" ? "never" : Number(v));
+      let hit = apply(all2, f, k), n = perCard() ? hit.length : words(hit);
       b.querySelector(".tn").textContent = fmtN(n), b.classList.toggle("none", !n);
     });
   }
   async function paintSel() {
-    let sel = [...BR.sel].map((id) => S.cards.get(id)).filter((c) => !!c && S.notes.has(c.nid));
+    let rows = [...BR.sel].map((id) => S.cards.get(id)).filter((c) => !!c && S.notes.has(c.nid)), sel = perCard() ? rows : rows.flatMap((c) => cardsOf(c.nid));
     app.querySelectorAll(".tr[data-c]").forEach((tr) => {
       let on = BR.sel.has(Number(tr.dataset.c));
       tr.classList.toggle("sel", on), tr.setAttribute("aria-selected", String(on));
     });
     let bulk = $(".br-bulk", app);
-    if (bulk.hidden = sel.length < 2, sel.length >= 2) {
+    if (bulk.hidden = rows.length < 2, rows.length >= 2) {
       let anySusp = sel.some((c) => c.queue === -1);
-      bulk.innerHTML = `<span class="bk-n">${sel.length} cards</span><button type="button" class="btn-q" data-b="${anySusp ? "unsusp" : "susp"}">${anySusp ? "Unsuspend" : "Suspend"}</button><button type="button" class="btn-q" data-b="red"><i class="fd fd1"></i>Red</button><button type="button" class="btn-q" data-b="green"><i class="fd fd3"></i>Green</button><button type="button" class="btn-q bk-del" data-b="del">Delete</button><button type="button" class="dlg-x" data-b="none" aria-label="Clear selection">${XICON}</button>`, bulk.querySelectorAll("[data-b]").forEach((b) => b.onclick = () => bulkAct(b.dataset.b, sel));
+      bulk.innerHTML = `<span class="bk-n">${rows.length} ${perCard() ? "cards" : "words"}</span><button type="button" class="btn-q" data-b="${anySusp ? "unsusp" : "susp"}">${anySusp ? "Unsuspend" : "Suspend"}</button><button type="button" class="btn-q" data-b="red"><i class="fd fd1"></i>Red</button><button type="button" class="btn-q" data-b="green"><i class="fd fd3"></i>Green</button><button type="button" class="btn-q bk-del" data-b="del">Delete</button><button type="button" class="dlg-x" data-b="none" aria-label="Clear selection">${XICON}</button>`, bulk.querySelectorAll("[data-b]").forEach((b) => b.onclick = () => bulkAct(b.dataset.b, sel));
     }
-    let side = $(".br-side", app), focus = sel.length === 1 ? sel[0] : null;
+    let side = $(".br-side", app), row = rows.length === 1 ? rows[0] : null, sib = row && !perCard() ? cardsOf(row.nid).filter((c) => typeOf(S.notes.get(c.nid))) : [], focus = row && BR.pick && sib.some((c) => c.id === BR.pick) ? S.cards.get(BR.pick) : row;
     if (!focus) {
       side.hidden || await closeSide();
       return;
@@ -1468,18 +1606,23 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
       ["Uses", x.uses == null ? "" : DOTS(x.uses)]
     ].filter(([, v]) => v);
     side.innerHTML = `<div class="sd-top"><span class="sd-w zh">${esc2(x.word)}</span><button type="button" class="dlg-x" aria-label="Close">${XICON}</button></div>
-    <p class="sd-sub"><span class="sd-st st-${x.state}"><i class="sdot"></i>${STATE_NAME[x.state]}</span><span>${esc2(x.tmpl)}</span></p>
+    <p class="sd-sub"><span class="sd-st st-${x.state}"><i class="sdot"></i>${STATE_NAME[x.state]}</span>${sib.length > 1 ? "" : `<span>${esc2(x.tmpl)}</span>`}</p>
+    ${sib.length > 1 ? `<div class="sd-seg sd-cards" role="radiogroup" aria-label="Card">${sib.map((c) => `<button type="button" role="radio" data-pc="${c.id}" aria-checked="${c.id === focus.id}">${esc2(typeOf(note)?.templates.find((t) => t.ord === c.ord)?.name ?? "")}</button>`).join("")}</div>` : ""}
     <div class="sd-face"><div class="sd-seg" role="radiogroup" aria-label="Side"><button type="button" role="radio" data-face="q" aria-checked="${BR.face === "q"}">Front</button><button type="button" role="radio" data-face="a" aria-checked="${BR.face === "a"}">Back</button></div><div class="host sd-host"></div></div>
     <dl class="sd-facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>
     <div class="sd-act"><button type="button" class="btn-q" data-s="susp">${focus.queue === -1 ? "Unsuspend" : "Suspend"}</button><button type="button" class="btn-q${f === 1 ? " on" : ""}" data-s="red"><i class="fd fd1"></i>Red</button><button type="button" class="btn-q${f === 3 ? " on" : ""}" data-s="green"><i class="fd fd3"></i>Green</button></div>
-    ${f === 3 ? greenHelp(note) : ""}${f === 1 ? '<div class="sd-help"><button type="button" class="btn-q" data-s="deeper">Five minutes on it</button></div>' : ""}
+    ${quickHelp(note.id)}
     <button type="button" class="sd-note" aria-expanded="${BR.note}"><span>Note</span><i aria-hidden="true"></i></button>
     <div class="sd-ed"${BR.note ? "" : " hidden"}></div>`;
     let face = () => {
       let host = $(".sd-host", side), root = draw(host, { card: x.card, note: S.notes.get(note.id) ?? note, type: typeOf(note) }, BR.face), loud = !!root.querySelector("[data-sound]");
       host.classList.toggle("loud", loud), host.onclick = loud ? () => playAll(root) : null;
     };
-    face(), side.querySelectorAll("[data-face]").forEach(
+    face(), side.querySelectorAll("[data-pc]").forEach(
+      (b) => b.onclick = () => {
+        BR.pick = Number(b.dataset.pc), sfx("tap"), delete side.dataset.c, paintSel();
+      }
+    ), bindTriage(side, reopen), side.querySelectorAll("[data-face]").forEach(
       (b) => b.onclick = () => {
         BR.face = b.dataset.face, side.querySelectorAll("[data-face]").forEach((y) => y.setAttribute("aria-checked", String(y === b))), face();
       }
@@ -1497,9 +1640,6 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
       (b) => b.onclick = async () => {
         let s = b.dataset.s, c = S.cards.get(focus.id);
         if (s === "susp" && await change(c.queue === -1 ? "Unsuspend" : "Suspend", [["card", c.id, { ...c, queue: c.queue === -1 ? unsuspended(c) : -1 }]]), s === "red" || s === "green") return flagIt(s === "red" ? 1 : 3, [c]).then(reopen);
-        if (s === "deeper")
-          return RV.panel = "deeper", RV.deeperFor = c.id, go("review");
-        if (s.startsWith("pair:")) return combine(note.id, Number(s.slice(5)));
         reopen();
       }
     );
@@ -1508,9 +1648,9 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
     let side = $(".br-side", app);
     side && delete side.dataset.c, paintBrowse();
   };
-  function greenHelp(note) {
-    let near = nearNotes(note).slice(0, 8);
-    return near.length ? `<div class="sd-help"><span class="sd-hl">Combine with</span>${near.map((n) => `<button type="button" class="chipb zh" data-s="pair:${n.id}">${esc2(wordOfNote(n))}</button>`).join("")}</div>` : "";
+  function quickHelp(nid) {
+    let list = flaggedList(), f = list.find((x) => x.nid === nid);
+    return f ? `<div class="sd-help"><span class="sd-hl">${EASE_NAME[f.ease]}</span>${quickActs(f, list)}</div>` : "";
   }
   async function closeSide() {
     let side = app.querySelector(".br-side"), close = BR.close;
