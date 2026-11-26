@@ -124,7 +124,7 @@
 .fc.on{background:var(--ink)}
 .fc.on .fc-b{color:var(--on-ink);padding-right:4px}
 .fc.on.open{box-shadow:0 0 0 2px var(--bg),0 0 0 3.5px var(--ink)}
-.fc-x{border:0;background:none;color:rgba(255,255,255,.66);width:28px;height:28px;margin-right:3px;border-radius:50%;font-size:18px;line-height:1;cursor:pointer;display:grid;place-items:center}
+.fc-x{border:0;background:none;color:rgba(255,255,255,.66);width:28px;height:28px;margin-right:3px;border-radius:50%;font-size:var(--fs-l);line-height:1;cursor:pointer;display:grid;place-items:center}
 .fc-clear{border:0;background:none;color:var(--ink-3);font-size:var(--fs-s);padding:7px 10px;border-radius:999px;cursor:pointer}
 @media (hover:hover){.fc:not(.on):not(.open):hover{background:var(--wash-2)}.fc-x:hover{color:#fff;background:rgba(255,255,255,.14)}.fc-clear:hover{color:var(--ink);background:var(--wash)}}
 /* the tray: the open chip's choices, each with the cards it would leave */

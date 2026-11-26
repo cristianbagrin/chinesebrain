@@ -115,7 +115,7 @@ p{text-wrap:pretty}
 .toc{font-size:var(--fs-m);color:var(--ink-3);white-space:nowrap;margin-right:var(--s3)}
 .toc b{font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
 .toc .s{display:none}
-@media (max-width:520px){.bar-in{gap:var(--s4)}.seg{gap:var(--s4)}.seg button{font-size:16px}.toc .l{display:none}.toc .s{display:inline}.toc{margin-right:0}.bar-r{gap:2px}.snd,.labbtn{width:34px;height:34px}}
+@media (max-width:520px){.bar-in{gap:var(--s4)}.seg{gap:var(--s4)}.seg button{font-size:var(--fs-m)}.toc .l{display:none}.toc .s{display:inline}.toc{margin-right:0}.bar-r{gap:2px}.snd,.labbtn{width:34px;height:34px}}
 /* on a phone the countdown is just the number: TOCFL is the one countdown */
 @media (max-width:440px){.toc>.s:nth-child(2){display:none}}
 .snd,.labbtn{border:0;background:none;width:38px;height:38px;display:grid;place-items:center;border-radius:10px;color:var(--ink-3);cursor:pointer;flex:none;transition:color .15s,background .15s}
@@ -168,7 +168,7 @@ html:not(.opt-on) .opt:not(.kept){display:none!important}
 html.opt-on .opt:not(.kept){animation:opt-in .14s var(--ease) both}
 @keyframes opt-in{from{opacity:0}}
 /* four pages on a phone: the tabs close up so the bar still fits a 375px screen */
-@media (max-width:440px){.bar-in{gap:8px}.seg{gap:11px}.seg button{font-size:15px}.toc{font-size:15px}.snd,.labbtn{width:30px}}
+@media (max-width:440px){.bar-in{gap:8px}.seg{gap:11px}.seg button{font-size:var(--fs-s)}.toc{font-size:var(--fs-s)}.snd,.labbtn{width:30px}}
 /* the tabs never get cut off: on a narrow screen they scroll sideways (the open one is brought into view, core.js), and
    the right side keeps only what fits: the TOCFL number and the gear */
 @media (max-width:760px){

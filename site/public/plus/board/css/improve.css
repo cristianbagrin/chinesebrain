@@ -66,7 +66,7 @@
 .es-row.fresh .es-ri{animation:imflash 1.2s var(--ease)}
 
 .im-new{display:flex;align-items:center;gap:var(--s3);width:calc(100% + 24px);margin:2px -12px 0;padding:8px 12px;border:0;background:none;border-radius:var(--r-s);font-size:var(--fs-s);color:var(--ink-3);cursor:pointer;text-align:left;transition:background .15s,color .15s}
-.im-new span{width:22px;text-align:center;font-size:20px;line-height:1;font-weight:300}
+.im-new span{width:22px;text-align:center;font-size:var(--fs-l);line-height:1;font-weight:300}
 .im-new:hover{background:var(--wash);color:var(--ink-2)}
 .im-empty{margin:0;padding:10px 0 4px 34px;font-size:var(--fs-s);color:var(--ink-3)}
 .im-err{color:var(--red);padding-left:0}
