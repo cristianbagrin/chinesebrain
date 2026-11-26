@@ -66,7 +66,7 @@
   margin:0 calc(-1 * var(--s4));padding:var(--s2) var(--s4);border-radius:var(--r);outline:0;cursor:default;
   transition:background .3s var(--ease),box-shadow .3s var(--ease)}
 .es-text p{margin:0}
-.es-text p+p{margin-top:var(--para-zh)} /* more than the gap between lines (base.css, text rhythm), so a paragraph never reads like a wrapped line */
+.es-text p+p{margin-top:var(--essay-para)} /* more than the gap between lines (base.css, text rhythm), so a paragraph never reads like a wrapped line */
 .es-text .es-en{font:inherit}
 /* editing happens on the page itself: no box, no ring, only the caret */
 .es-text:focus-visible{box-shadow:none}

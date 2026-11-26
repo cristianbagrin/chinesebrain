@@ -860,8 +860,18 @@ img{max-width:100%!important;max-height:calc(min(38vh,400px) / var(--rw-z,1) / v
   }
   function draw(host, r, side) {
     let t = r.type, tmpl = t.templates.find((x) => x.ord === r.card.ord) ?? t.templates[0], ctx = { note: r.note, type: t, card: r.card, deck: S.decks.get(r.card.did)?.name }, q = render(tmpl.qfmt, ctx), html = side === "q" ? q : render(tmpl.afmt, ctx, q), root = host.shadowRoot ?? host.attachShadow({ mode: "open" });
-    return root.innerHTML = `<style>${cardCss(t)}${OVER}${RUBY.CSS}</style><div class="card card${r.card.ord + 1}">${html}</div>`, sideBySide(root), root;
+    return root.innerHTML = `<style>${cardCss(t)}${OVER}${RUBY.CSS}</style><div class="card card${r.card.ord + 1}">${html}</div>`, sideBySide(root), host.closest(".rw-card") && fitCard(host, root), root;
   }
+  function fitCard(host, root) {
+    let fit = () => {
+      if (!host.isConnected) return;
+      host.style.zoom = "";
+      let foot = parseFloat(getComputedStyle(VIEW_EL).getPropertyValue("--rw-foot")) || 150, room = innerHeight - host.getBoundingClientRect().top - foot - 8, h = root.querySelector(".card")?.scrollHeight ?? 0;
+      h > room && room > 0 && (host.style.zoom = String(Math.max(0.6, room / h)));
+    };
+    requestAnimationFrame(fit), root.querySelectorAll("img").forEach((i) => i.complete || i.addEventListener("load", fit, { once: !0 })), host._fit = fit;
+  }
+  addEventListener("resize", () => document.querySelectorAll(".rw-card .host").forEach((h) => h._fit?.()));
   var view = "review";
   function go(v) {
     view === "browse" && v !== "browse" && closeSide(), view = v, VIEW_EL.querySelectorAll("[data-v]").forEach((b) => b.setAttribute("aria-current", String(b.dataset.v === v))), app.className = "rx-body v-" + v, $(".rx", VIEW_EL).dataset.rx = v, paint(), v === "review" && VIEW === "reviews" && takeKeys();
@@ -1198,11 +1208,11 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
   var ED = null, clean = (h) => h.replace(/^(<br>)+$/, "").replace(/\s+data-[\w-]+="[^"]*"/g, "").replace(/ class="rv-sel"/g, "");
   function editDialog(note) {
     let d = document.createElement("dialog");
-    d.className = "rx-dlg", d.innerHTML = `<div class="dlg-top"><span class="dlg-w zh">${esc2(wordOfNote(note))}</span><button type="button" class="dlg-x" aria-label="Close">${XICON}</button></div><div class="dlg-ed"></div>`, document.body.append(d);
+    d.className = "rx-dlg", d.tabIndex = -1, d.innerHTML = `<div class="dlg-top"><button type="button" class="dlg-x" aria-label="Close">${XICON}</button></div><div class="dlg-ed"></div>`, document.body.append(d);
     let done = editor($(".dlg-ed", d), note, () => d.close());
     $(".dlg-x", d).onclick = () => d.close(), d.addEventListener("click", (e) => e.target === d && d.close()), d.addEventListener("close", async () => {
       await done(), d.remove(), RV.cur && (RV.cur = S.cards.get(RV.cur.id) ?? null), view === "review" && showReview();
-    }), d.showModal(), $(".rv-f[contenteditable]", d)?.focus();
+    }), d.showModal(), d.focus();
   }
   async function upload(files, f, save) {
     let imgs = files.filter((x) => /^image\//.test(x.type));

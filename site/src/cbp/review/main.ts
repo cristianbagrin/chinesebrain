@@ -260,8 +260,25 @@ function draw(host: HTMLElement, r: Row, side: 'q' | 'a') {
   const root = host.shadowRoot ?? host.attachShadow({ mode: 'open' });
   root.innerHTML = `<style>${cardCss(t)}${OVER}${RUBY.CSS}</style><div class="card card${r.card.ord + 1}">${html}</div>`;
   sideBySide(root);
+  if (host.closest('.rw-card')) fitCard(host, root);
   return root;
 }
+/** The review card always fits between its top and the button strip: when it would need scrolling, it is drawn smaller
+ *  (zoom, never below 60%) instead. Runs again once its pictures load and when the window changes size. */
+function fitCard(host: HTMLElement, root: ShadowRoot) {
+  const fit = () => {
+    if (!host.isConnected) return;
+    host.style.zoom = '';
+    const foot = parseFloat(getComputedStyle(VIEW_EL).getPropertyValue('--rw-foot')) || 150;
+    const room = innerHeight - host.getBoundingClientRect().top - foot - 8;
+    const h = (root.querySelector('.card') as HTMLElement | null)?.scrollHeight ?? 0;
+    if (h > room && room > 0) host.style.zoom = String(Math.max(0.6, room / h));
+  };
+  requestAnimationFrame(fit);
+  root.querySelectorAll('img').forEach((i) => i.complete || i.addEventListener('load', fit, { once: true }));
+  (host as HTMLElement & { _fit?: () => void })._fit = fit;
+}
+addEventListener('resize', () => document.querySelectorAll<HTMLElement>('.rw-card .host').forEach((h) => (h as HTMLElement & { _fit?: () => void })._fit?.()));
 
 // ---------- views inside the tab ----------
 type View = 'review' | 'browse' | 'designs';
@@ -806,7 +823,9 @@ const clean = (h: string) => h.replace(/^(<br>)+$/, '').replace(/\s+data-[\w-]+=
 function editDialog(note: Note) {
   const d = document.createElement('dialog');
   d.className = 'rx-dlg';
-  d.innerHTML = `<div class="dlg-top"><span class="dlg-w zh">${esc(wordOfNote(note))}</span><button type="button" class="dlg-x" aria-label="Close">${XICON}</button></div><div class="dlg-ed"></div>`;
+  d.tabIndex = -1;
+  // no title: the word is right there in its field
+  d.innerHTML = `<div class="dlg-top"><button type="button" class="dlg-x" aria-label="Close">${XICON}</button></div><div class="dlg-ed"></div>`;
   document.body.append(d);
   const done = editor($('.dlg-ed', d), note, () => d.close());
   $('.dlg-x', d).onclick = () => d.close();
@@ -818,7 +837,8 @@ function editDialog(note: Note) {
     if (view === 'review') showReview();
   });
   d.showModal();
-  ($('.rv-f[contenteditable]', d) as HTMLElement | null)?.focus();
+  // the window opens with nothing focused for typing, so his shortcuts work at once; a click puts the caret in a field
+  d.focus();
 }
 
 /** Pictures pasted or dropped into a field as files: kept on the site, then put in where the caret is. */

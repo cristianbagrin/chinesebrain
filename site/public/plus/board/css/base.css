@@ -39,7 +39,7 @@
 :root{
   --fs-xs:calc(15px * var(--k)); --fs-s:calc(17px * var(--k)); --fs-m:calc(19px * var(--k)); --fs-l:calc(22px * var(--k));
   --fs-zh:calc(24px * var(--k)); --fs-xl:calc(28px * var(--k)); --fs-2xl:calc(40px * var(--k)); --fs-3xl:calc(60px * var(--k));
-  --essay:calc(22px * var(--k)); --essay-lh:var(--lh-zh); --read-lh:var(--lh);
+  --essay:calc(22px * var(--k)); --essay-lh:1.5; --essay-para:.45em; --read-lh:var(--lh);
   /* text rhythm (2026-11-26, Notion-like): lines sit close, paragraphs clearly apart. The gap between paragraphs is always
      bigger than the gap between two lines of one paragraph (--lh - 1), so a new paragraph never reads like a wrapped line.
        --lh       running Latin text (explanations, answers, the tutor)
@@ -107,8 +107,7 @@ p{text-wrap:pretty}
 .seg button{position:relative;border:0;background:none;padding:0 2px;font-size:var(--fs-m);font-weight:450;color:var(--ink-3);cursor:pointer;transition:color .2s}
 .seg button:hover{color:var(--ink-2)}
 .seg button[aria-selected="true"]{color:var(--ink)}
-.seg .thumb{position:absolute;bottom:0;left:0;width:0;height:2px;border-radius:2px;background:var(--ink)}
-.seg.ready .thumb{transition:transform .36s var(--ease),width .36s var(--ease)}
+.seg .thumb{display:none} /* the current tab is just ink (Nov 27: no underline) */
 .dot{position:absolute;top:16px;right:-9px;width:7px;height:7px;border-radius:50%;background:var(--red)}
 .dot.gold{background:var(--gold);box-shadow:inset 0 0 0 1px var(--gold-edge)}
 .bar-r{margin-left:auto;display:flex;align-items:center;gap:var(--s2);min-width:0}

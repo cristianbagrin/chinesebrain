@@ -100,8 +100,7 @@
 @keyframes rx-dlg{from{opacity:0;transform:translateY(8px) scale(.98)}}
 .rx-dlg::backdrop{background:var(--dim);animation:rx-fade .2s}
 @keyframes rx-fade{from{opacity:0}}
-.dlg-top{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;padding:12px 12px var(--s2) 28px;background:var(--bg)}
-.dlg-w{font-size:var(--fs-xl)}
+.dlg-top{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:flex-end;padding:12px 12px var(--s2) 28px;background:var(--bg)}
 .dlg-ed{padding:0 28px 28px}
 .dlg-x{border:0;background:none;width:36px;height:36px;padding:0;border-radius:50%;font-size:var(--fs-l);line-height:1;color:var(--ink-3);cursor:pointer;display:grid;place-items:center;flex:none;transition:background .12s,color .12s}
 .dlg-x svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round}
@@ -253,16 +252,6 @@
   .bar-in>#tabs button{flex:none}
   .bar-in>.bar-r{flex:none}
 }
-
-/* the card at a size for the screen it's on (wave 5): his note types are drawn for a phone (28px), so on a wider screen
-   the whole card is zoomed (text, pictures, pinyin alike), and Settings › Text size › Larger adds a step. The picture
-   limits in the card (OVER, review/main.ts) divide by it, so a picture never grows past the screen. */
-.rw-card{--rw-z:1}
-@media (min-width:700px){.rw-card{--rw-z:1.15}}
-@media (min-width:1000px){.rw-card{--rw-z:1.3;margin-top:4vh}}
-@media (min-width:1300px){.rw-card{--rw-z:1.45;margin-top:6vh}}
-:root[data-text-size="larger"] .rw-card{--rw-z2:1.12}
-.rw-card .host{zoom:calc(var(--rw-z) * var(--rw-z2,1))}
 
 /* text rhythm (base.css tokens): paragraph gap larger than the line gap */
 .br-none p+p,.deeper p+p{margin-top:var(--para)}

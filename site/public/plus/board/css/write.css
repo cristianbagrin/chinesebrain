@@ -12,7 +12,7 @@ u.d{text-decoration:underline 2px var(--red);text-underline-offset:5px;text-deco
 
 /* ---------- the page ---------- */
 #write{position:relative;z-index:1;display:block;overflow:visible;min-width:0;transition:box-shadow .5s var(--ease),z-index 0s .5s}
-.w-paper{--wr-fs:calc(var(--essay) * var(--pen-k));--paper-row:calc(var(--wr-fs) * var(--lh-zh));--paper-top:calc(76px * var(--k));cursor:text}
+.w-paper{--wr-fs:calc(var(--essay) * var(--pen-k));--paper-row:calc(var(--wr-fs) * var(--essay-lh));--paper-top:calc(76px * var(--k));cursor:text}
 /* the header: Day and the save status on the left, printed small like a page header; the day's focus on the right, both
    on one line, centered on each other */
 .w-top{position:absolute;left:var(--paper-x);right:calc(var(--paper-x) - var(--s2));top:calc(22px * var(--k));display:flex;align-items:center;gap:var(--s3);min-height:calc(34px * var(--k))}
@@ -33,7 +33,7 @@ u.d{text-decoration:underline 2px var(--red);text-underline-offset:5px;text-deco
   letter-spacing:.01em;color:var(--paper-ink);caret-color:var(--paper-ink);-webkit-text-stroke:var(--pen-stroke) currentColor}
 /* one block per paragraph (write.js): a new paragraph sits further apart than a wrapped line, as on the Essays page */
 #write .sheet{position:relative}
-#write .sheet>div+div{margin-top:var(--para-zh)}
+#write .sheet>div+div{margin-top:var(--essay-para)}
 #write .sheet:empty::before,#write .sheet.blank::before{content:attr(data-ph);position:absolute;left:0;top:0;color:var(--ink-4);-webkit-text-stroke:0;pointer-events:none}
 /* a phone: the sheet is as tall as what he wrote, three lines at least (no tall empty box) */
 @media (max-width:600px){#write .sheet{min-height:calc(var(--paper-row) * 3)}}
