@@ -157,7 +157,7 @@ test('the VAPID header is a valid ES256 token for the push service', async () =>
 });
 
 // ---------- the evening check ----------
-function fakeDb(rows: { settings?: unknown; habit?: unknown; last?: unknown }) {
+function fakeDb(rows: { settings?: unknown; habit?: unknown; last?: unknown; log?: Record<string, unknown>; tz?: string }) {
   const writes: unknown[][] = [];
   const prepare = (sql: string) => {
     let args: unknown[] = [];
@@ -165,13 +165,13 @@ function fakeDb(rows: { settings?: unknown; habit?: unknown; last?: unknown }) {
       bind: (...a: unknown[]) => ((args = a), s),
       first: async () => {
         if (sql.includes('FROM meta')) {
-          const v = args[0] === 'settings' ? rows.settings : rows.last;
+          const v = args[0] === 'settings' ? rows.settings : args[0] === 'tz' ? rows.tz : rows.last;
           return v ? { v: JSON.stringify(v) } : null;
         }
         if (sql.includes('FROM habit')) return rows.habit ? { data: JSON.stringify(rows.habit) } : null;
         return null;
       },
-      all: async () => ({ results: [] }),
+      all: async () => ({ results: sql.includes('FROM habit') ? Object.entries(rows.log ?? {}).map(([day, d]) => ({ day, data: JSON.stringify(d) })) : [] }),
       run: async () => (writes.push([sql, ...args]), {}),
     };
     return s;
@@ -191,6 +191,30 @@ test('the nudge waits for his time, skips a done day, and goes once', async () =
   assert.deepEqual(await nudge(fakeDb({ last: { day: '2026-11-26' } }).env as never, { now: nine }), { day: '2026-11-26', skipped: 'sent' });
   assert.equal(await nudge(fakeDb({ settings: { values: { nudge: 'off' } } }).env as never, { now: nine }), null, 'off');
   assert.equal((await nudge(fakeDb({ settings: { values: { nudge: '22:30' } } }).env as never, { now: nine + 90 * 60e3 }))?.day, '2026-11-26', 'his own time');
+});
+
+test('a day not reported yet still gets the lower bar after a miss; a forced try leaves the evening nudge alone', async () => {
+  const done = { rv: 10, cleared: true, chars: 200, sent: 6, cards: 0, test: false };
+  // done on the 23rd and 24th, nothing on the 25th: yesterday was a rest (the first miss of the week), so the bar holds
+  const rest = await nudge(fakeDb({ log: { '2026-11-23': done, '2026-11-24': done } }).env as never, { now: nine });
+  assert.equal(rest?.body, 'Reviews and your essay.');
+  // the 24th missed, the 25th missed too (the week's rest went on the 24th): today's bar is three sentences
+  const low = await nudge(fakeDb({ log: { '2026-11-23': done } }).env as never, { now: nine });
+  assert.equal(low?.body, 'Reviews and three sentences.');
+  const f = fakeDb({});
+  await nudge(f.env as never, { now: nine - 8 * 3600e3, force: true });
+  assert.equal(f.writes.length, 0, 'a forced try is not remembered as the day\'s nudge');
+});
+
+test('the nudge follows the time zone his device reported', async () => {
+  // 21:00 in Warsaw on Feb 10 (winter, UTC+1) = 20:00 UTC; at that moment it's 4 am the next day in Taipei
+  const w9 = Date.UTC(2027, 1, 10, 20, 0);
+  const r = await nudge(fakeDb({ tz: 'Europe/Warsaw' }).env as never, { now: w9 });
+  assert.equal(r?.day, '2027-02-10', 'his day in Warsaw, not Taipei\'s');
+  assert.equal(await nudge(fakeDb({}).env as never, { now: w9 }), null, 'with no zone yet: Taipei time, so not now');
+  assert.equal(await nudge(fakeDb({ tz: 'Europe/Warsaw' }).env as never, { now: nine }), null, '9 pm in Taipei is 2 pm in Warsaw');
+  // a zone the runtime doesn't know falls back to Taipei
+  assert.equal((await nudge(fakeDb({ tz: 'Mars/Base' }).env as never, { now: nine }))?.day, '2026-11-26');
 });
 
 test('the essay counts once he leaves the writing box, and stays counted', () => {

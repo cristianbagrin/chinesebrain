@@ -6,7 +6,15 @@ const chars = (t: string, f = 0, s = ''): Piece[] => [...t].map((c) => ({ c, f, 
 
 test('plain text stays plain; markup and spaces are escaped', () => {
   assert.equal(write(chars('a<b>&c')), 'a&lt;b&gt;&amp;c');
-  assert.equal(write(chars('a b')), 'a&nbsp;b');
+  assert.equal(write(chars('a b')), 'a b');
+});
+
+test('spaces stay breakable between words; only the ones HTML would swallow become &nbsp;', () => {
+  assert.equal(write(chars('Used when talking')), 'Used when talking');
+  assert.equal(write(chars(' a  b ')), '&nbsp;a &nbsp;b&nbsp;');
+  assert.equal(write([...chars('a '), { br: 1 }, ...chars(' b')]), 'a&nbsp;<br>&nbsp;b');
+  // a non-breaking space read back from the field is a space like any other
+  assert.equal(write(chars('a\u00a0b')), 'a b');
 });
 
 test('styles nest the same way every time: b > i > u > mark', () => {
@@ -34,7 +42,7 @@ test('a style goes on over the selection, and off when all of it already has it'
 
 test('spaces don’t stop a style coming off, and a selection backwards works the same', () => {
   const t = [...chars('a', BIT.b), ...chars(' '), ...chars('b', BIT.b)];
-  assert.equal(write(toggleRange(t, 3, 0, 'b')), 'a&nbsp;b');
+  assert.equal(write(toggleRange(t, 3, 0, 'b')), 'a b');
 });
 
 test('other styles survive a toggle', () => {

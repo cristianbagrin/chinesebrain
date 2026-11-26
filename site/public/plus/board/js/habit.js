@@ -249,7 +249,9 @@ function HB_post(st){
   if(key===HB.posted) return;
   clearTimeout(HB_postT);
   HB_postT=setTimeout(async()=>{
-    const r=await HB_api('habit',{day:tk,data,low});
+    // the device's time zone too: the evening nudge comes at his time wherever he is
+    let tz='';try{tz=Intl.DateTimeFormat().resolvedOptions().timeZone||'';}catch(e){}
+    const r=await HB_api('habit',{day:tk,data,low,tz});
     if(r){HB.posted=key;HB.log[tk]=r;}
   },1500);
 }

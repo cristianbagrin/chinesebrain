@@ -1,12 +1,13 @@
 // Chinese Brain Plus: the habit on the server (migrations/0007_habit.sql) and the evening nudge.
 //   habit      one row a day: what the board reported (reviews, cleared, essay, test), merged from every device
 //   push_subs  the phones (Home Screen app) that asked for the nudge: Web Push subscriptions
-//   nudge      at the time he picked (Settings › Habit, meta `settings` value `nudge`; default 9 pm Taipei), if the day
+//   nudge      at the time he picked (Settings › Habit, meta `settings` value `nudge`; default 9 pm), in the time zone of
+//              the device that last reported his day (meta `tz`, Taipei until one has), if the day
 //              isn't done, one notification saying what's left. Runs on the half-hour cron (worker.js); no AI.
 // Web Push by hand on Web Crypto (no dependencies): VAPID (RFC 8292, ES256) and aes128gcm payloads (RFC 8291).
 // Keys: VAPID_PUBLIC (base64url, 65 bytes uncompressed P-256) and VAPID_PRIVATE (base64url, the 32-byte `d`), both
 // secrets; `node scripts/vapid.mjs` makes a pair.
-import { merge, met, left, dayOf, addDays, type Day } from './habit.ts';
+import { merge, met, left, dayOf, addDays, walk, type Day } from './habit.ts';
 
 type Stmt = { bind(...v: unknown[]): Stmt; first<T>(): Promise<T | null>; all<T>(): Promise<{ results: T[] }>; run(): Promise<unknown> };
 export type Env = { CBP: { prepare(sql: string): Stmt }; VAPID_PUBLIC?: string; VAPID_PRIVATE?: string; SUPPORT?: string };
@@ -41,8 +42,27 @@ export async function log(env: Env) {
   return { days: Object.fromEntries(results.map((r) => [r.day, JSON.parse(r.data)])) };
 }
 
-/** POST plus/habit {day, data: Day, low}: the board's report of a day, merged with what's kept (each part its best). */
-export async function report(env: Env, b: { day?: unknown; data?: unknown; low?: unknown }) {
+// ---------- where he is ----------
+export const DEFAULT_TZ = 'Asia/Taipei';
+/** A time zone name the runtime knows ('Europe/Warsaw'), else null. */
+export function validTz(tz: unknown) {
+  if (typeof tz !== 'string' || !/^[A-Za-z][\w+/-]{1,63}$/.test(tz)) return null;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return tz;
+  } catch {
+    return null;
+  }
+}
+/** The clock on the wall in `tz` at `ms`, as if it were UTC (so its UTC fields read the local date and time). */
+export function wall(ms: number, tz: string) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(ms).map((x) => [x.type, x.value]));
+  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute);
+}
+
+/** POST plus/habit {day, data: Day, low, tz}: the board's report of a day, merged with what's kept (each part its best).
+ *  `tz` is the device's time zone: the evening nudge follows it (he moves between Taipei and Warsaw). */
+export async function report(env: Env, b: { day?: unknown; data?: unknown; low?: unknown; tz?: unknown }) {
   const day = String(b.day ?? '');
   if (!DAY.test(day) || day > addDays(today(), 1) || day < addDays(today(), -3)) throw new Bad('Bad day.');
   const row = await env.CBP.prepare('SELECT data FROM habit WHERE day = ?').bind(day).first<{ data: string }>();
@@ -50,6 +70,8 @@ export async function report(env: Env, b: { day?: unknown; data?: unknown; low?:
   const d = merge(old, b.data as Partial<Day>);
   const low = typeof b.low === 'boolean' ? b.low : !!old?.low;
   const out = { ...d, low, done: met(d, low) };
+  const tz = validTz(b.tz);
+  if (tz) await env.CBP.prepare('INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v').bind('tz', JSON.stringify(tz)).run();
   await env.CBP.prepare('INSERT INTO habit (day, data, updated) VALUES (?, ?, ?) ON CONFLICT (day) DO UPDATE SET data = excluded.data, updated = excluded.updated').bind(day, JSON.stringify(out), Date.now()).run();
   return out;
 }
@@ -123,7 +145,7 @@ export async function send(env: Env, sub: Sub, msg: Msg, ttl = 4 * 3600) {
 
 // ---------- the nudge ----------
 export const DEFAULT_TIME = '21:00';
-/** The times he can pick (Settings › Habit), every half hour from 5 pm to 11:30 pm Taipei. */
+/** The times he can pick (Settings › Habit), every half hour from 5 pm to 11:30 pm, his local time. */
 export const TIMES = Array.from({ length: 14 }, (_, i) => `${String(17 + (i >> 1)).padStart(2, '0')}:${i % 2 ? '30' : '00'}`);
 
 async function meta<T>(env: Env, k: string) {
@@ -139,21 +161,29 @@ async function meta<T>(env: Env, k: string) {
  *  whatever the time and the day (the push key's /api/plus/push/nudge?force=1, to try it). */
 export async function nudge(env: Env, o: { now?: number; force?: boolean } = {}) {
   const now = o.now ?? Date.now();
-  const t = new Date(now + 8 * 3600e3), hm = `${String(t.getUTCHours()).padStart(2, '0')}:${t.getUTCMinutes() < 30 ? '00' : '30'}`;
+  // his time, where he is: the zone of the device that last reported his day
+  const tz = validTz(await meta<string>(env, 'tz')) ?? DEFAULT_TZ;
+  const w = wall(now, tz), t = new Date(w), hm = `${String(t.getUTCHours()).padStart(2, '0')}:${t.getUTCMinutes() < 30 ? '00' : '30'}`;
   const at = (await meta<{ values?: Record<string, string> }>(env, 'settings'))?.values?.nudge ?? DEFAULT_TIME;
   if (!o.force && (at === 'off' || at !== hm)) return null;
-  const day = today(now);
+  // the essay day there (it turns over at 4 am), the same day the board keys its report by
+  const day = dayOf(w, 0);
   const row = await env.CBP.prepare('SELECT data FROM habit WHERE day = ?').bind(day).first<{ data: string }>();
   const d = row ? (JSON.parse(row.data) as Day & { low?: boolean; done?: boolean }) : null;
-  // the day before ended as a miss when nothing reported it done: the board sends `low` with today's report, but a day
-  // it never saw still lowers the bar
-  const low = d?.low ?? false;
+  // the bar after a miss: the board sends `low` with today's report; a day it hasn't reported yet gets it from the log
+  // (the habit's own walk over the days before: a missed day lowers the bar, a rest day doesn't)
+  let low = d?.low;
+  if (low == null) {
+    const { results } = await env.CBP.prepare('SELECT day, data FROM habit WHERE day >= ? AND day < ?').bind(addDays(day, -60), day).all<{ day: string; data: string }>();
+    low = walk(Object.fromEntries(results.map((r) => [r.day, JSON.parse(r.data) as Day])), day).low;
+  }
   const last = await meta<{ day: string }>(env, 'job.nudge');
   if (!o.force && (d?.done || last?.day === day)) return { day, skipped: d?.done ? 'done' : 'sent' };
   const { results: subs } = await env.CBP.prepare('SELECT endpoint, p256dh, auth FROM push_subs').all<Sub>();
   const body = left(d, low);
   const sent: number[] = [];
   for (const s of subs) sent.push(await send(env, s, { title: 'Chinese', body, tag: 'nudge', url: '/plus' }).catch(() => 0));
-  await env.CBP.prepare('INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v').bind('job.nudge', JSON.stringify({ day, at: new Date(now).toISOString(), body, sent })).run();
+  // a forced try isn't the day's nudge: the evening's own still goes
+  if (!o.force) await env.CBP.prepare('INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v').bind('job.nudge', JSON.stringify({ day, at: new Date(now).toISOString(), body, sent })).run();
   return { day, body, sent };
 }

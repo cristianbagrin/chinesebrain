@@ -472,7 +472,7 @@
         audio: /\[sound:/i.test(all2),
         flag: card.flags & 7,
         leech: note.tags.some((t) => /^leech$/i.test(t)),
-        uses: word in uses ? uses[word] : null,
+        uses: Object.prototype.hasOwnProperty.call(uses, word) ? uses[word] : null,
         zh: [word, fld("Chinese"), fld("Mnemonic"), fld("Notes")].map(strip).join(`
 `),
         py: toneless(fld("Pinyin")),
@@ -837,9 +837,9 @@ CREATE INDEX ix_notes_csum ON notes (csum);`;
   }
   var autoplayed = "", cardCss = (t) => t.css.replace(/@import[^;]+;/g, ""), XICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>', OVER = `:host{display:block}.card{background:transparent!important;min-height:100%;box-sizing:border-box}hr{border:0;border-top:1px solid #E4E6EC;margin:22px 0}
 a.hint,.snd-btn,.hint-body{display:none!important}.audio:not(:has(:not(.snd-btn))){display:none}
-img{max-width:100%!important;max-height:calc(min(38vh,400px) / var(--rw-z,1) / var(--rw-z2,1))!important;width:auto!important;height:auto!important;object-fit:contain!important}
+img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!important;height:auto!important;object-fit:contain!important}
 .cbp-pics{display:flex!important;justify-content:center;align-items:center;gap:10px;margin-inline:auto;max-width:100%}
-.cbp-pics>img{flex:0 1 auto;min-width:0;margin:0!important;max-width:calc((100% - (var(--n) - 1) * 10px) / var(--n))!important;max-height:calc(min(30vh,320px) / var(--rw-z,1) / var(--rw-z2,1))!important}`;
+.cbp-pics>img{flex:0 1 auto;min-width:0;margin:0!important;max-width:calc((100% - (var(--n) - 1) * 10px) / var(--n))!important;max-height:min(30vh,320px)!important}`;
   function sideBySide(root) {
     let blank2 = (n) => n.nodeType === 3 && !(n.textContent ?? "").trim(), done = /* @__PURE__ */ new Set();
     for (let img of root.querySelectorAll("img")) {
@@ -871,7 +871,8 @@ img{max-width:100%!important;max-height:calc(min(38vh,400px) / var(--rw-z,1) / v
     };
     requestAnimationFrame(fit), root.querySelectorAll("img").forEach((i) => i.complete || i.addEventListener("load", fit, { once: !0 })), host._fit = fit;
   }
-  addEventListener("resize", () => document.querySelectorAll(".rw-card .host").forEach((h) => h._fit?.()));
+  var refit = (h) => h?._fit?.();
+  addEventListener("resize", () => document.querySelectorAll(".rw-card .host").forEach(refit));
   var view = "review";
   function go(v) {
     view === "browse" && v !== "browse" && closeSide(), view = v, VIEW_EL.querySelectorAll("[data-v]").forEach((b) => b.setAttribute("aria-current", String(b.dataset.v === v))), app.className = "rx-body v-" + v, $(".rx", VIEW_EL).dataset.rx = v, paint(), v === "review" && VIEW === "reviews" && takeKeys();
@@ -933,7 +934,7 @@ img{max-width:100%!important;max-height:calc(min(38vh,400px) / var(--rw-z,1) / v
     let host = $(".host", app), root = draw(host, r, RV.shown ? "a" : "q"), loud = !!root.querySelector("[data-sound]");
     $(".rw-snd", app).hidden = !loud, host.classList.toggle("loud", loud), loud && (host.onclick = (e) => !e.composedPath().some((x) => x instanceof HTMLElement && x.matches("a,button,input,[contenteditable]")) && !String(getSelection() ?? "") && playAll(root));
     let side = `${c.id}:${RV.shown ? "a" : "q"}`;
-    side !== autoplayed && (autoplayed = side, SOUND.autoplay() && playAll(root)), RV.py && RUBY.set(root.querySelector(".card"), !0), sitting || (sitting = !0, BUS.emit("reviews:start")), bindReview();
+    side !== autoplayed && (autoplayed = side, SOUND.autoplay() && playAll(root)), RV.py && RUBY.set(root.querySelector(".card"), !0).then(() => refit(host)), sitting || (sitting = !0, BUS.emit("reviews:start")), bindReview();
   }
   var footRO = typeof ResizeObserver == "function" ? new ResizeObserver((es) => es.forEach((e) => e.target.isConnected && VIEW_EL.style.setProperty("--rw-foot", `${Math.ceil(e.target.offsetHeight)}px`))) : null;
   function watchFoot() {
@@ -986,8 +987,11 @@ img{max-width:100%!important;max-height:calc(min(38vh,400px) / var(--rw-z,1) / v
     if (a === "show")
       return !c || RV.shown ? void 0 : (RV.shown = !0, showReview());
     if (c) {
-      if (a === "py")
-        return RV.py = !RV.py, sfx("tap"), void RUBY.set($(".host", app)?.shadowRoot?.querySelector(".card"), RV.py);
+      if (a === "py") {
+        RV.py = !RV.py, sfx("tap");
+        let host = $(".host", app);
+        return void RUBY.set(host?.shadowRoot?.querySelector(".card"), RV.py).then(() => refit(host));
+      }
       if (a === "play") return playAll($(".host", app)?.shadowRoot);
       if (a === "edit") return editDialog(S.notes.get(c.nid));
       if (a === "flag")
@@ -1173,9 +1177,12 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
     EDITOR.attach(host, {
       field: ".rv-f",
       changed: () => (save(), paintSnd()),
-      files: (files, f) => (upload(files, f, save), !0),
+      // only picture files are taken; any other file pastes as the browser would (its name as text)
+      files: (files, f) => files.some((x) => /^image\//.test(x.type)) && (upload(files, f, save), !0),
       pasted: (f) => void keepPics(f, save)
-    }), host.addEventListener("input", () => (save(), paintSnd())), host.querySelector('[data-e="del"]').onclick = async () => {
+    });
+    let h = host;
+    h._edAc?.abort(), h._edAc = new AbortController(), host.addEventListener("input", () => (save(), paintSnd()), { signal: h._edAc.signal }), host.querySelector('[data-e="del"]').onclick = async () => {
       clearTimeout(saveT), await deleteNote(note.id), onClose?.();
     };
     let voicing = !1, me = {
@@ -1524,7 +1531,11 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
   }
   var saveConf = async (name, patch) => {
     let cur = conf();
-    await change(name, [["conf", cur.id, { ...cur, ...patch }]]);
+    try {
+      await change(name, [["conf", cur.id, { ...cur, ...patch }]]);
+    } catch (e) {
+      toast(esc2(e.message || "That didn\u2019t save."));
+    }
   }, fmtDay = (ms) => new Date(ms).toLocaleDateString([], { month: "short", day: "numeric" });
   LAB.row("rv-new", "Reviews", {
     html: () => ready ? `<div class="st-row"><label class="st-l" for="rs-new">New cards a day</label><span class="st-step"><button type="button" data-n="-1" aria-label="Fewer">\u2212</button><input id="rs-new" inputmode="numeric" value="${conf().newPerDay}"><button type="button" data-n="1" aria-label="More">+</button></span></div>` : "",
@@ -1732,7 +1743,10 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
     document.getElementById("tab-" + v)?.scrollIntoView({ block: "nearest", inline: "nearest" }), v === "reviews" ? (ready ? (go(view), sync()) : start().then(() => VIEW === "reviews" && ready && go(view)), settlePairs()) : prev === "reviews" && (SOUND.stop(), sitting = !1, dropToast(), closeSide(), document.querySelector("dialog.rx-dlg[open]")?.close()), paintDot();
   });
   BUS.on("lab", (id) => {
-    id !== "pinyin" || view !== "review" || !RV.cur || (RV.py = RUBY.shown(), RUBY.set($(".host", app)?.shadowRoot?.querySelector(".card"), RV.py));
+    if (id !== "pinyin" || view !== "review" || !RV.cur) return;
+    RV.py = RUBY.shown();
+    let host = $(".host", app);
+    RUBY.set(host?.shadowRoot?.querySelector(".card"), RV.py).then(() => refit(host));
   });
   start();
   setInterval(paintDot, 5 * 6e4);

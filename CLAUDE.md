@@ -40,7 +40,8 @@
 - **Chinese Brain Plus** (`/plus`, plan: life/chinese/online-plan): Chris's whole Chinese system, and the only place it lives (the
   Mac's `life/chinese` files were archived on 2026-11-23). The engine is `site/src/cbp/engine.ts` (words.py ported; `scripts/cbp-parity.ts`
   compared them), its data the CBP D1 (`files` incl. `chinese.md`, the system's rules; `docs`, `meta`, `history`; `site/src/cbp/plus.ts`).
-  Jobs run on two Cron Triggers (10 pm and 5 am Taipei; `scheduled` in worker.js); nothing polls, and only work that needs
+  Jobs run on one half-hourly Cron Trigger (`scheduled` in worker.js runs the evening nudge, `push.ts`, in the device's time zone, every time and the
+  night jobs only at 10 pm and 5 am Taipei; the free plan allows 5 triggers per account); nothing polls, and only work that needs
   judging calls Claude. 10 pm: the nightly (`site/src/cbp/nightly.ts`): his Chinese Brain marks in from his account
   (`Account.brainSince`) and CBP's K/L changes back out (`writeBack`, `Account.brainGet/brainPut`, newer change wins per word),
   Todoist's "Chinese" project drained (TODOIST_TOKEN), the finished test and cards filed, the day's test (one a day, ~10 items:
@@ -56,7 +57,7 @@
   The board's code lives in `site/public/plus/board` and is edited there now (`scripts/cbp-board.py` copied it from the old folder);
   `plus/runtime.js` stands in for claude.ai's database and `sample`; `plus/review.js` adds his review card beside the study card on
   the Cards page (`site/src/cbp/cards.ts`: pictures from Wikimedia Commons or drawn on Pollinations, Azure voices, media in R2; a daily
-  sweep, `cards.clean`, drops media nothing points to). The Tutor tab (`plus/tutor.js` from `site/src/cbp/tutor/`, server
+  sweep, `cards.clean`, drops media nothing points to). The Tutor pane (from the right on any page; `plus/tutor.js` from `site/src/cbp/tutor/`, server
   `tutor.ts`; Scene and Ask modes) is behind `plus.tutor`. Staging has no AI keys: it borrows production's through the `Brains` entrypoint, and its Account
   objects are production's. A Claude session he opens himself reads and writes it through the connector
   at `/mcp/<CBP_MCP_KEY>` (tools in `plus.ts`). `scripts/cbp-push.py` is retired.

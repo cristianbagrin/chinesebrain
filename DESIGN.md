@@ -34,7 +34,7 @@ Reasons marked *inferred* weren't said by Chris; check them with him before lean
 - **Radii: `--r-s` 8px small inner things, `--r` 12px fields/rows/popovers, `--r-l` 16px dialogs and panels,
   `--r-sheet` 18px phone sheets, 999px for buttons, chips and segmented controls. No other values.**
 - **Shadows: `--sh-1` raised control or panel, `--sh-pop` anything floating over the page, `--sh-dlg` a dialog or
-  pane, `--sh-btn` a floating ink button. No hand-written shadows.**
+  pane, `--sh-sheet` a phone's bottom sheet, `--sh-btn` a floating ink button. No hand-written shadows.**
   Why (*inferred*): ~30 different shadows made the same role look different on every page.
 - **Every dialog is the Settings window's shell (`dialog.st` in kit.css): `--bg` inside, `--r-l`, `--sh-dlg`,
   `--dim` behind, an svg × top right, Escape and a click outside close it, a bottom sheet on a phone.**
@@ -52,9 +52,10 @@ Reasons marked *inferred* weren't said by Chris; check them with him before lean
 
 ## Pages
 
-- **Reviews: the card is his note type's CSS; never edit it to fix sizing. Scale the whole card with `zoom` on
-  `.rw-card .host` (`--rw-z` by width, Larger text adds a step) and divide picture limits by the zoom.**
-  Why: his note types are drawn for a phone; on a laptop the card was small on an empty page.
+- **Reviews: the card is his note type's CSS; never edit it to fix sizing. It is drawn at its own size; when it would
+  need scrolling, `fitCard` (review/main.ts) draws the whole card smaller with `zoom` on `.rw-card .host` (never below
+  60%), again once its pictures load, its pinyin is drawn, or the window changes size.**
+  Why (*inferred*, from the Nov 27 change back): a width zoom made big cards scroll under the answer buttons.
 - **Empty states use `.empty` (a line in ink-2, a second in ink-3, centered).**
 
 ## Motion

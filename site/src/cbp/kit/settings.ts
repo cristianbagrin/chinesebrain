@@ -56,7 +56,7 @@ LAB.define('test-model', 'Writing tests', M, 'sonnet', 'AI', A);
 LAB.define('grade-model', 'Grading tests', M, 'sonnet', 'AI', A);
 LAB.define('essay-model', 'Essay marks', M, 'opus', 'AI', A);
 LAB.define('tutor-model', 'Tutor', M, 'sonnet', 'AI', A);
-// Habit: the evening nudge on his phone (src/cbp/push.ts), at a time he picks, Taipei time; habit.js adds the phone's switch
+// Habit: the evening nudge on his phone (src/cbp/push.ts), at a time he picks, in the device's own time zone; habit.js adds the phone's switch
 const hm = (v: string) => `${+v.slice(0, 2) - 12}:${v.slice(3)} pm`;
 LAB.define('nudge', 'Evening nudge', [['off', 'Off'], ...Array.from({ length: 14 }, (_, i) => `${17 + (i >> 1)}:${i % 2 ? '30' : '00'}`).map((v): [string, string] => [v, hm(v)])], '21:00', 'Habit', A);
 // (end Habit)
@@ -411,7 +411,10 @@ dlg.addEventListener('pointerdown', (e) => {
     last = { y: m.clientY, t: m.timeStamp };
   };
   const up = () => {
+    // both ends go: a leftover pointercancel would run this drag's end again on a later scroll (and close the sheet)
     dlg.removeEventListener('pointermove', move);
+    dlg.removeEventListener('pointerup', up);
+    dlg.removeEventListener('pointercancel', up);
     dlg.classList.remove('drag');
     // away on distance (a third of the sheet) or on a flick down
     if (dy > h / 3 || v > 0.5) {
@@ -420,8 +423,8 @@ dlg.addEventListener('pointerdown', (e) => {
     } else dlg.style.transform = '';
   };
   dlg.addEventListener('pointermove', move);
-  dlg.addEventListener('pointerup', up, { once: true });
-  dlg.addEventListener('pointercancel', up, { once: true });
+  dlg.addEventListener('pointerup', up);
+  dlg.addEventListener('pointercancel', up);
 });
 
 export const SETTINGS = { open: (to?: string) => show(to), close: () => hide(), redraw: () => dlg.open && draw() };

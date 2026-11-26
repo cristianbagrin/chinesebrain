@@ -242,7 +242,10 @@ function renderQuiz(){
       };
       el.querySelectorAll('.q-ch').forEach(b=>b.onclick=()=>pick(+b.dataset.i));
       document.removeEventListener('keydown',QZ_keys);
-      QZ_keys=e=>{const i=['test.a','test.b','test.c','test.d'].findIndex(id=>KEYS.is(e,id));if(i>=0&&VIEW==='today'&&!/INPUT|TEXTAREA/.test(document.activeElement?.tagName||'')&&!document.activeElement?.isContentEditable){e.preventDefault();pick(i);}};
+      // the keys belong to this item's choices: once they're off the page (answered, Next, another view drawn), the
+      // listener goes, so A–D can't answer it later and B/C go back to their go-to keys
+      const chs=el.querySelector('.q-ch');
+      QZ_keys=e=>{if(!chs||!chs.isConnected){document.removeEventListener('keydown',QZ_keys);return;}const i=['test.a','test.b','test.c','test.d'].findIndex(id=>KEYS.is(e,id));if(i>=0&&VIEW==='today'&&!/INPUT|TEXTAREA/.test(document.activeElement?.tagName||'')&&!document.activeElement?.isContentEditable){e.preventDefault();pick(i);}};
       document.addEventListener('keydown',QZ_keys);
       return;
     }

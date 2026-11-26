@@ -168,9 +168,9 @@
     if (e.pointerType !== "mouse" || e.button !== 0 || e.target.closest("button")) return;
     tr = begin(e.clientX, e.clientY, e.timeStamp, 0);
     let move = (m) => step(m.clientX, m.clientY, m.timeStamp), up = (u) => {
-      removeEventListener("pointermove", move), end(u);
+      removeEventListener("pointermove", move), removeEventListener("pointerup", up), removeEventListener("pointercancel", up), end(u);
     };
-    addEventListener("pointermove", move), addEventListener("pointerup", up, { once: !0 });
+    addEventListener("pointermove", move), addEventListener("pointerup", up), addEventListener("pointercancel", up);
   });
   var wx = 0, wT = 0, wv = 0;
   PANE.addEventListener(

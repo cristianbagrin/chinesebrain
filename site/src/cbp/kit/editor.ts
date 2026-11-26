@@ -24,7 +24,12 @@ export type Kind = keyof typeof BIT;
 export type Piece = { c: string; f: number; s: string } | { br: 1 } | { img: { src: string; from?: string } };
 const isChar = (p: Piece | undefined): p is { c: string; f: number; s: string } => !!p && 'c' in p;
 
-const escT = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/ /g, '&nbsp;');
+const escT = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const isSp = (p: Piece | undefined) => isChar(p) && (p.c === ' ' || p.c === '\u00a0');
+const edge = (p: Piece | undefined) => !p || 'br' in p;
+/** A space as HTML keeps it: a plain space between words (so lines can wrap), &nbsp; only where HTML would swallow it
+ *  (at a line's start or end, or after another space). */
+const hardSpace = (out: Piece[], k: number) => edge(out[k - 1]) || edge(out[k + 1]) || isSp(out[k - 1]);
 const escA = (t: string) => t.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
 /** Pieces back to HTML: runs of one style each, the tags always in the same order (b > i > u > mark). */
@@ -36,8 +41,8 @@ export function write(out: Piece[]): string {
     else if ('img' in p) (h += `<img src="${escA(p.img.src)}"${p.img.from ? ` data-from="${escA(p.img.from)}"` : ''}>`), i++;
     else {
       let t = '';
-      for (let q = out[i]; i < out.length && isChar(q) && q.f === p.f && q.s === p.s; q = out[++i]) t += q.c;
-      t = escT(t);
+      for (let q = out[i]; i < out.length && isChar(q) && q.f === p.f && q.s === p.s; q = out[++i]) t += isSp(q) ? (hardSpace(out, i) ? '\u0001' : ' ') : q.c;
+      t = escT(t).replace(/\u0001/g, '&nbsp;');
       if (p.f & BIT.hl) t = `<mark>${t}</mark>`;
       if (p.f & BIT.ul) t = `<u>${t}</u>`;
       if (p.f & BIT.i) t = `<i>${t}</i>`;
@@ -228,7 +233,14 @@ export type Opts = {
   /** after a paste or drop of HTML: pictures in it can be kept on the site now */
   pasted?: (f: HTMLElement) => void;
 };
+/** The listeners of each root's attach: attaching the same root again (Browse's Note closed and opened again) replaces
+ *  them, so a paste never goes in twice and Cmd+B never toggles twice. */
+const ATTACHED = new WeakMap<HTMLElement, AbortController>();
 export function attach(root: HTMLElement, o: Opts) {
+  ATTACHED.get(root)?.abort();
+  const ac = new AbortController();
+  ATTACHED.set(root, ac);
+  const on = <K extends keyof HTMLElementEventMap>(type: K, f: (e: HTMLElementEventMap[K]) => void) => root.addEventListener(type, f, { signal: ac.signal });
   const fieldIn = (t: EventTarget | null) => {
     const f = (t as HTMLElement | null)?.closest?.<HTMLElement>(o.field);
     return f && root.contains(f) ? f : null;
@@ -301,7 +313,7 @@ export function attach(root: HTMLElement, o: Opts) {
     select(f, c);
     pend = null;
   }
-  root.addEventListener('beforeinput', (e) => {
+  on('beforeinput', (e) => {
     const f = fieldIn(e.target);
     if (!f) return;
     const t = e.inputType || '';
@@ -319,18 +331,18 @@ export function attach(root: HTMLElement, o: Opts) {
     if (t === 'insertCompositionText') return;
     snap(f, /^(insertText|deleteContent(Backward|Forward))$/.test(t) ? 'type' : 'edit');
   });
-  root.addEventListener('compositionstart', (e) => snap(fieldIn(e.target), 'type'));
-  root.addEventListener('compositionend', (e) => {
+  on('compositionstart', (e) => snap(fieldIn(e.target), 'type'));
+  on('compositionend', (e) => {
     const f = fieldIn(e.target);
     if (f) setTimeout(() => (typed(f), changed(f)));
   });
-  root.addEventListener('input', (e) => {
+  on('input', (e) => {
     const f = fieldIn(e.target);
     if (f && !(e as InputEvent).isComposing && pend) typed(f);
   });
-  root.addEventListener('pointerdown', () => (pend = null));
-  root.addEventListener('focusout', () => (pend = null));
-  root.addEventListener('keydown', (e) => {
+  on('pointerdown', () => (pend = null));
+  on('focusout', () => (pend = null));
+  on('keydown', (e) => {
     const f = fieldIn(e.target);
     if (!f) return;
     // Cmd+B, Cmd+I, Cmd+U, Cmd+Shift+H (the word's mark): on the selection, or on what he types next
@@ -350,7 +362,7 @@ export function attach(root: HTMLElement, o: Opts) {
     }
     if (/^(Arrow|Home|End|Page)/.test(e.key)) pend = null;
   });
-  root.addEventListener('paste', (e) => {
+  on('paste', (e) => {
     const f = fieldIn(e.target);
     if (!f) return;
     e.preventDefault();
@@ -363,7 +375,7 @@ export function attach(root: HTMLElement, o: Opts) {
     o.pasted?.(f);
     changed(f);
   });
-  root.addEventListener('drop', (e) => {
+  on('drop', (e) => {
     const f = fieldIn(e.target);
     if (!f) return;
     const files = [...(e.dataTransfer?.files ?? [])];
@@ -387,6 +399,7 @@ export function attach(root: HTMLElement, o: Opts) {
     if (o.files?.(files, f)) changed(f);
   });
   fmtBar();
+  for (let i = ROOTS.length - 1; i >= 0; i--) if (ROOTS[i].root === root) ROOTS.splice(i, 1);
   ROOTS.push({ root, sel: o.field, ed });
   // roots that left the page are let go
   for (let i = ROOTS.length - 1; i >= 0; i--) if (!ROOTS[i].root.isConnected && ROOTS[i].root !== root) ROOTS.splice(i, 1);

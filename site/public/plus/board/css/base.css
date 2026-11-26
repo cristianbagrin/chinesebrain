@@ -58,7 +58,7 @@
               aren't pills · --r-l 16px dialogs, panels, the card he adds · --r-sheet 18px a phone's bottom sheet ·
               999px pills (buttons, segmented controls, chips)
      shadows  --sh-1 a raised control (the segment that's on, a tab) · --sh-pop anything floating over the page (tips,
-              popovers, the flag picker, trays) · --sh-dlg a dialog or a pane · --sh-btn the ink button that floats
+              popovers, the flag picker, trays) · --sh-dlg a dialog or a pane · --sh-sheet a phone's bottom sheet · --sh-btn the ink button that floats
      motion   --ease for things that arrive, --spring only for a small pop, --sheet for sheets and panes; a popover
               .16s, a dialog .22s, a sheet .45s; reduced motion: opacity only
      dim      --dim behind a modal */
@@ -67,6 +67,7 @@
   --sh-pop:0 0 0 1px var(--hair),0 14px 36px -10px rgba(21,23,28,.22);
   --sh-dlg:0 0 0 1px var(--hair),0 24px 70px rgba(21,23,28,.20);
   --sh-btn:0 8px 22px -12px rgba(21,23,28,.55);
+  --sh-sheet:0 -8px 40px rgba(21,23,28,.16);
   --dim:rgba(21,23,28,.22);
   --ease:cubic-bezier(.22,.9,.24,1); --spring:cubic-bezier(.3,1.35,.5,1); --sheet:cubic-bezier(.32,.72,0,1);
 
