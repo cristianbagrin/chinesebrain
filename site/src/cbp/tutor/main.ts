@@ -34,7 +34,7 @@ async function api(path: string, body?: unknown) {
 /* Laptop: the bottom-right corner is a hot corner. The pointer there shows a small round button; a click slides the
    Tutor in from the right, over the page (the page stays usable). A click elsewhere sends it away, unless it's pinned.
    Phone: a swipe left from the right edge pulls it in, full height. Either way a swipe right (finger, mouse drag on its
-   top bar, or two fingers on a trackpad), Escape or × sends it away, and the KEYS 'page.tutor' shortcut (Shift+A) toggles it. Hidden,
+   top bar, or two fingers on a trackpad), Escape or × sends it away, and the KEYS 'page.tutor' shortcut (Shift+6) toggles it. Hidden,
    it keeps everything: the conversation, the mode, what he was typing. */
 const PANE = document.createElement('aside');
 PANE.className = 'tu-pane';
@@ -178,7 +178,7 @@ document.addEventListener('keydown', (e) => {
     closePane();
   }
 });
-// the shortcut (KEYS 'page.tutor', Shift+A), like the page keys (kit/go.ts): not while typing (its own box included), not
+// the shortcut (KEYS 'page.tutor', Shift+6), like the page keys (kit/go.ts): not while typing (its own box included), not
 // over a dialog other than Settings (which closes for it), not for a key a page used
 addEventListener('keydown', (e) => {
   if (!KEYS.is(e, 'page.tutor') || !KEYS.free(e)) return;
