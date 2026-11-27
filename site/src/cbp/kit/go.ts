@@ -1,9 +1,10 @@
-/* Shortcuts to the pages, from anywhere (KEYS 'page.*', his to change): Shift and the page's first letter, Shift+T Today,
-   Shift+R Reviews, Shift+B Reviews › Browse, Shift+C Cards, Shift+E Essays, Shift+P Progress (Shift+A, the Tutor, is in
+/* Shortcuts to the pages, from anywhere (KEYS 'page.*', his to change): Shift and the tab's place, Shift+1 Today,
+   Shift+2 Reviews, Shift+3 Cards, Shift+4 Essays, Shift+5 Progress, and Shift+B Reviews › Browse (Shift+6, the Tutor, is in
    tutor/main.ts). They step aside while he types in a field, over a dialog other than Settings (which closes for them), and
    for any key a page used first: this listens last, on window, and lets a handled key (defaultPrevented) be (KEYS.free). */
 import { KEYS } from './keys.ts';
 import { SETTINGS } from './settings.ts';
+import { swipe } from './swipe.ts';
 
 declare const VIEWS: string[];
 declare const VIEW: string;
@@ -75,10 +76,10 @@ function note() {
 }
 BUS.on('view', note);
 BUS.on('place', note);
-function step(d: number) {
+function step(d: number): boolean {
   const i = at + d;
   const p = PLACES[i];
-  if (!p) return;
+  if (!p) return false;
   if (!VIEWS.includes(p.v)) {
     // a page that's gone (a switch went off): skip it
     PLACES.splice(i, 1);
@@ -99,6 +100,7 @@ function step(d: number) {
     // the moves above note themselves a tick later; they aren't new places
     window.setTimeout(() => (moving = false), 0);
   }
+  return true;
 }
 addEventListener(
   'keydown',
@@ -112,4 +114,66 @@ addEventListener(
     step(d);
   },
   true,
+);
+
+/* The same steps by two fingers sideways on a trackpad (swipe.ts): fingers right, back; left, forward. Never over a dialog,
+   a field, the Tutor pane (its own swipe sends it away) or anything that scrolls sideways (the Cards page's word tabs,
+   Browse's table on a phone, an essay sheet), and never when the page itself is wider than the window. The browser's
+   own swipe (leave Plus) is off on the page (kit.css: overscroll-behavior-x). While the fingers move the page leans a
+   little their way; a step brings the next place in from that side. Reduced motion: only a fade. */
+const SW = swipe();
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)');
+const viewEl = () => (VIEW ? document.getElementById('view-' + VIEW) : null);
+function scrollsX(t: Element | null) {
+  const root = document.documentElement;
+  if (root.scrollWidth > root.clientWidth + 1) return true;
+  for (let n = t; n && n !== document.body && n !== root; n = n.parentElement) {
+    if (n.scrollWidth <= n.clientWidth + 1) continue;
+    const o = getComputedStyle(n).overflowX;
+    if (o === 'auto' || o === 'scroll') return true;
+  }
+  return false;
+}
+let leanEl: HTMLElement | null = null, leanT = 0;
+function lean(px: number) {
+  const v = viewEl();
+  if (leanEl && leanEl !== v) leanEl.style.translate = '';
+  leanEl = v;
+  if (v && !REDUCED.matches) v.style.translate = px ? `${px}px 0` : '';
+}
+function unlean() {
+  const v = leanEl;
+  leanEl = null;
+  if (!v || !v.style.translate) return;
+  const from = v.style.translate;
+  v.style.translate = '';
+  v.animate([{ translate: from }, { translate: '0 0' }], { duration: 180, easing: 'ease-out' });
+}
+addEventListener(
+  'wheel',
+  (e) => {
+    if (e.ctrlKey) return; // a pinch
+    const k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerWidth : 1;
+    const dx = e.deltaX * k, dy = e.deltaY * k;
+    const t = e.target as Element | null;
+    const side = Math.abs(dx) > Math.abs(dy);
+    const blocked = side && (e.defaultPrevented || !!document.querySelector('dialog[open]') || KEYS.typing(t) || !!t?.closest?.('#tutor') || scrollsX(t));
+    const f = SW.feed(dx, dy, e.timeStamp, blocked);
+    if (!f.mine) return;
+    e.preventDefault();
+    clearTimeout(leanT);
+    leanT = window.setTimeout(unlean, SW.quiet);
+    if (!f.d) return lean(f.acc ? -Math.sign(f.acc) * Math.min(Math.abs(f.acc) / SW.need, 1) * 10 : 0);
+    lean(0);
+    leanEl = null;
+    if (!step(f.d)) return;
+    // the next place comes in from the side the fingers went (after the page has switched)
+    window.setTimeout(() => {
+      const v = viewEl();
+      if (!v) return;
+      const x = (f.d < 0 ? -1 : 1) * 16;
+      v.animate(REDUCED.matches ? [{ opacity: 0.6 }, { opacity: 1 }] : [{ translate: `${x}px 0`, opacity: 0.6 }, { translate: '0 0', opacity: 1 }], { duration: 220, easing: 'cubic-bezier(.22,.9,.24,1)' });
+    }, 0);
+  },
+  { passive: false },
 );

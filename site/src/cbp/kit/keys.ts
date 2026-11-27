@@ -22,16 +22,17 @@ export const DEFS: Def[] = [
     ['back', 'Back', 'mod+['],
     ['forward', 'Forward', 'mod+]'],
   ]),
-  // to a page from anywhere: Shift and the page's first letter (go.ts); the Tutor pane is Shift+A (Ask), as T is Today's.
-  // Not while he types in a field, nor over a dialog other than Settings (KEYS.free)
+  // to a page from anywhere: Shift and its place in the tabs, Shift+1 Today … Shift+5 Progress, Shift+6 the Tutor pane (again:
+  // away); Browse, inside Reviews, is Shift+B (go.ts). Not while he types in a field, nor over a dialog other than Settings
+  // (KEYS.free)
   ...D('Pages', undefined, [
-    ['page.today', 'Today', 'shift+t'],
-    ['page.reviews', 'Reviews', 'shift+r'],
+    ['page.today', 'Today', 'shift+1'],
+    ['page.reviews', 'Reviews', 'shift+2'],
     ['page.browse', 'Browse', 'shift+b'],
-    ['page.cards', 'Cards', 'shift+c'],
-    ['page.essays', 'Essays', 'shift+e'],
-    ['page.progress', 'Progress', 'shift+p'],
-    ['page.tutor', 'Tutor', 'shift+a'],
+    ['page.cards', 'Cards', 'shift+3'],
+    ['page.essays', 'Essays', 'shift+4'],
+    ['page.progress', 'Progress', 'shift+5'],
+    ['page.tutor', 'Tutor', 'shift+6'],
   ]),
   ...D('Reviews', undefined, [
     ['rv.show', 'Show answer', 'space enter'],
@@ -104,6 +105,9 @@ const BY = new Map(DEFS.map((d) => [d.id, d]));
 /** Ids from before the Shift+letter page keys (Nov 27): bare T, C, R, B and A. A binding saved for one of them is dropped
     on load, so the page keys start from their new defaults and the next save leaves the old ids out. */
 export const RETIRED = ['go.today', 'go.cards', 'go.reviews', 'go.browse', 'tutor'];
+/** The page keys' defaults before Shift+digits (Nov 27, wave 8). A saved key equal to one of these is a leftover (the
+    Settings list once saved the swapped-in default), so it's dropped and the new default shows; a key he picked stays. */
+export const OLD: Record<string, string> = { 'page.today': 'shift+t', 'page.reviews': 'shift+r', 'page.cards': 'shift+c', 'page.essays': 'shift+e', 'page.progress': 'shift+p', 'page.tutor': 'shift+a' };
 const TYPING = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
 /** Is this in a place that takes typing (a field, an editor)? */
 export const typing = (t: EventTarget | null | undefined) => !!(t && (t as Element).closest?.(TYPING));
@@ -121,7 +125,8 @@ let saveHook: ((keys: Record<string, string>) => void) | null = null;
 export function combo(e: KeyboardEvent): string {
   let k = e.key;
   if (e.altKey && /^Key[A-Z]$/.test(e.code)) k = e.code.slice(3);
-  else if (e.altKey && /^Digit\d$/.test(e.code)) k = e.code.slice(5);
+  // a digit by where it sits: Shift+1 types "!" (or "1" on a French keyboard), and is still shift+1
+  else if ((e.altKey || e.shiftKey) && /^Digit\d$/.test(e.code)) k = e.code.slice(5);
   k = k === ' ' ? 'space' : k.toLowerCase();
   if (k === 'esc') k = 'escape';
   const m: string[] = [];
@@ -173,7 +178,7 @@ export const KEYS = {
   changed: (id: string) => mine[id] != null,
   /** settings.ts: what's saved on his account, and where changes go. */
   load(saved: Record<string, string>, onSave: (keys: Record<string, string>) => void) {
-    mine = Object.fromEntries(Object.entries(saved).filter(([id]) => !RETIRED.includes(id)));
+    mine = Object.fromEntries(Object.entries(saved).filter(([id, k]) => !RETIRED.includes(id) && OLD[id] !== k));
     saveHook = onSave;
   },
 };

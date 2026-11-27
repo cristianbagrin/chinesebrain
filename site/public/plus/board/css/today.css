@@ -130,15 +130,20 @@ li:nth-child(even)>.hc-s .hc-t::after{rotate:1.5deg}
 .hm-full{--hm-max:calc(30px * var(--k))}
 /* no weekday letters (his call, 2026-11-26): the columns are weeks, that's enough; the month names are the one small
    caption on the board (--fs-xs). Today's gold ring sticks out of its cell, so the grid keeps room for it on the right. */
-.hm-in{--p:min(var(--hm-max),calc((100cqw - var(--hm-ring)) / var(--w)));--gap:max(2px,calc(var(--p) * .2));--c:calc(var(--p) - var(--gap));
+/* months: a narrow empty column (--mg) before the week that holds a 1st, so the gap there is wider; that week's days of
+   the month before (.pm) move back beside their month, and the edge steps down where the 1st falls mid-week. Each
+   month's gap costs about .3 of a column (--s of them). */
+.hm-in{--p:min(var(--hm-max),calc((100cqw - var(--hm-ring)) / (var(--w) + var(--s,0) * .3)));--gap:max(2px,calc(var(--p) * .2));--c:calc(var(--p) - var(--gap));--mg:calc(var(--gap) * .5);
   display:grid;grid-template-columns:auto;grid-template-rows:auto auto;row-gap:var(--s2)}
-.hm-mo{display:grid;grid-template-columns:repeat(var(--w),var(--c));column-gap:var(--gap);height:calc(18px * var(--k))}
+.hm-mo{display:grid;grid-template-columns:var(--cols);column-gap:var(--gap);height:calc(18px * var(--k))}
 .hm-mo span{font-size:var(--fs-xs);line-height:1.1;color:var(--ink-3);white-space:nowrap;overflow:visible;width:0}
 .hm-mo span.now{color:var(--ink-2)}
 .hm-mo span.later{opacity:.6}
 /* on a phone the year is narrow: every other month's name */
 @container (max-width:420px){.hm-full .hm-mo span:nth-child(even):not(.now){visibility:hidden}}
-.hm-g{display:grid;grid-template-rows:repeat(7,var(--c));grid-auto-flow:column;grid-auto-columns:var(--c);gap:var(--gap)}
+.hm-g{display:grid;grid-template-rows:repeat(7,var(--c));grid-template-columns:var(--cols);grid-auto-flow:column;grid-auto-columns:var(--c);gap:var(--gap)}
+.hm-sp{visibility:hidden}
+.hm-c.pm{translate:calc(-1 * (var(--mg) + var(--gap))) 0}
 .hm-c{display:block;border-radius:28%;background:var(--hm-0);transition:transform .15s var(--ease)}
 .hm-c.pre{background:var(--hm-pre)}
 .hm-c.partial{background:var(--hm-1)}
