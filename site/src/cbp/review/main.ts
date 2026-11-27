@@ -10,6 +10,7 @@ import { index, apply as filterBy, sortBy, byWord, blank, active, STATES, nextRo
 import { answer, clock, queue, label, missed3, right3, historyOf, type Card, type Conf, type Rev } from '../sched.ts';
 import { Fsrs, optimize, loss } from '../fsrs.ts';
 import { exportAnki } from './export.ts';
+import { drops, sameReviews } from './sync.ts';
 import { triage, verdict, type Ease, type Flagged } from './triage.ts';
 import { rank, missing, pairPrompt, harder, strength, settles, restOf, learnOf, type Cand, type Kept, type Ranked, type Pair } from './partners.ts';
 
@@ -77,7 +78,21 @@ const rowOf = (c: Card): Row | null => {
   const note = S.notes.get(c.nid);
   return note ? { card: c, note, type: typeOf(note) } : null;
 };
-const cardsOf = (nid: number) => [...S.cards.values()].filter((c) => c.nid === nid).sort((a, b) => a.ord - b.ord);
+/** Each note's cards by ord, built once per change to the collection (S.ver), not by a scan of every card per note. */
+let byNote = { ver: -1, m: new Map<number, Card[]>() };
+const cardsOf = (nid: number): Card[] => {
+  if (byNote.ver !== S.ver) {
+    const m = new Map<number, Card[]>();
+    for (const c of S.cards.values()) {
+      const l = m.get(c.nid);
+      if (l) l.push(c);
+      else m.set(c.nid, [c]);
+    }
+    for (const l of m.values()) l.sort((a, b) => a.ord - b.ord);
+    byNote = { ver: S.ver, m };
+  }
+  return (byNote.m.get(nid) ?? []).slice();
+};
 const live = () => [...S.cards.values()].filter((c) => S.notes.has(c.nid));
 /** The cards reviews can show: a card whose front would be empty (no picture for Pic → word) is skipped, as Anki would
  *  never have made it; it comes back by itself once the note has what its front needs. */
@@ -156,7 +171,6 @@ type Change = [Kind, number | string, any, any];
 type Step = { name: string; rows: Change[]; card?: number };
 const H = { undo: [] as Step[], redo: [] as Step[] };
 const clone = <T>(x: T): T => (x == null ? x : JSON.parse(JSON.stringify(x)));
-const revIds = (c: Card | null | undefined) => new Set((c?.revs ?? []).map((r) => r[0]));
 /** Makes a change he can take back: each row from what it is now to `after`. */
 async function change(name: string, rows: [Kind, number | string, any][], card?: number) {
   const cur = (k: Kind, id: number | string) => (k === 'card' ? S.cards.get(+id) : k === 'note' ? S.notes.get(+id) : k === 'conf' ? S.confs.get(+id) : k === 'notetype' ? S.types.get(+id) : S.meta.get(String(id)));
@@ -167,16 +181,14 @@ async function change(name: string, rows: [Kind, number | string, any][], card?:
   await apply(step, 'after');
 }
 async function apply(step: Step, side: 'before' | 'after') {
-  const other = side === 'after' ? 'before' : 'after';
   await putMany(
     step.rows.map(([k, id, before, after]) => {
-      const data = clone(side === 'after' ? after : before), was = side === 'after' ? before : after;
-      // reviews the other side has and this one doesn't leave the server too
-      const gone = k === 'card' ? [...revIds(was)].filter((x) => !revIds(data).has(x)) : [];
-      return [k, id, data, gone.length ? gone : undefined] as [Kind, number | string, any, number[]?];
+      const data = clone(side === 'after' ? after : before);
+      // only an undo takes reviews off the server, and only the ones this step itself added: a review another device
+      // logged in the meantime (on the server, not in this step) is never dropped, by doing, redoing or undoing (sync.ts)
+      return [k, id, data, k === 'card' ? drops(side, before, after) : undefined] as [Kind, number | string, any, number[]?];
     }),
   );
-  void other;
 }
 async function undo() {
   const s = H.undo.pop();
@@ -287,6 +299,7 @@ addEventListener('resize', () => document.querySelectorAll<HTMLElement>('.rw-car
 type View = 'review' | 'browse' | 'designs';
 let view: View = 'review';
 function go(v: View) {
+  stopEnd();
   if (view === 'browse' && v !== 'browse') closeSide();
   view = v;
   VIEW_EL.querySelectorAll<HTMLElement>('[data-v]').forEach((b) => b.setAttribute('aria-current', String(b.dataset.v === v)));
@@ -338,7 +351,12 @@ const left = () => {
   return q.fresh.length + q.learn.length + q.review.length;
 };
 
+/** The end screen waits for the next learning card (or the new day) and draws itself again then: one timer, cleared on
+ *  any redraw or when he leaves the tab or Review. */
+let endT: ReturnType<typeof setTimeout> | undefined;
+const stopEnd = () => clearTimeout(endT);
 function showReview(): void {
+  stopEnd();
   if (RV.panel === 'deeper') return showDeeper();
   // a sync brings back the rows this device just sent (a flag, an edit) as new objects: the same card, unanswered since,
   // stays on screen as it was (side and all). Taking it for a new card flipped it to its front and played that (the F bug).
@@ -373,6 +391,8 @@ function showReview(): void {
         }),
     );
     doneToday();
+    const at = nextLearn && Math.min(nextLearn.due * 1000, ck().dayEnd);
+    if (at) endT = setTimeout(() => VIEW === 'reviews' && view === 'review' && RV.panel !== 'deeper' && !RV.cur && showReview(), Math.max(1000, at - Date.now() + 500));
     return;
   }
   const r = rowOf(c)!;
@@ -457,14 +477,27 @@ BUS.on('reviews:done', () => {
 });
 const SPEAKER = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 9.5h3.2L12 5.6v12.8l-4.8-3.9H4z" fill="currentColor"/><path d="M15.5 8.8a4.5 4.5 0 0 1 0 6.4M18.2 6.2a8.2 8.2 0 0 1 0 11.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
 
+let grading = false;
 async function grade(g: number) {
   const c = RV.cur;
-  if (!c || !RV.shown) return;
+  if (!c || !RV.shown || grading) return;
+  // another device answered this card since it was drawn (a sync brought it in): it's drawn again, not answered twice
+  const now = S.cards.get(c.id);
+  if (!now || !sameReviews(c, now)) {
+    RV.cur = null;
+    return showReview();
+  }
   const r = rowOf(c)!;
+  grading = true;
+  RV.cur = null;
   const a = answer(c, g, conf(), ck(), Date.now() - RV.t0);
   const rows: [Kind, number, any][] = [['card', c.id, a.card]];
   if (a.leech && !r.note.tags.includes('leech')) rows.push(['note', r.note.id, { ...r.note, tags: [...r.note.tags, 'leech'] }]);
-  await change(['Again', 'Hard', 'Good', 'Easy'][g - 1], rows, c.id);
+  try {
+    await change(['Again', 'Hard', 'Good', 'Easy'][g - 1], rows, c.id);
+  } finally {
+    grading = false;
+  }
   acted = true;
   BUS.emit('reviews:card', { grade: g, card: c.id, word: wordOfNote(r.note), left: left() });
   RV.sinceNew = c.type === 0 ? 0 : RV.sinceNew + 1;
@@ -1817,11 +1850,18 @@ async function tune(now = false) {
   try {
     const k = ck();
     const cards = live().filter((x) => x.revs.length);
-    const hs = cards.map((x) => historyOf(x, k.dayOf)).filter((h): h is { day: number; g: number }[] => !!h && h.length > 1);
-    const reviews = hs.reduce((n, h) => n + h.length, 0);
-    if (reviews < 400) return;
+    type H = { day: number; g: number }[];
+    const both = cards.map((x) => ({ id: x.id, h: historyOf(x, k.dayOf) })).filter((x): x is { id: number; h: H } => !!x.h && x.h.length > 1);
+    // only reviews a day or more after the one before count (the model learns from nothing else), and it takes ~1,000
+    const reviews = both.reduce((n, { h }) => n + h.filter((r, i) => i > 0 && r.day - h[i - 1].day >= 1).length, 0);
+    if (reviews < 1000) return;
+    // fitted on 80% of his cards, judged on the other 20% (the same split every time, by card id)
+    const held = (id: number) => (Math.imul(id % 2147483647 | 0, -1640531535) >>> 0) % 5 === 0;
+    const fit = both.filter((x) => !held(x.id)).map((x) => x.h), test = both.filter((x) => held(x.id)).map((x) => x.h);
+    if (!test.length || !fit.length) return;
     const breathe = () => new Promise<void>((ok) => ('requestIdleCallback' in window ? requestIdleCallback(() => ok(), { timeout: 200 }) : setTimeout(ok, 16)));
-    const r = await optimize(c.w, hs, 160, breathe);
+    const fitted = await optimize(c.w, fit, 160, breathe);
+    const r = { w: fitted.w, before: loss(c.w, test), after: loss(fitted.w, test) };
     const better = r.after < r.before * 0.998;
     const w = better ? r.w : c.w;
     const tuned: Tuned = { at: Date.now(), before: r.before, after: better ? r.after : r.before, better: better ? Math.round((1 - r.after / r.before) * 1000) / 10 : 0, reviews };
@@ -1836,7 +1876,6 @@ async function tune(now = false) {
       }
     }
     await putMany(rows);
-    void loss;
   } finally {
     tuning = false;
   }
@@ -1982,12 +2021,14 @@ addEventListener(
     // the flag picker, while open, takes its own keys
     if (RV.flags) {
       const f = KEYS.is(e, 'rv.red') ? 1 : KEYS.is(e, 'rv.green') ? 3 : KEYS.is(e, 'rv.noflag') ? 0 : -1;
-      if (f >= 0) return eat(), flagIt(f);
-      if (KEYS.is(e, 'rv.flag')) return e.preventDefault(), act('flag');
+      if (f >= 0) return eat(), e.repeat ? undefined : flagIt(f);
+      if (KEYS.is(e, 'rv.flag')) return e.preventDefault(), e.repeat ? undefined : act('flag');
     }
     // Space and Enter press a button only when he got to it with Tab (a clicked one, like the Reviews tab, doesn't count)
     const on = t.closest?.('button');
     if ((e.key === ' ' || e.key === 'Enter') && on && on.matches(':focus-visible') && !on.matches('.rw-show,.rw-a')) return;
+    // a held key repeats: in a review only the first press counts (one long Space answered the next card too)
+    if (e.repeat && ['rv.show', 'rv.again', 'rv.hard', 'rv.good', 'rv.easy', 'rv.suspend', 'rv.flag', 'rv.pinyin', 'rv.play', 'rv.edit'].some((id) => KEYS.is(e, id))) return eat();
     if (KEYS.is(e, 'rv.show')) {
       e.preventDefault();
       return RV.shown ? grade(3) : act('show');
@@ -1997,7 +2038,7 @@ addEventListener(
     const a = ([['rv.suspend', 'suspend'], ['rv.flag', 'flag'], ['rv.pinyin', 'py'], ['rv.play', 'play'], ['rv.edit', 'edit']] as const).find(([id]) => KEYS.is(e, id));
     if (a) {
       eat();
-      if (!e.repeat || a[1] !== 'play') act(a[1]);
+      act(a[1]);
     }
   },
   true,
@@ -2016,8 +2057,16 @@ onChange((what) => {
   paintSync();
   if (what === 'pulled') void settlePairs();
   if (what !== 'pulled' || VIEW !== 'reviews') return paintDot();
-  // another device answered or changed something: the card on screen stays unless it changed
-  if (view === 'review' && !RV.shown && !document.querySelector('dialog[open]') && !VIEW_EL.contains(document.activeElement)) showReview();
+  // another device answered or changed something: the card on screen stays unless it changed. A card answered elsewhere
+  // is drawn again even with its answer showing or the focus in the tab, but never while he types or a dialog is open.
+  const a = document.activeElement as HTMLElement | null;
+  const typing = !!a?.closest?.('input, textarea, select, [contenteditable="true"]');
+  const answered = !!RV.cur && !!S.cards.get(RV.cur.id) && !sameReviews(RV.cur, S.cards.get(RV.cur.id)!);
+  if (view === 'review' && !typing && !document.querySelector('dialog[open]') && (answered || (!RV.shown && !VIEW_EL.contains(a)))) {
+    const inTab = VIEW_EL.contains(a);
+    showReview();
+    if (inTab && !VIEW_EL.contains(document.activeElement)) app.focus({ preventScroll: true });
+  }
   if (view === 'browse' && !$('.br-side', app)?.contains(document.activeElement)) paintBrowse();
 });
 
@@ -2066,6 +2115,7 @@ BUS.on('view', (v: string, prev: string) => {
     }
     void settlePairs();
   } else if (prev === 'reviews') {
+    stopEnd();
     SOUND.stop();
     sitting = false;
     dropToast();

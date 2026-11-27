@@ -28,37 +28,82 @@ type Op = { kind: string; id: string; data: Record<string, unknown> | null; mod:
 let lastUsn = 0;
 const nextUsn = () => (lastUsn = Math.max(Date.now(), lastUsn + 1));
 
+/** What a card's schedule is: these move together, from the side that saw his latest review. */
+const SCHEDULE = ['due', 'ivl', 's', 'd', 'type', 'queue', 'left', 'lapses', 'reps', 'lrt'] as const;
+type Rec = Record<string, unknown>;
+const lastRev = (revs: unknown[][], drop: Set<number>) => revs.reduce((m, r) => (drop.has(r[0] as number) ? m : Math.max(m, r[0] as number)), -Infinity);
+
+/** One card from two sides (the server's `old`, a device's `data`). Reviews: every one either side logged, less the ones
+ *  he undid (`drop`). The schedule: from the side holding the latest review (an offline phone's answers outrank a refit
+ *  that rewrote every card later); when both end on the same review, the newer change (`newer`: the device's) wins whole,
+ *  so a flag or a suspension follows the newer change. A suspension made on the other side still holds. */
+export function mergeCard(old: Rec, data: Rec, drop: number[] = [], newer: boolean): Rec {
+  const no = new Set(drop);
+  const a = (old.revs as unknown[][]) ?? [], b = (data.revs as unknown[][]) ?? [];
+  const byId = new Map<number, unknown[]>();
+  for (const r of [...a, ...b]) if (!no.has(r[0] as number)) byId.set(r[0] as number, r);
+  const revs = [...byId.values()].sort((x, y) => (x[0] as number) - (y[0] as number));
+  const base = newer ? data : old;
+  const la = lastRev(a, no), lb = lastRev(b, no);
+  if (la === lb) return { ...base, revs };
+  const won = lb > la ? data : old;
+  const out: Rec = { ...base, revs };
+  for (const k of SCHEDULE) if (k in won) out[k] = won[k];
+  else delete out[k];
+  // suspended (queue -1) or not is his choice, not the schedule's: it follows the newer change
+  if (base.queue === -1) out.queue = -1;
+  else if (won.queue === -1) out.queue = won.type === 0 ? 0 : won.type === 2 ? 2 : 1;
+  return out;
+}
+
 /** A device's changes. Each row: the newer `mod` wins. A card keeps every review any device logged (`drop` takes out
- *  the ones he undid). Returns what was stored, and the rows the server kept instead (the device takes those). */
+ *  the ones he undid) and its schedule from the latest review (mergeCard). Each write only lands if the row is still as
+ *  it was read (mod and usn), else it's read and merged again (3 tries), so two pushes at once can't erase each other's
+ *  reviews. Returns what was stored, and the rows the server kept instead (the device takes those). */
 export async function push(env: Env, body: { ops?: unknown }) {
-  const ops = (Array.isArray(body.ops) ? body.ops : []).slice(0, 300) as Op[];
-  const stmts: Stmt[] = [];
-  const kept: unknown[] = [];
+  let ops = (Array.isArray(body.ops) ? body.ops : []).slice(0, 300) as Op[];
   for (const op of ops) {
     if (!KINDS.has(op.kind) || typeof op.id !== 'string' || !op.id || op.id.length > 80 || typeof op.mod !== 'number') throw new Bad('Bad change.');
     if (op.data !== null && (typeof op.data !== 'object' || Array.isArray(op.data))) throw new Bad('Bad change.');
-    const row = await env.CBP.prepare('SELECT data, mod FROM anki WHERE kind = ? AND id = ?').bind(op.kind, op.id).first<{ data: string | null; mod: number }>();
-    let data = op.data;
-    const old = row?.data ? (JSON.parse(row.data) as Record<string, unknown>) : null;
-    const newer = !row || op.mod >= row.mod;
-    if (op.kind === 'card' && old && data) {
-      // reviews from both sides, by id
-      const drop = new Set(op.drop ?? []);
-      const byId = new Map<number, unknown[]>();
-      for (const r of [...((old.revs as unknown[][]) ?? []), ...((data.revs as unknown[][]) ?? [])]) if (!drop.has(r[0] as number)) byId.set(r[0] as number, r);
-      const revs = [...byId.values()].sort((a, b) => (a[0] as number) - (b[0] as number));
-      data = { ...(newer ? data : old), revs };
-    } else if (!newer) {
-      kept.push([op.kind, op.id, old, row!.mod]);
-      continue;
-    }
-    const text = data === null ? null : JSON.stringify(data);
-    if (text && text.length > 400_000) throw new Bad('Too big.');
-    const mod = Math.max(op.mod, row?.mod ?? 0);
-    stmts.push(env.CBP.prepare('INSERT INTO anki (kind, id, data, mod, usn) VALUES (?, ?, ?, ?, ?) ON CONFLICT (kind, id) DO UPDATE SET data = excluded.data, mod = excluded.mod, usn = excluded.usn').bind(op.kind, op.id, text, mod, nextUsn()));
   }
-  for (let i = 0; i < stmts.length; i += 50) await env.CBP.batch(stmts.slice(i, i + 50));
-  return { stored: stmts.length, kept };
+  const kept: unknown[] = [];
+  let stored = 0;
+  for (let round = 0; ops.length; round++) {
+    if (round === 3) throw new Error('The collection was busy: try again.');
+    const todo: { op: Op; stmt: Stmt }[] = [];
+    for (const op of ops) {
+      const row = await env.CBP.prepare('SELECT data, mod, usn FROM anki WHERE kind = ? AND id = ?').bind(op.kind, op.id).first<{ data: string | null; mod: number; usn: number }>();
+      let data = op.data;
+      const old = row?.data ? (JSON.parse(row.data) as Rec) : null;
+      const newer = !row || op.mod >= row.mod;
+      if (op.kind === 'card' && old && data) data = mergeCard(old, data, op.drop, newer);
+      else if (!newer) {
+        kept.push([op.kind, op.id, old, row!.mod]);
+        continue;
+      }
+      const text = data === null ? null : JSON.stringify(data);
+      if (text && text.length > 400_000) throw new Bad('Too big.');
+      const mod = Math.max(op.mod, row?.mod ?? 0);
+      todo.push({
+        op,
+        stmt: row
+          ? env.CBP.prepare('UPDATE anki SET data = ?, mod = ?, usn = ? WHERE kind = ? AND id = ? AND mod = ? AND usn = ?').bind(text, mod, nextUsn(), op.kind, op.id, row.mod, row.usn)
+          : env.CBP.prepare('INSERT INTO anki (kind, id, data, mod, usn) VALUES (?, ?, ?, ?, ?) ON CONFLICT (kind, id) DO NOTHING').bind(op.kind, op.id, text, mod, nextUsn()),
+      });
+    }
+    const again: Op[] = [];
+    for (let i = 0; i < todo.length; i += 50) {
+      const part = todo.slice(i, i + 50);
+      const res = await env.CBP.batch(part.map((t) => t.stmt));
+      part.forEach((t, j) => {
+        // another push changed the row since it was read: read it again and merge once more
+        if ((res[j] as { meta?: { changes?: number } } | undefined)?.meta?.changes === 0) again.push(t.op);
+        else stored++;
+      });
+    }
+    ops = again;
+  }
+  return { stored, kept };
 }
 
 // ---------- the import (scripts/cbp-anki.ts, with the push key) ----------
