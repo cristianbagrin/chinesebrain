@@ -80,39 +80,28 @@ function HB_tip(d,k,s){
   return `<span class="hb-th">${k===essayToday()?'Today':fmtDate(P(k))}</span>${L.join('')}`;
 }
 
-// cap: at most this many weeks (the latest), so a narrow Today keeps cells big enough to read
+// cap: at most this many columns (the latest), so a narrow Today keeps cells big enough to read
 function HB_heat(full,m,W0,cap){
-  const tk=essayToday(), T=P(tk), S=W0.days;
-  const y=T.getFullYear(), j1=new Date(y,0,1), d31=new Date(y,11,31);
-  const first=monday(j1), lastMon=monday(T);
-  const total=days(first,monday(d31))/7+1, W=full?total:days(first,lastMon)/7+1, from=cap&&!full?Math.max(0,W-cap):0, n=W-from;
-  // a month starts after a slightly wider gap: an empty narrow column before the week that holds its 1st; when the 1st
-  // falls mid-week, that week's days of the month before sit back beside their own month, so the edge steps down
-  const cells=[], heads=[], cols=[];
-  let s=0;
-  for(let w=from;w<W;w++){
-    const mon=add(first,7*w);
-    let one=-1;
-    for(let i=0;i<7;i++){const d1=add(mon,i);if(d1.getDate()===1&&d1.getFullYear()===y) one=i;}
-    if(one>=0&&w>from){cols.push('var(--mg)');for(let i=0;i<7;i++)cells.push('<i class="hm-sp" aria-hidden="true"></i>');s++;}
-    else one=-1;
-    cols.push('var(--c)');
-    const col=cols.length;
-    for(let i=0;i<7;i++){
-      const dt=add(mon,i), k=K(dt), pm=i<one?' pm':'';
-      if(dt.getDate()===1&&dt.getFullYear()===y&&(dt<=T||full)) heads.push(`<span style="grid-column:${col}" data-w="${w-from}"${dt.getMonth()===T.getMonth()?' class="now"':dt>T?' class="later"':''}>${MO[dt.getMonth()]}</span>`);
-      if(dt<j1||dt>T){cells.push(`<i class="hm-c off${pm}" aria-hidden="true"></i>`);continue;}
+  const tk=essayToday(), T=P(tk), S=W0.days, y=T.getFullYear();
+  // a column a week, and every month starts its own column (HABIT.columns): no gaps, the edge between two months steps
+  // where the 1st falls mid-week
+  const all=HABIT.columns(y,full?y+'-12-31':tk), from=cap&&!full?Math.max(0,all.length-cap):0, C=all.slice(from), n=C.length;
+  const cells=[], heads=[];
+  C.forEach((c,ci)=>{
+    if(c.first){const d1=P(c.days.find(Boolean));heads.push(`<span style="grid-column:${ci+1}" data-c="${ci}"${c.month===T.getMonth()?' class="now"':d1>T?' class="later"':''}>${MO[c.month]}</span>`);}
+    c.days.forEach(k=>{
+      if(!k||k>tk){cells.push('<i class="hm-c off" aria-hidden="true"></i>');return;}
       const d=m[k]||HABIT.blank(), sv=S[k], st=sv?sv.st:(d.rv||d.cards||d.test)?'partial':'pre';
       const cls=st==='done'?(sv.deep?'deep':'done'):st==='open'?'open':st;
       const tip=HB_tip(d,k,sv), pop=k===tk&&st==='done'&&HB.pop;
-      cells.push(`<i class="hm-c ${cls}${pm}${k===tk?' today':''}${pop?' pop':''}"${tip?` data-tip="${esc(tip)}"`:''}></i>`);
-    }
-  }
-  // the first column's month: the 1st of January sits mid-week, and a shortened year starts mid-month; it gets its label
-  // anyway, unless the next month's name is right beside it
-  const c1=+((heads[0]||'').match(/data-w="(\d+)"/)||[])[1];
-  if(!heads.length||c1>2){const d0=add(first,7*from);heads.unshift(`<span style="grid-column:1"${d0.getMonth()===T.getMonth()?' class="now"':''}>${MO[from?d0.getMonth():0]}</span>`);}
-  return `<div class="hm-in" style="--w:${n};--s:${s};--wt:${total};--cols:${cols.join(' ')}" data-cols="${n}" data-y="${y}">
+      cells.push(`<i class="hm-c ${cls}${k===tk?' today':''}${pop?' pop':''}"${tip?` data-tip="${esc(tip)}"`:''}></i>`);
+    });
+  });
+  // a shortened year starts mid-month: its first column gets the month's name anyway, unless the next month's name is
+  // right beside it
+  const c1=+((heads[0]||'').match(/data-c="(\d+)"/)||[])[1];
+  if(n&&(!heads.length||c1>2)&&!C[0].first) heads.unshift(`<span style="grid-column:1"${C[0].month===T.getMonth()?' class="now"':''}>${MO[C[0].month]}</span>`);
+  return `<div class="hm-in" style="--w:${n};--wt:${all.length}" data-cols="${n}" data-y="${y}">
     <div class="hm-mo" aria-hidden="true">${heads.join('')}</div>
     <div class="hm-g" role="img" aria-label="Every day this year">${cells.join('')}</div></div>`;
 }
@@ -122,12 +111,11 @@ function HB_state(){
   HB.walk=w;
   return {m,w};
 }
-// Today: as many of the latest weeks as fit with each day at least 13px (× k), months' wider gaps counted (about one
-// column in 14); the whole year when it fits
+// Today: as many of the latest columns as fit with each day at least 13px (× k); the whole year when it fits
 function HB_cap(el){
   const k=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--k'))||.92, w=el.clientWidth;
   if(!w) return 0;
-  return Math.max(8,Math.floor((w-4*k)/(13*k*1.07)));
+  return Math.max(8,Math.floor((w-4*k)/(13*k)));
 }
 let HB_capW=0;
 addEventListener('resize',()=>{const el=document.getElementById('habit-today');if(el&&el.clientWidth!==HB_capW){HB_capW=el.clientWidth;HB_soon();}},{passive:true});
