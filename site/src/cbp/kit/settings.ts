@@ -65,6 +65,10 @@ LAB.define('nudge', 'Evening nudge', [['off', 'Off'], ...Array.from({ length: 14
 // (end Habit)
 const ORDER = ['text-size', 'pinyin', 'autoplay', 'card-model', 'card-ahead', 'pinyin-model', 'idea-model', 'draw-model', 'deeper-model', 'test-model', 'grade-model', 'essay-model', 'tutor-model'];
 const GROUPS = ['Everyday', 'Reviews', 'AI'];
+// Combine: partner words for a word that's too easy (src/cbp/combine.ts reads it), right after Five minutes on a word
+LAB.define('combine-model', 'Combine partners', M, 'haiku', 'AI', A);
+ORDER.splice(ORDER.indexOf('deeper-model') + 1, 0, 'combine-model');
+// (end Combine)
 
 // ---------- his account ----------
 const token = () => lsGet('cb-token') ?? '';

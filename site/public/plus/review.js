@@ -123,11 +123,12 @@
     // the first card takes the study card's first sentence; another card the first one no card of the word has yet
     const c = parseCard(d.text), used = new Set(notesOf(w).map((x) => plain(RV.notes[noteId(w, x)].chinese || '')));
     let s = [...c.mine, ...c.ex].map((x) => fromSentence(x, c.word || w)).find((x) => !used.has(plain(x.chinese))) || { chinese: '', py: '' };
-    // Reviews: a pair card (Combine on the Reviews tab, "A、B"): both sentences, each with its own word marked
+    // Combine (the Reviews tab, "A、B"): both example sentences, each using both words, both marked in each
     const pair = String(c.word || w).split('、');
     if (pair.length > 1 && c.ex.length > 1 && !used.size) {
-      const ss = c.ex.map((x) => fromSentence(x, pair.find((p) => String(x.zh).includes(p)) || ''));
-      s = { chinese: ss.map((x) => x.chinese).join('<br>'), py: ss.map((x) => x.py).join('\n') };
+      const ss = c.ex.map((x) => fromSentence(x, pair[0]));
+      const more = (h) => pair.slice(1).reduce((acc, p) => acc.replace(new RegExp(esc(p).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), (m, at, all) => (/<mark>[^<]*$/.test(all.slice(0, at)) ? m : `<mark>${m}</mark>`)), h);
+      s = { chinese: ss.map((x) => more(x.chinese)).join('<br>'), py: ss.map((x) => x.py).join('\n') };
     }
     const st = { n: k, chinese: s.chinese, word: esc(c.word || w), mnemonic: '', type: 'Chinese', picture: '', notes: '', audio: '', audioFor: '', py: s.py, pyFor: s.py ? plain(s.chinese) : '', saved: false };
     const dr = draft.get(w, k);

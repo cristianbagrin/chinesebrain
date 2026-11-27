@@ -327,3 +327,18 @@ export function byWord(items: Item[]): Item[] {
   }
   return out;
 }
+
+// Combine: Browse by keyboard and a word's panel
+/** ↑ ↓: the row after (d = 1) or before (d = -1) `cur` among the rows shown, held at the ends; with none open, the first
+ *  (↓) or the last (↑). */
+export function nextRow(ids: number[], cur: number, d: number): number | null {
+  if (!ids.length) return null;
+  const i = ids.indexOf(cur);
+  return ids[i < 0 ? (d > 0 ? 0 : ids.length - 1) : Math.max(0, Math.min(ids.length - 1, i + d))];
+}
+/** A word's cards as its panel lists them, one row each: the word's notes oldest first, each note's cards in order. */
+export const wordRows = <C extends { nid: number; ord: number }>(nids: number[], cards: C[]) =>
+  [...new Set(nids)].sort((a, b) => a - b).flatMap((nid) => cards.filter((c) => c.nid === nid).sort((a, b) => a.ord - b.ord));
+/** What a row says: the note's sentence on one line (its lines joined), else the word. */
+export const rowText = (sentence: string, word: string) => strip(String(sentence ?? '').replace(/<br\s*\/?>|<\/div>|<\/p>/gi, ' ')).replace(/\s+/g, ' ').trim() || word;
+// (end Combine)

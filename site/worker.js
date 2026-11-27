@@ -16,6 +16,7 @@ import * as taste from './src/cbp/taste.ts';
 import * as ai from './src/cbp/ai.ts';
 import * as cards from './src/cbp/cards.ts';
 import * as anki from './src/cbp/anki.ts';
+import * as combine from './src/cbp/combine.ts'; // Combine
 import * as nightly from './src/cbp/nightly.ts';
 import * as tutor from './src/cbp/tutor.ts';
 import * as jobs from './src/cbp/jobs.ts';
@@ -854,6 +855,8 @@ async function api(request, env, path) {
         if (path.startsWith('plus/anki/') && !flags.includes('plus.anki')) throw new Fail(404, 'not_found', 'Not found.');
         if (path === 'plus/anki/push') return await anki.push(env, body);
         if (path === 'plus/anki/deeper') return await anki.deeper(env, body);
+        // Combine: partner words for the words that are too easy (src/cbp/combine.ts)
+        if (path === 'plus/anki/partners') return await combine.partners(env, body);
         // the card window (src/cbp/cards.ts)
         if (path === 'plus/sample') return await cards.sample(env, body);
         if (path === 'plus/photos') return await cards.photos(env, body);
