@@ -47,6 +47,8 @@
   "r2_buckets": [{ "binding": "FILES", "bucket_name": "cbp-files" }],
   // Workers AI: the monthly test's scene photos (FLUX schnell, inside the free daily allowance)
   "ai": { "binding": "AI" },
+  // Cloudflare Images: big pictures are made smaller as they're kept (src/cbp/cards.ts keepMedia); 5,000 a month free
+  "images": { "binding": "IMAGES" },
   // every half hour (worker.js scheduled): the evening nudge's check (src/cbp/push.ts); at 14:00 UTC, 10 pm in Taipei,
   // the nightly (src/cbp/nightly.ts); at 21:00 UTC, 5 am, the morning jobs. One trigger: the free plan allows 5 per account.
   "triggers": { "crons": ["*/30 * * * *"] },
@@ -81,6 +83,7 @@
       ],
       "r2_buckets": [{ "binding": "FILES", "bucket_name": "cbp-files-staging" }],
       "ai": { "binding": "AI" },
+      "images": { "binding": "IMAGES" },
       // production's AI (the Brains entrypoint in worker.js): staging has no AI keys of its own
       "services": [{ "binding": "BRAINS", "service": "chinesebrain", "entrypoint": "Brains" }],
       "triggers": { "crons": [] }

@@ -20,7 +20,7 @@ type Env = {
   FILES: {
     put(k: string, v: ArrayBuffer | ReadableStream, o?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
     get(k: string): Promise<R2Object | null>;
-    list(o: { prefix: string; cursor?: string; limit?: number }): Promise<{ objects: { key: string; uploaded: Date }[]; truncated: boolean; cursor?: string }>;
+    list(o: { prefix: string; cursor?: string; limit?: number }): Promise<{ objects: { key: string; uploaded: Date; size: number }[]; truncated: boolean; cursor?: string }>;
     delete(k: string | string[]): Promise<unknown>;
   };
   CBP_PUSH_KEY?: string;
@@ -29,6 +29,12 @@ type Env = {
   ANTHROPIC_API_KEY?: string;
   POLLINATIONS_KEY?: string;
   ASSETS?: { fetch(r: Request | string): Promise<Response> };
+  IMAGES?: Images;
+};
+type ImgOut = { response(): Response; contentType(): string };
+type Images = {
+  info(s: ReadableStream): Promise<{ width?: number; height?: number; format?: string }>;
+  input(s: ReadableStream): { transform(o: Record<string, unknown>): { output(o: Record<string, unknown>): Promise<ImgOut> } };
 };
 
 export const CARD_MODEL = 'anthropic:claude-sonnet-5-5';
@@ -71,9 +77,60 @@ export async function keepMedia(env: Env, bytes: ArrayBuffer, type: string) {
   const t = type.split(';')[0].trim().toLowerCase();
   if (!EXT[t]) throw new Bad('Not a picture or a sound.');
   if (bytes.byteLength > 12_000_000) throw new Bad('Too big.');
-  const name = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('') + '.' + EXT[t];
-  await env.FILES.put(`m/${name}`, bytes, { httpMetadata: { contentType: t } });
+  const small = await shrink(env, bytes, t);
+  if (small) bytes = small;
+  const k = small ? 'image/webp' : t;
+  const name = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('') + '.' + EXT[k];
+  await env.FILES.put(`m/${name}`, bytes, { httpMetadata: { contentType: k } });
   return mediaUrl(name);
+}
+
+// ---------- pictures kept small ----------
+// A card shows a picture a few hundred pixels wide, yet drawings come back as 1024px PNGs (~1 MB) and imported
+// Anki pictures run to 2–3 MB: every one is downloaded and kept on the phone. Anything over SMALL is redrawn as a
+// WebP no wider or taller than EDGE (Cloudflare Images, free up to 5,000 a month); if that fails, or doesn't save
+// much, the original is kept as it was.
+const SMALL = 200_000, EDGE = 1024;
+const SHRINKABLE = new Set(['image/jpeg', 'image/png', 'image/webp']);
+export async function shrink(env: Env, bytes: ArrayBuffer, type: string): Promise<ArrayBuffer | null> {
+  if (!env.IMAGES || !SHRINKABLE.has(type) || bytes.byteLength <= SMALL) return null;
+  try {
+    const out = await env.IMAGES.input(new Blob([bytes]).stream())
+      .transform({ width: EDGE, height: EDGE, fit: 'scale-down' })
+      .output({ format: 'image/webp', quality: 80 });
+    const b = await out.response().arrayBuffer();
+    return b.byteLength > 0 && b.byteLength < bytes.byteLength * 0.8 ? b : null;
+  } catch (e) {
+    console.error('shrink', e);
+    return null;
+  }
+}
+/** POST push/shrink (?dry=1, ?limit=N): the big pictures already kept, made small in place. The name (and so every
+ *  card pointing at it) stays; the bytes become a WebP and its type says so. The original goes to `orig/` first, which
+ *  the daily sweep never touches, so any of them can be put back. */
+export async function shrinkKept(env: Env, o: { dry?: boolean; limit?: number } = {}) {
+  const limit = o.limit ?? 60;
+  const big: { key: string; size: number }[] = [];
+  let cursor: string | undefined;
+  do {
+    const l = await env.FILES.list({ prefix: 'm/', cursor, limit: 1000 });
+    for (const x of l.objects) if (x.size > SMALL && /\.(jpe?g|png|webp)$/i.test(x.key)) big.push({ key: x.key, size: x.size });
+    cursor = l.truncated ? l.cursor : undefined;
+  } while (cursor);
+  if (o.dry) return { big: big.length, mb: Math.round(big.reduce((s, x) => s + x.size, 0) / 1e5) / 10 };
+  let done = 0, before = 0, after = 0, kept = 0;
+  for (const x of big.slice(0, limit)) {
+    const obj = await env.FILES.get(x.key);
+    if (!obj) continue;
+    const type = obj.httpMetadata?.contentType ?? '';
+    const bytes = await new Response(obj.body).arrayBuffer();
+    const small = await shrink(env, bytes, type);
+    if (!small) { kept++; continue; }
+    await env.FILES.put(`orig/${x.key.slice(2)}`, bytes, { httpMetadata: { contentType: type } });
+    await env.FILES.put(x.key, small, { httpMetadata: { contentType: 'image/webp' } });
+    done++; before += bytes.byteLength; after += small.byteLength;
+  }
+  return { big: big.length, done, kept, left: Math.max(0, big.length - limit), mbBefore: Math.round(before / 1e5) / 10, mbAfter: Math.round(after / 1e5) / 10 };
 }
 export async function media(env: Env, name: string) {
   if (!/^[0-9a-f]{32}\.(jpg|png|webp|gif|svg|mp3|m4a|ogg|wav)$/.test(name)) return new Response('Not found', { status: 404 });
