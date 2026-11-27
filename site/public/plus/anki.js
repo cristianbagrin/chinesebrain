@@ -824,9 +824,32 @@ CREATE INDEX ix_notes_csum ON notes (csum);`;
     return out.slice(0, n);
   }
   var STALE = 30 * 864e5, missing = (targets, kept2, now = Date.now()) => [...new Set(targets)].filter((w) => !kept2[w] || now - kept2[w].at > STALE);
-  function pairPrompt(a, b, why = "") {
+  function strength(cards) {
+    let lo = (k) => cards.some((c) => c[k] == null) ? null : cards.length ? Math.min(...cards.map((c) => c[k])) : null, ds = cards.map((c) => c.d).filter((x) => x != null);
+    return { d: ds.length ? Math.max(...ds) : null, s: lo("s"), r: lo("r"), lapses: Math.max(0, ...cards.map((c) => c.lapses)) };
+  }
+  function harder(easy, partner) {
+    let v = 0, vote = (a, b, more2, near) => {
+      if (!(a == null && b == null)) {
+        if (a == null) return void (v += more2 ? -1 : 1);
+        if (b == null) return void (v += more2 ? 1 : -1);
+        Math.abs(a - b) <= near || (v += a > b === more2 ? 1 : -1);
+      }
+    };
+    return vote(easy.d, partner.d, !0, 0.3), vote(easy.s, partner.s, !1, 0.05 * Math.max(easy.s ?? 0, partner.s ?? 0)), vote(easy.r, partner.r, !1, 0.02), easy.lapses !== partner.lapses && (v += easy.lapses > partner.lapses ? 1 : -1), v > 0 ? "easy" : "partner";
+  }
+  var learnOf = (p) => p.kind ? p.word ?? "" : p.learn || p.words.split("\u3001").at(-1) || "";
+  function settles(p, word) {
+    if (!word) return !1;
+    if (p.kind || p.learn) return word === learnOf(p);
+    let parts = p.words.split("\u3001");
+    return parts.includes(word) || parts.every((w) => word.includes(w));
+  }
+  var restOf = (p) => p.nids.slice(0, 1);
+  function pairPrompt(a, b, why = "", learn = b) {
+    let other = learn === a ? b : a;
     return `=== TWO WORDS, ONE CARD ===
-${a} and ${b} are both easy for him now. This card replaces their old cards and teaches them together, the way they meet in real life${why ? ` (${why})` : ""}. word: ${a}\u3001${b} (exactly this). meaning: ${a} \u2026; ${b} \u2026 (short). ex: exactly two, and EACH one uses BOTH ${a} and ${b}, naturally, as a Taiwanese person would say it: one sentence, or a short exchange on one line (A\uFF1A\u2026 B\uFF1A\u2026). Nothing forced: if a sentence needs a stretch to hold both, write a different one. Taiwan usage, Traditional characters, words he knows apart from these two; **bold** ${a} and ${b} each time. know: 1 or 2 points on how the two go together (the collocation, the situation, the contrast). One char: line per distinct character, no how: lines, no second: line.`;
+${other} is easy for him now; ${learn} is the harder of the two for him. This card teaches ${learn}, with ${other} beside it, the way they meet in real life${why ? ` (${why})` : ""}. word: ${learn} (exactly this, only this word). meaning: ${learn} \u2026 (short). ex: exactly two, and EACH one uses BOTH ${learn} and ${other}, naturally, as a Taiwanese person would say it: one sentence, or a short exchange on one line (A\uFF1A\u2026 B\uFF1A\u2026). Nothing forced: if a sentence needs a stretch to hold both, write a different one. Taiwan usage, Traditional characters, words he knows apart from these two; **bold** ${learn} each time (not ${other}). know: 1 or 2 points on how the two go together (the collocation, the situation, the contrast). One char: line per distinct character of ${learn}, no how: lines, no second: line.`;
   }
 
   // site/src/cbp/review/main.ts
@@ -1163,29 +1186,29 @@ img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!imp
     }
     return [...out.values()];
   }
-  var nearWords = (note) => nearNotes(note).map((n) => wordOfNote(n)), mergeNo = () => new Set(S.meta.get("mergeNo")?.pairs ?? []), pairKey = (a, b) => [a, b].sort().join("-"), pairs = () => S.meta.get("combine")?.list ?? [];
+  var nearWords = (note) => nearNotes(note).map((n) => wordOfNote(n)), mergeNo = () => new Set(S.meta.get("mergeNo")?.pairs ?? []), pairKey = (a, b) => [a, b].sort().join("-"), pairs = () => S.meta.get("combine")?.list ?? [], strengthOf = (nid) => strength(items().filter((i) => i.note.id === nid));
   async function combine(x, y, why = "") {
     let [a, b] = [S.notes.get(x), S.notes.get(y)];
     if (!a || !b) return;
-    let words2 = `${wordOfNote(a)}\u3001${wordOfNote(b)}`;
-    await put("meta", "combine", { list: [...pairs().filter((p) => p.words !== words2), { words: words2, nids: [x, y], at: Date.now(), ...why ? { why } : {} }] });
+    let words2 = `${wordOfNote(a)}\u3001${wordOfNote(b)}`, learn = harder(strengthOf(x), strengthOf(y)) === "easy" ? wordOfNote(a) : wordOfNote(b);
+    await put("meta", "combine", { list: [...pairs().filter((p) => p.words !== words2), { words: words2, nids: [x, y], at: Date.now(), learn, ...why ? { why } : {} }] });
     try {
       openCard(words2, "any");
     } catch {
     }
   }
-  var settling = !1;
+  var settling = !1, loudTill = 0;
   async function settlePairs() {
-    let list = pairs();
+    let loud = Date.now() < loudTill, list = pairs();
     if (!(!ready || settling || !list.length)) {
       settling = !0;
       try {
         let wait = [];
         for (let p of list) {
-          let parts = p.words.split("\u3001"), made = [...S.notes.values()].find((n) => n.id > p.at - 6e4 && !p.nids.includes(n.id) && (p.kind ? wordOfNote(n) === p.word : parts.every((w) => wordOfNote(n).includes(w)))), doc = typeof CD < "u" && typeof cardId == "function" ? CD.docs[cardId(p.words)] : void 0;
+          let made = [...S.notes.values()].find((n) => n.id > p.at - 6e4 && !p.nids.includes(n.id) && settles(p, wordOfNote(n))), doc = typeof CD < "u" && typeof cardId == "function" ? CD.docs[cardId(p.words)] : void 0;
           if (made) {
-            let old = p.nids.flatMap(cardsOf).filter((c) => c.queue >= 0 || c.flags & 7);
-            old.length && (await change(p.kind ? "Rewrite" : "Combine", old.map((c) => ["card", c.id, { ...c, queue: -1, flags: c.flags & -8 }])), VIEW === "reviews" && toast(`<span class="zh">${esc2(p.kind ? p.word : p.words)}</span>: the old cards rest`, !0)), await keep(p.nids, !1);
+            let rest = restOf(p), easy = rest.map((id) => S.notes.get(id)).filter(Boolean).map((n) => wordOfNote(n)).join("\u3001"), old = rest.flatMap(cardsOf).filter((c) => c.queue >= 0 || c.flags & 7);
+            old.length && (await change(p.kind ? "Rewrite" : "Combine", old.map((c) => ["card", c.id, { ...c, queue: -1, flags: c.flags & -8 }])), (loud || VIEW === "reviews") && later(() => toast(`<span class="zh">${esc2(easy || p.word || "")}</span>: old cards suspended`, !0))), await keep(rest, !1);
           } else !doc?.dropped && Date.now() - p.at < 14 * 864e5 && wait.push(p);
         }
         wait.length !== list.length && await put("meta", "combine", { list: wait });
@@ -1194,6 +1217,17 @@ img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!imp
       }
     }
   }
+  function later(f, tries = 12) {
+    if (tries > 0 && typeof TOAST < "u" && TOAST) return void setTimeout(() => later(f, tries - 1), 500);
+    f();
+  }
+  async function added(key) {
+    !key.includes("\u3001") && !key.endsWith(" \u21BB") || (ready || await start(), pairs().some((p) => p.words === key) && (loudTill = Date.now() + 2e4, await sync(), await settlePairs()));
+  }
+  Object.assign(window, { CBP_learn: (key) => {
+    let p = pairs().find((x) => x.words === key);
+    return p ? learnOf(p) : "";
+  }, CBP_added: (key) => void added(key).catch((e) => console.error(e)) });
   if (typeof cardPrompt == "function") {
     let base = cardPrompt;
     cardPrompt = (kit, word) => {
@@ -1205,7 +1239,7 @@ ${remakePrompt(p)}`;
       let [a, b] = p.words.split("\u3001");
       return `${base(kit, word)}
 
-${pairPrompt(a, b, p.why)}`;
+${pairPrompt(a, b, p.why, learnOf(p))}`;
     };
   }
   var TH = () => conf().leechThreshold ?? 8, seenMap = () => S.meta.get("triage")?.seen ?? {}, onTheWay = () => new Set(pairs().flatMap((p) => p.nids)), tagsOf = (nid) => S.notes.get(nid)?.tags;

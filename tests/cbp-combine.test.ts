@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rank, missing, pairPrompt, STALE, type Cand } from '../site/src/cbp/review/partners.ts';
+import { rank, missing, pairPrompt, STALE, harder, strength, settles, restOf, learnOf, type Cand, type Pair } from '../site/src/cbp/review/partners.ts';
 import { prompt, parse } from '../site/src/cbp/combine.ts';
 import { nextRow, wordRows, rowText } from '../site/src/cbp/review/filter.ts';
 
@@ -40,14 +40,47 @@ test('only words with no list, or a stale one, are asked about', () => {
   assert.deepEqual(missing(['點菜', '應該', '青菜', '青菜'], kept, now), ['應該', '青菜']);
 });
 
-test("the pair card's prompt: two sentences, each with both words, both marked", () => {
-  const p = pairPrompt('點菜', '服務生', 'ordering at a restaurant');
-  assert.match(p, /word: 點菜、服務生 \(exactly this\)/);
-  assert.match(p, /ex: exactly two, and EACH one uses BOTH 點菜 and 服務生/);
-  assert.match(p, /\*\*bold\*\* 點菜 and 服務生/);
-  assert.match(p, /ordering at a restaurant/);
-  assert.doesNotMatch(p, /only .* fits/); // not the old "one sentence per word"
+test("the pair card's prompt: one word taught, two sentences each with both words", () => {
+  const p = pairPrompt('介紹', '認識', 'meeting people', '認識');
+  assert.match(p, /word: 認識 \(exactly this, only this word\)/);
+  assert.match(p, /ex: exactly two, and EACH one uses BOTH 認識 and 介紹/);
+  assert.match(p, /\*\*bold\*\* 認識 each time \(not 介紹\)/);
+  assert.match(p, /meeting people/);
   assert.match(p, /no second: line/);
+  // the too-easy word can be the harder one too
+  assert.match(pairPrompt('介紹', '認識', '', '介紹'), /word: 介紹 \(exactly this/);
+});
+
+test('combine: the harder word is the one taught, by his reviews; a tie goes to the partner', () => {
+  const easy = strength([{ d: 3.1, s: 120, r: 0.97, lapses: 0 }, { d: 2.8, s: 200, r: 0.98, lapses: 0 }]);
+  assert.deepEqual(easy, { d: 3.1, s: 120, r: 0.97, lapses: 0 });
+  const hardP = strength([{ d: 6.5, s: 14, r: 0.85, lapses: 3 }]);
+  assert.equal(harder(easy, hardP), 'partner');
+  // the too-easy word is harder only when the measures say so
+  assert.equal(harder(hardP, easy), 'easy');
+  // the same numbers: the partner
+  assert.equal(harder(easy, easy), 'partner');
+  // a partner he never studied is the harder
+  assert.equal(harder(easy, strength([{ d: null, s: null, r: null, lapses: 0 }])), 'partner');
+  // split votes (more lapses, but higher stability and recall): the partner unless the easy word wins outright
+  assert.equal(harder({ d: 5, s: 30, r: 0.9, lapses: 2 }, { d: 5, s: 60, r: 0.95, lapses: 0 }), 'easy');
+  assert.equal(harder({ d: 5, s: 60, r: 0.95, lapses: 1 }, { d: 5, s: 30, r: 0.9, lapses: 0 }), 'partner');
+});
+
+test("combine: the new note for the taught word settles the pair, and only the too-easy word's cards rest", () => {
+  const p: Pair = { words: '介紹、認識', nids: [11, 22], at: 1, learn: '認識' };
+  assert.ok(settles(p, '認識'));
+  assert.ok(!settles(p, '介紹') && !settles(p, '介紹、認識'));
+  assert.deepEqual(restOf(p), [11]);
+  assert.equal(learnOf(p), '認識');
+  // pairs from before (no learn): either word, or both together; still only the too-easy one rests
+  const old: Pair = { words: '介紹、認識', nids: [11, 22], at: 1 };
+  assert.ok(settles(old, '認識') && settles(old, '介紹、認識') && settles(old, '介紹'));
+  assert.deepEqual(restOf(old), [11]);
+  // Harder card: one word written again
+  const h: Pair = { words: '介紹 ↻', nids: [11], at: 1, kind: 'easy', word: '介紹' };
+  assert.ok(settles(h, '介紹') && !settles(h, '認識'));
+  assert.deepEqual(restOf(h), [11]);
 });
 
 test("the partner prompt and Claude's answer, kept to what can be used", () => {

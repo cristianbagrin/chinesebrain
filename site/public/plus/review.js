@@ -107,6 +107,16 @@
     const pre = zs.length > 1 ? '- ' : '';
     return { chinese: CD_sentCopy(zs, w).html, py: ps.map((p) => pre + strip(p)).join('\n') };
   }
+  /** The word a combined card teaches: the one Reviews chose (the harder for him), else the card's word when it is one of
+   *  the two, else the partner (the second). */
+  function pairWord(w, c, pair) {
+    let l = '';
+    try {
+      l = typeof window.CBP_learn === 'function' ? window.CBP_learn(w) : '';
+    } catch {}
+    const cw = String(c.word || '').replace(/\*\*/g, '').replace(/\s*[（(].*$/, '').trim();
+    return l || (pair.includes(cw) ? cw : pair[pair.length - 1]);
+  }
   /** The card on screen for a word (its slot n): saved, a draft, or new from the study card. */
   function state(w, k = slotOf(w)) {
     const id = noteId(w, k);
@@ -122,15 +132,18 @@
     if (!cardOK(d)) return null;
     // the first card takes the study card's first sentence; another card the first one no card of the word has yet
     const c = parseCard(d.text), used = new Set(notesOf(w).map((x) => plain(RV.notes[noteId(w, x)].chinese || '')));
-    let s = [...c.mine, ...c.ex].map((x) => fromSentence(x, c.word || w)).find((x) => !used.has(plain(x.chinese))) || { chinese: '', py: '' };
-    // Combine (the Reviews tab, "A、B"): both example sentences, each using both words, both marked in each
-    const pair = String(c.word || w).split('、');
-    if (pair.length > 1 && c.ex.length > 1 && !used.size) {
-      const ss = c.ex.map((x) => fromSentence(x, pair[0]));
-      const more = (h) => pair.slice(1).reduce((acc, p) => acc.replace(new RegExp(esc(p).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), (m, at, all) => (/<mark>[^<]*$/.test(all.slice(0, at)) ? m : `<mark>${m}</mark>`)), h);
-      s = { chinese: ss.map((x) => more(x.chinese)).join('<br>'), py: ss.map((x) => x.py).join('\n') };
+    // Combine (the Reviews tab, key "A、B"): the card teaches one word, the harder of the two for him (CBP_learn,
+    // review/main.ts); its Word is that word, and its Sentence both example sentences (each uses both words) with only
+    // that word marked
+    const pair = String(w).split('、'), learn = pair.length > 1 ? pairWord(w, c, pair) : '';
+    const ww = learn || c.word || w;
+    let s = [...c.mine, ...c.ex].map((x) => fromSentence(x, ww)).find((x) => !used.has(plain(x.chinese))) || { chinese: '', py: '' };
+    const both = c.ex.length ? c.ex : c.mine;
+    if (learn && both.length > 1 && !used.size) {
+      const ss = both.map((x) => fromSentence(x, learn));
+      s = { chinese: ss.map((x) => x.chinese).join('<br>'), py: ss.map((x) => x.py).join('\n') };
     }
-    const st = { n: k, chinese: s.chinese, word: esc(c.word || w), mnemonic: '', type: 'Chinese', picture: '', notes: '', audio: '', audioFor: '', py: s.py, pyFor: s.py ? plain(s.chinese) : '', saved: false };
+    const st = { n: k, chinese: s.chinese, word: esc(ww), mnemonic: '', type: 'Chinese', picture: '', notes: '', audio: '', audioFor: '', py: s.py, pyFor: s.py ? plain(s.chinese) : '', saved: false };
     const dr = draft.get(w, k);
     if (dr) Object.assign(st, Object.fromEntries(FIELDS.map(([f]) => [f, dr[f] ?? st[f]])), { audio: dr.audio || '', audioFor: dr.audioFor || '', type: dr.type || st.type, dirty: true });
     return (RV.st[id] = st);
@@ -543,6 +556,12 @@
       st.saved = true;
       st.dirty = false;
       draft.drop(w, k);
+      // a combined card or a word written again: the too-easy word's old cards rest now (review/main.ts)
+      if (!prev) {
+        try {
+          window.CBP_added?.(w);
+        } catch {}
+      }
       return true;
     } catch (e) {
       console.error(e);
