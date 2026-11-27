@@ -291,16 +291,17 @@
       ["back", "Back", "mod+["],
       ["forward", "Forward", "mod+]"]
     ]),
-    // to a page from anywhere: Shift and the page's first letter (go.ts); the Tutor pane is Shift+A (Ask), as T is Today's.
-    // Not while he types in a field, nor over a dialog other than Settings (KEYS.free)
+    // to a page from anywhere: Shift and its place in the tabs, Shift+1 Today … Shift+5 Progress, Shift+6 the Tutor pane (again:
+    // away); Browse, inside Reviews, is Shift+B (go.ts). Not while he types in a field, nor over a dialog other than Settings
+    // (KEYS.free)
     ...D("Pages", void 0, [
-      ["page.today", "Today", "shift+t"],
-      ["page.reviews", "Reviews", "shift+r"],
+      ["page.today", "Today", "shift+1"],
+      ["page.reviews", "Reviews", "shift+2"],
       ["page.browse", "Browse", "shift+b"],
-      ["page.cards", "Cards", "shift+c"],
-      ["page.essays", "Essays", "shift+e"],
-      ["page.progress", "Progress", "shift+p"],
-      ["page.tutor", "Tutor", "shift+a"]
+      ["page.cards", "Cards", "shift+3"],
+      ["page.essays", "Essays", "shift+4"],
+      ["page.progress", "Progress", "shift+5"],
+      ["page.tutor", "Tutor", "shift+6"]
     ]),
     ...D("Reviews", void 0, [
       ["rv.show", "Show answer", "space enter"],
@@ -357,14 +358,14 @@
       ["im.up", "Move up", "mod+shift+arrowup"],
       ["im.down", "Move down", "mod+shift+arrowdown"]
     ])
-  ], BY = new Map(DEFS.map((d) => [d.id, d])), RETIRED = ["go.today", "go.cards", "go.reviews", "go.browse", "tutor"], TYPING = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])', typing = (t) => !!(t && t.closest?.(TYPING)), openDialogs = () => typeof document > "u" ? [] : [...document.querySelectorAll("dialog[open]")].map((d) => d.id);
+  ], BY = new Map(DEFS.map((d) => [d.id, d])), RETIRED = ["go.today", "go.cards", "go.reviews", "go.browse", "tutor"], OLD = { "page.today": "shift+t", "page.reviews": "shift+r", "page.cards": "shift+c", "page.essays": "shift+e", "page.progress": "shift+p", "page.tutor": "shift+a" }, TYPING = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])', typing = (t) => !!(t && t.closest?.(TYPING)), openDialogs = () => typeof document > "u" ? [] : [...document.querySelectorAll("dialog[open]")].map((d) => d.id);
   function free(e, dialogs = openDialogs()) {
     return e.defaultPrevented || e.isComposing || e.repeat || typing(e.target) ? !1 : dialogs.every((id) => id === "settings");
   }
   var mine = {}, saveHook = null;
   function combo(e) {
     let k = e.key;
-    e.altKey && /^Key[A-Z]$/.test(e.code) ? k = e.code.slice(3) : e.altKey && /^Digit\d$/.test(e.code) && (k = e.code.slice(5)), k = k === " " ? "space" : k.toLowerCase(), k === "esc" && (k = "escape");
+    e.altKey && /^Key[A-Z]$/.test(e.code) ? k = e.code.slice(3) : (e.altKey || e.shiftKey) && /^Digit\d$/.test(e.code) && (k = e.code.slice(5)), k = k === " " ? "space" : k.toLowerCase(), k === "esc" && (k = "escape");
     let m = [];
     return (MAC ? e.metaKey : e.ctrlKey) && m.push("mod"), MAC && e.ctrlKey && m.push("ctrl"), !MAC && e.metaKey && m.push("meta"), e.altKey && m.push("alt"), e.shiftKey && (k.length > 1 || /[a-z0-9]/.test(k)) && m.push("shift"), [...m, k].join("+");
   }
@@ -402,7 +403,7 @@
     changed: (id) => mine[id] != null,
     /** settings.ts: what's saved on his account, and where changes go. */
     load(saved, onSave) {
-      mine = Object.fromEntries(Object.entries(saved).filter(([id]) => !RETIRED.includes(id))), saveHook = onSave;
+      mine = Object.fromEntries(Object.entries(saved).filter(([id, k]) => !RETIRED.includes(id) && OLD[id] !== k)), saveHook = onSave;
     }
   }, ALL = (d) => d.group === "Everywhere" || d.group === "Pages", clash = (a, b) => (a.group === b.group || ALL(a) || ALL(b)) && (a.ctx ?? "") === (b.ctx ?? ""), NAMES = MAC ? { mod: "\u2318", shift: "\u21E7", alt: "\u2325", ctrl: "\u2303", enter: "\u21B5", space: "Space", escape: "Esc", arrowleft: "\u2190", arrowright: "\u2192", arrowup: "\u2191", arrowdown: "\u2193", backspace: "\u232B", tab: "\u21E5" } : { mod: "Ctrl+", shift: "Shift+", alt: "Alt+", meta: "Win+", enter: "Enter", space: "Space", escape: "Esc", arrowleft: "\u2190", arrowright: "\u2192", arrowup: "\u2191", arrowdown: "\u2193", backspace: "Backspace", tab: "Tab" };
   function pretty(k) {
@@ -744,6 +745,21 @@
   });
   var SETTINGS = { open: (to) => show(to), close: (now) => hide(now), redraw: () => dlg.open && !sub && draw(), page };
 
+  // site/src/cbp/kit/swipe.ts
+  function swipe({ need = 90, quiet = 220, ratio = 1.5 } = {}) {
+    let acc = 0, last = -1 / 0, spent = !1, other = !1;
+    return {
+      need,
+      quiet,
+      /** One wheel event, in px; `blocked`: this one is over something that takes sideways itself. */
+      feed(dx, dy, t, blocked = !1) {
+        t - last > quiet && (acc = 0, spent = !1, other = !1), last = t;
+        let side = Math.abs(dx) > Math.abs(dy) * ratio;
+        return !other && !spent && acc === 0 && (blocked || !side && Math.abs(dy) > 1) && (other = !0), other ? { d: 0, acc: 0, mine: !1 } : spent ? { d: 0, acc: 0, mine: !0 } : side ? (acc += dx, Math.abs(acc) < need ? { d: 0, acc, mine: !0 } : (spent = !0, { d: acc < 0 ? -1 : 1, acc, mine: !0 })) : { d: 0, acc, mine: !1 };
+      }
+    };
+  }
+
   // site/src/cbp/kit/go.ts
   var TO = [
     ["page.today", "today"],
@@ -783,22 +799,22 @@
   BUS.on("place", note);
   function step(d) {
     let i = at + d, p = PLACES[i];
-    if (p) {
-      if (!VIEWS.includes(p.v))
-        return PLACES.splice(i, 1), i < at && at--, step(d);
-      at = i, moving = !0;
-      try {
-        sfx("tap");
-      } catch {
-      }
-      try {
-        p.v === "cards" && p.sub && typeof openCard == "function" && !(typeof cardOf == "function" && cardOf(p.sub)?.dropped) ? openCard(p.sub, void 0, { write: !1 }) : p.v !== VIEW && setView(p.v);
-        let rx = window.RX_go;
-        p.v === "reviews" && p.sub && rx && rx(p.sub);
-      } finally {
-        window.setTimeout(() => moving = !1, 0);
-      }
+    if (!p) return !1;
+    if (!VIEWS.includes(p.v))
+      return PLACES.splice(i, 1), i < at && at--, step(d);
+    at = i, moving = !0;
+    try {
+      sfx("tap");
+    } catch {
     }
+    try {
+      p.v === "cards" && p.sub && typeof openCard == "function" && !(typeof cardOf == "function" && cardOf(p.sub)?.dropped) ? openCard(p.sub, void 0, { write: !1 }) : p.v !== VIEW && setView(p.v);
+      let rx = window.RX_go;
+      p.v === "reviews" && p.sub && rx && rx(p.sub);
+    } finally {
+      window.setTimeout(() => moving = !1, 0);
+    }
+    return !0;
   }
   addEventListener(
     "keydown",
@@ -810,6 +826,45 @@
       e.repeat || t?.closest?.(TYPING2) || document.querySelector("dialog[open]") || step(d);
     },
     !0
+  );
+  var SW = swipe(), REDUCED2 = matchMedia("(prefers-reduced-motion: reduce)"), viewEl = () => VIEW ? document.getElementById("view-" + VIEW) : null;
+  function scrollsX(t) {
+    let root = document.documentElement;
+    if (root.scrollWidth > root.clientWidth + 1) return !0;
+    for (let n = t; n && n !== document.body && n !== root; n = n.parentElement) {
+      if (n.scrollWidth <= n.clientWidth + 1) continue;
+      let o = getComputedStyle(n).overflowX;
+      if (o === "auto" || o === "scroll") return !0;
+    }
+    return !1;
+  }
+  var leanEl = null, leanT = 0;
+  function lean(px) {
+    let v = viewEl();
+    leanEl && leanEl !== v && (leanEl.style.translate = ""), leanEl = v, v && !REDUCED2.matches && (v.style.translate = px ? `${px}px 0` : "");
+  }
+  function unlean() {
+    let v = leanEl;
+    if (leanEl = null, !v || !v.style.translate) return;
+    let from = v.style.translate;
+    v.style.translate = "", v.animate([{ translate: from }, { translate: "0 0" }], { duration: 180, easing: "ease-out" });
+  }
+  addEventListener(
+    "wheel",
+    (e) => {
+      if (e.ctrlKey) return;
+      let k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerWidth : 1, dx = e.deltaX * k, dy = e.deltaY * k, t = e.target, blocked = Math.abs(dx) > Math.abs(dy) && (e.defaultPrevented || !!document.querySelector("dialog[open]") || KEYS2.typing(t) || !!t?.closest?.("#tutor") || scrollsX(t)), f = SW.feed(dx, dy, e.timeStamp, blocked);
+      if (f.mine) {
+        if (e.preventDefault(), clearTimeout(leanT), leanT = window.setTimeout(unlean, SW.quiet), !f.d) return lean(f.acc ? -Math.sign(f.acc) * Math.min(Math.abs(f.acc) / SW.need, 1) * 10 : 0);
+        lean(0), leanEl = null, step(f.d) && window.setTimeout(() => {
+          let v = viewEl();
+          if (!v) return;
+          let x = (f.d < 0 ? -1 : 1) * 16;
+          v.animate(REDUCED2.matches ? [{ opacity: 0.6 }, { opacity: 1 }] : [{ translate: `${x}px 0`, opacity: 0.6 }, { translate: "0 0", opacity: 1 }], { duration: 220, easing: "cubic-bezier(.22,.9,.24,1)" });
+        }, 0);
+      }
+    },
+    { passive: !1 }
   );
 
   // site/src/cbp/habit.ts
