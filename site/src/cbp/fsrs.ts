@@ -142,19 +142,28 @@ export async function optimize(w0: number[], hs: History[], steps = 160, tick?: 
   const before = loss(w, hs);
   let cur = clip(w), m = Array(21).fill(0), v = Array(21).fill(0);
   const lr = 0.02, b1 = 0.9, b2 = 0.999;
+  // the page breathes whenever ~12 ms of work have gone by (inside a step too: one step is 42 passes over his reviews),
+  // so answering cards stays smooth while this runs
+  let since = performance.now();
+  const breathe = async () => {
+    if (!tick || performance.now() - since < 12) return;
+    await tick();
+    since = performance.now();
+  };
   for (let s = 1; s <= steps; s++) {
-    const g = cur.map((x, i) => {
-      const h = Math.max(1e-4, Math.abs(x) * 1e-3);
+    const g: number[] = [];
+    for (let i = 0; i < cur.length; i++) {
+      const x = cur[i], h = Math.max(1e-4, Math.abs(x) * 1e-3);
       const up = cur.slice(), dn = cur.slice();
       up[i] = x + h;
       dn[i] = x - h;
-      return (loss(up, hs) - loss(dn, hs)) / (2 * h);
-    });
+      g.push((loss(up, hs) - loss(dn, hs)) / (2 * h));
+      await breathe();
+    }
     m = m.map((mi, i) => b1 * mi + (1 - b1) * g[i]);
     v = v.map((vi, i) => b2 * vi + (1 - b2) * g[i] * g[i]);
     // each weight moves in proportion to its own size, so small and large weights learn at the same pace
     cur = clip(cur.map((x, i) => x - lr * Math.max(0.05, Math.abs(x)) * (m[i] / (1 - b1 ** s)) / (Math.sqrt(v[i] / (1 - b2 ** s)) + 1e-8)));
-    if (tick && s % 4 === 0) await tick();
   }
   const after = loss(cur, hs);
   return { w: cur.map((x) => Math.round(x * 1e4) / 1e4), before, after };

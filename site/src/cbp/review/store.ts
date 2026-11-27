@@ -17,6 +17,8 @@ export const S = {
   confs: new Map<number, Conf & { mod: number }>(),
   meta: new Map<string, any>(),
   usn: 0,
+  /** Goes up with every row placed here (main.ts keys what it works out from the cards on it). */
+  ver: 0,
   outbox: new Map<string, Op>(),
   online: navigator.onLine,
   syncing: false,
@@ -67,6 +69,7 @@ function place(kind: Kind, id: string, data: any) {
   const n = Number(id);
   const m: Map<any, any> = kind === 'card' ? S.cards : kind === 'note' ? S.notes : kind === 'notetype' ? S.types : kind === 'deck' ? S.decks : kind === 'conf' ? S.confs : S.meta;
   const k = kind === 'meta' ? id : n;
+  S.ver++;
   if (data == null) m.delete(k);
   else m.set(k, data);
 }
@@ -191,6 +194,7 @@ export async function sync() {
 /** Forget this device's copy (after a new import). Changes not sent yet are lost with it: they belonged to the old one. */
 async function wipe() {
   for (const m of [S.cards, S.notes, S.types, S.decks, S.confs, S.meta]) m.clear();
+  S.ver++;
   S.outbox.clear();
   S.usn = 0;
   await tx('rows', 'readwrite', (s) => s.clear());

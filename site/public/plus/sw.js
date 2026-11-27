@@ -1,7 +1,8 @@
 // The board's offline worker (/plus): the page, the board's and the reviews' scripts, fonts, and the cards' pictures and
 // sounds, kept so reviews work with no signal. Network first for the page and code (always the newest when there's
-// signal), the cache when there's none. The cards themselves live in IndexedDB (src/cbp/review/store.ts).
-const V = 'cbp-plus-2';
+// signal), the cache when there's none, or when the network is slow (3 s) or answers with an error. The cards themselves
+// live in IndexedDB (src/cbp/review/store.ts).
+const V = 'cbp-plus-3';
 const SHELL = ['/plus', '/plus.js', '/plus/anki.js', '/plus/anki.css', '/plus/review.js', '/plus/review.css', '/plus/runtime.js', '/plus/kit.js'];
 
 self.addEventListener('install', (e) => {
@@ -19,15 +20,23 @@ const cacheFirst = async (req, name) => {
   if (res.ok || res.type === 'opaque') c.put(req, res.clone());
   return res;
 };
-const fresh = async (req) => {
-  const c = await caches.open(V);
-  try {
-    const res = await fetch(req, { cache: 'no-cache' });
-    if (res.ok) c.put(req, res.clone());
+// network first, but a slow or failing network (a weak signal, a 5xx) doesn't hold the page: after 3 s, or on an error
+// status, the kept copy answers; the network's answer still lands in the cache when it comes, so a deploy reaches him
+const fresh = (req, e) => {
+  const net = fetch(req, { cache: 'no-cache' }).then(async (res) => {
+    if (res.ok) await (await caches.open(V)).put(req, res.clone());
     return res;
-  } catch {
-    return (await c.match(req, { ignoreSearch: true })) ?? Response.error();
-  }
+  });
+  e.waitUntil(net.catch(() => {}));
+  const slow = new Promise((ok) => setTimeout(ok, 3000, 'slow'));
+  return Promise.race([net.catch(() => null), slow]).then(async (res) => {
+    if (res && res !== 'slow' && res.ok) return res;
+    const hit = await caches.open(V).then((c) => c.match(req, { ignoreSearch: true }));
+    if (hit) return hit;
+    // nothing kept: the network's answer after all, whatever it is
+    if (res === 'slow') return net.catch(() => Response.error());
+    return res ?? Response.error();
+  });
 };
 
 self.addEventListener('fetch', (e) => {
@@ -38,7 +47,7 @@ self.addEventListener('fetch', (e) => {
     if (u.pathname.startsWith('/api/plus/media/')) return e.respondWith(cacheFirst(req, 'cbp-media'));
     // the pinyin lexicon: big and versioned (?v=), so kept once and read from the device after that
     if (u.pathname === '/plus/pinyin.txt') return e.respondWith(cacheFirst(req, 'cbp-pinyin'));
-    if (u.pathname === '/plus' || u.pathname === '/plus.js' || (u.pathname.startsWith('/plus/') && u.pathname !== '/plus/sw.js')) return e.respondWith(fresh(req));
+    if (u.pathname === '/plus' || u.pathname === '/plus.js' || (u.pathname.startsWith('/plus/') && u.pathname !== '/plus/sw.js')) return e.respondWith(fresh(req, e));
     return;
   }
   if (u.hostname === 'fonts.googleapis.com' || u.hostname === 'fonts.gstatic.com') return e.respondWith(cacheFirst(req, 'cbp-fonts'));

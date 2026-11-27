@@ -9,6 +9,8 @@
     confs: /* @__PURE__ */ new Map(),
     meta: /* @__PURE__ */ new Map(),
     usn: 0,
+    /** Goes up with every row placed here (main.ts keys what it works out from the cards on it). */
+    ver: 0,
     outbox: /* @__PURE__ */ new Map(),
     online: navigator.onLine,
     syncing: !1,
@@ -40,7 +42,7 @@
   }
   function place(kind, id, data) {
     let n = Number(id), m = kind === "card" ? S.cards : kind === "note" ? S.notes : kind === "notetype" ? S.types : kind === "deck" ? S.decks : kind === "conf" ? S.confs : S.meta, k = kind === "meta" ? id : n;
-    data == null ? m.delete(k) : m.set(k, data);
+    S.ver++, data == null ? m.delete(k) : m.set(k, data);
   }
   var current = (kind, id) => {
     let n = Number(id);
@@ -115,7 +117,7 @@
   }
   async function wipe() {
     for (let m of [S.cards, S.notes, S.types, S.decks, S.confs, S.meta]) m.clear();
-    S.outbox.clear(), S.usn = 0, await tx("rows", "readwrite", (s) => s.clear()), await tx("kv", "readwrite", (s) => s.clear());
+    S.ver++, S.outbox.clear(), S.usn = 0, await tx("rows", "readwrite", (s) => s.clear()), await tx("kv", "readwrite", (s) => s.clear());
   }
   async function take(rows) {
     let write = [];
@@ -249,13 +251,16 @@
     return n ? sum / n : 1 / 0;
   }
   async function optimize(w0, hs, steps = 160, tick) {
-    let w = new Fsrs(w0).w.slice(), clip = (x) => x.map((v2, i) => Math.min(BOUNDS[i][1], Math.max(BOUNDS[i][0], v2))), before = loss(w, hs), cur = clip(w), m = Array(21).fill(0), v = Array(21).fill(0), lr = 0.02, b1 = 0.9, b2 = 0.999;
+    let w = new Fsrs(w0).w.slice(), clip = (x) => x.map((v2, i) => Math.min(BOUNDS[i][1], Math.max(BOUNDS[i][0], v2))), before = loss(w, hs), cur = clip(w), m = Array(21).fill(0), v = Array(21).fill(0), lr = 0.02, b1 = 0.9, b2 = 0.999, since = performance.now(), breathe = async () => {
+      !tick || performance.now() - since < 12 || (await tick(), since = performance.now());
+    };
     for (let s = 1; s <= steps; s++) {
-      let g = cur.map((x, i) => {
-        let h = Math.max(1e-4, Math.abs(x) * 1e-3), up = cur.slice(), dn = cur.slice();
-        return up[i] = x + h, dn[i] = x - h, (loss(up, hs) - loss(dn, hs)) / (2 * h);
-      });
-      m = m.map((mi, i) => b1 * mi + (1 - b1) * g[i]), v = v.map((vi, i) => b2 * vi + (1 - b2) * g[i] * g[i]), cur = clip(cur.map((x, i) => x - lr * Math.max(0.05, Math.abs(x)) * (m[i] / (1 - b1 ** s)) / (Math.sqrt(v[i] / (1 - b2 ** s)) + 1e-8))), tick && s % 4 === 0 && await tick();
+      let g = [];
+      for (let i = 0; i < cur.length; i++) {
+        let x = cur[i], h = Math.max(1e-4, Math.abs(x) * 1e-3), up = cur.slice(), dn = cur.slice();
+        up[i] = x + h, dn[i] = x - h, g.push((loss(up, hs) - loss(dn, hs)) / (2 * h)), await breathe();
+      }
+      m = m.map((mi, i) => b1 * mi + (1 - b1) * g[i]), v = v.map((vi, i) => b2 * vi + (1 - b2) * g[i] * g[i]), cur = clip(cur.map((x, i) => x - lr * Math.max(0.05, Math.abs(x)) * (m[i] / (1 - b1 ** s)) / (Math.sqrt(v[i] / (1 - b2 ** s)) + 1e-8)));
     }
     let after = loss(cur, hs);
     return { w: cur.map((x) => Math.round(x * 1e4) / 1e4), before, after };
@@ -568,10 +573,10 @@
     }
     return out;
   }
-  function nextRow(ids, cur, d) {
-    if (!ids.length) return null;
-    let i = ids.indexOf(cur);
-    return ids[i < 0 ? d > 0 ? 0 : ids.length - 1 : Math.max(0, Math.min(ids.length - 1, i + d))];
+  function nextRow(ids2, cur, d) {
+    if (!ids2.length) return null;
+    let i = ids2.indexOf(cur);
+    return ids2[i < 0 ? d > 0 ? 0 : ids2.length - 1 : Math.max(0, Math.min(ids2.length - 1, i + d))];
   }
   var wordRows = (nids, cards) => [...new Set(nids)].sort((a, b) => a - b).flatMap((nid) => cards.filter((c) => c.nid === nid).sort((a, b) => a.ord - b.ord)), rowText = (sentence, word) => strip(String(sentence ?? "").replace(/<br\s*\/?>|<\/div>|<\/p>/gi, " ")).replace(/\s+/g, " ").trim() || word;
 
@@ -780,6 +785,15 @@ CREATE INDEX ix_cards_sched ON cards (did, queue, due);
 CREATE INDEX ix_revlog_cid ON revlog (cid);
 CREATE INDEX ix_notes_csum ON notes (csum);`;
 
+  // site/src/cbp/review/sync.ts
+  var ids = (c) => new Set((c?.revs ?? []).map((r) => r[0]));
+  function drops(side, before, after) {
+    if (side !== "before") return;
+    let had = ids(before), out = [...ids(after)].filter((x) => !had.has(x));
+    return out.length ? out : void 0;
+  }
+  var sameReviews = (a, b) => a.reps === b.reps && a.revs.length === b.revs.length && a.revs.at(-1)?.[0] === b.revs.at(-1)?.[0];
+
   // site/src/cbp/review/triage.ts
   var answers = (c, since = 0) => c.revs.filter((r) => r[1] >= 1 && r[1] <= 4 && r[6] !== 4 && r[6] !== 5 && r[0] > since), lapsedSince = (c, since) => c.revs.some((r) => r[6] === 1 && r[1] === 1 && r[0] > since);
   function verdict(c, tags, th = 8, seen = 0) {
@@ -881,7 +895,18 @@ ${other} is easy for him now; ${learn} is the harder of the two for him. This ca
   var col = () => S.meta.get("col"), ck = () => clock(col().day0, col().rollover), conf = () => S.confs.get(col().conf) ?? [...S.confs.values()][0], typeOf = (n) => S.types.get(n.mid), rowOf = (c) => {
     let note = S.notes.get(c.nid);
     return note ? { card: c, note, type: typeOf(note) } : null;
-  }, cardsOf = (nid) => [...S.cards.values()].filter((c) => c.nid === nid).sort((a, b) => a.ord - b.ord), live = () => [...S.cards.values()].filter((c) => S.notes.has(c.nid)), studyable = () => showable(live(), (id) => S.notes.get(id), typeOf), wordOfNote = (n) => wordOf(typeOf(n), n) || sortText(typeOf(n), n) || strip(n.flds.find((f) => strip(f)) ?? ""), wordOfCard = (c) => {
+  }, byNote = { ver: -1, m: /* @__PURE__ */ new Map() }, cardsOf = (nid) => {
+    if (byNote.ver !== S.ver) {
+      let m = /* @__PURE__ */ new Map();
+      for (let c of S.cards.values()) {
+        let l = m.get(c.nid);
+        l ? l.push(c) : m.set(c.nid, [c]);
+      }
+      for (let l of m.values()) l.sort((a, b) => a.ord - b.ord);
+      byNote = { ver: S.ver, m };
+    }
+    return (byNote.m.get(nid) ?? []).slice();
+  }, live = () => [...S.cards.values()].filter((c) => S.notes.has(c.nid)), studyable = () => showable(live(), (id) => S.notes.get(id), typeOf), wordOfNote = (n) => wordOf(typeOf(n), n) || sortText(typeOf(n), n) || strip(n.flds.find((f) => strip(f)) ?? ""), wordOfCard = (c) => {
     let n = S.notes.get(c.nid);
     return n ? wordOfNote(n) : "";
   }, dueText = (c, k = ck()) => {
@@ -921,17 +946,16 @@ ${other} is easy for him now; ${learn} is the harder of the two for him. This ca
     let el = toastEl;
     toastEl = null, el && (el.classList.add("out"), setTimeout(() => el.remove(), 220));
   }
-  var H = { undo: [], redo: [] }, clone = (x) => x == null ? x : JSON.parse(JSON.stringify(x)), revIds = (c) => new Set((c?.revs ?? []).map((r) => r[0]));
+  var H = { undo: [], redo: [] }, clone = (x) => x == null ? x : JSON.parse(JSON.stringify(x));
   async function change(name, rows, card) {
     let cur = (k, id) => k === "card" ? S.cards.get(+id) : k === "note" ? S.notes.get(+id) : k === "conf" ? S.confs.get(+id) : k === "notetype" ? S.types.get(+id) : S.meta.get(String(id)), step = { name, card, rows: rows.map(([k, id, after]) => [k, id, clone(cur(k, id) ?? null), clone(after)]) };
     H.undo.push(step), H.undo.length > 200 && H.undo.shift(), H.redo = [], await apply2(step, "after");
   }
   async function apply2(step, side) {
-    let other = side === "after" ? "before" : "after";
     await putMany(
       step.rows.map(([k, id, before, after]) => {
-        let data = clone(side === "after" ? after : before), gone = k === "card" ? [...revIds(side === "after" ? before : after)].filter((x) => !revIds(data).has(x)) : [];
-        return [k, id, data, gone.length ? gone : void 0];
+        let data = clone(side === "after" ? after : before);
+        return [k, id, data, k === "card" ? drops(side, before, after) : void 0];
       })
     );
   }
@@ -991,7 +1015,7 @@ img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!imp
   addEventListener("resize", () => document.querySelectorAll(".rw-card .host").forEach(refit));
   var view = "review";
   function go(v) {
-    view === "browse" && v !== "browse" && closeSide(), view = v, VIEW_EL.querySelectorAll("[data-v]").forEach((b) => b.setAttribute("aria-current", String(b.dataset.v === v))), app.className = "rx-body v-" + v, $(".rx", VIEW_EL).dataset.rx = v, paint(), v === "review" && VIEW === "reviews" && takeKeys();
+    stopEnd(), view === "browse" && v !== "browse" && closeSide(), view = v, VIEW_EL.querySelectorAll("[data-v]").forEach((b) => b.setAttribute("aria-current", String(b.dataset.v === v))), app.className = "rx-body v-" + v, $(".rx", VIEW_EL).dataset.rx = v, paint(), v === "review" && VIEW === "reviews" && takeKeys();
     try {
       sessionStorage.setItem("cbp-rx", v);
     } catch {
@@ -1019,9 +1043,9 @@ img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!imp
   var left = () => {
     let { q } = todayQueue();
     return q.fresh.length + q.learn.length + q.review.length;
-  };
+  }, endT, stopEnd = () => clearTimeout(endT);
   function showReview() {
-    if (RV.panel === "deeper") return showDeeper();
+    if (stopEnd(), RV.panel === "deeper") return showDeeper();
     let back = RV.cur && S.cards.get(RV.cur.id);
     RV.cur && back && back !== RV.cur && back.queue >= 0 && back.reps === RV.cur.reps && back.due === RV.cur.due && (RV.cur = back), (!RV.cur || !S.cards.has(RV.cur.id) || RV.cur !== S.cards.get(RV.cur.id) || RV.cur.queue < 0) && (RV.cur = pick(), RV.shown = !1, RV.py = RUBY.shown(), RV.t0 = Date.now());
     let c = RV.cur, t = today(), n = c ? Math.max(1, left()) : 0, prog = `<div class="rx-prog" aria-hidden="true"><i style="width:${n ? Math.round(t.done / (t.done + n) * 100) : 100}%"></i></div>`;
@@ -1035,6 +1059,8 @@ img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!imp
           b.dataset.more === "new" ? m.fresh += 10 : m.ahead = !0, sfx("tap"), showReview();
         }
       ), doneToday();
+      let at = nextLearn && Math.min(nextLearn.due * 1e3, ck().dayEnd);
+      at && (endT = setTimeout(() => VIEW === "reviews" && view === "review" && RV.panel !== "deeper" && !RV.cur && showReview(), Math.max(1e3, at - Date.now() + 500)));
       return;
     }
     let r = rowOf(c), flag = c.flags & 7;
@@ -1085,12 +1111,23 @@ img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!imp
     } catch {
     }
   });
-  var SPEAKER = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 9.5h3.2L12 5.6v12.8l-4.8-3.9H4z" fill="currentColor"/><path d="M15.5 8.8a4.5 4.5 0 0 1 0 6.4M18.2 6.2a8.2 8.2 0 0 1 0 11.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+  var SPEAKER = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 9.5h3.2L12 5.6v12.8l-4.8-3.9H4z" fill="currentColor"/><path d="M15.5 8.8a4.5 4.5 0 0 1 0 6.4M18.2 6.2a8.2 8.2 0 0 1 0 11.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>', grading = !1;
   async function grade(g) {
     let c = RV.cur;
-    if (!c || !RV.shown) return;
-    let r = rowOf(c), a = answer(c, g, conf(), ck(), Date.now() - RV.t0), rows = [["card", c.id, a.card]];
-    a.leech && !r.note.tags.includes("leech") && rows.push(["note", r.note.id, { ...r.note, tags: [...r.note.tags, "leech"] }]), await change(["Again", "Hard", "Good", "Easy"][g - 1], rows, c.id), acted = !0, BUS.emit("reviews:card", { grade: g, card: c.id, word: wordOfNote(r.note), left: left() }), RV.sinceNew = c.type === 0 ? 0 : RV.sinceNew + 1, RV.cur = null, RV.flags = !1, g === 1 && missed3(a.card) && (RV.panel = "deeper", RV.deeperFor = a.card.id), showReview();
+    if (!c || !RV.shown || grading) return;
+    let now = S.cards.get(c.id);
+    if (!now || !sameReviews(c, now))
+      return RV.cur = null, showReview();
+    let r = rowOf(c);
+    grading = !0, RV.cur = null;
+    let a = answer(c, g, conf(), ck(), Date.now() - RV.t0), rows = [["card", c.id, a.card]];
+    a.leech && !r.note.tags.includes("leech") && rows.push(["note", r.note.id, { ...r.note, tags: [...r.note.tags, "leech"] }]);
+    try {
+      await change(["Again", "Hard", "Good", "Easy"][g - 1], rows, c.id);
+    } finally {
+      grading = !1;
+    }
+    acted = !0, BUS.emit("reviews:card", { grade: g, card: c.id, word: wordOfNote(r.note), left: left() }), RV.sinceNew = c.type === 0 ? 0 : RV.sinceNew + 1, RV.cur = null, RV.flags = !1, g === 1 && missed3(a.card) && (RV.panel = "deeper", RV.deeperFor = a.card.id), showReview();
   }
   async function act(a) {
     let c = RV.cur;
@@ -1247,10 +1284,10 @@ ${pairPrompt(a, b, p.why, learnOf(p))}`;
     return triage(live(), tagsOf, TH(), seenMap(), onTheWay());
   }
   async function keep(nids, unflag) {
-    let ids = Array.isArray(nids) ? nids : [nids], flagged = ids.flatMap(cardsOf).filter((c) => c.flags & 7);
+    let ids2 = Array.isArray(nids) ? nids : [nids], flagged = ids2.flatMap(cardsOf).filter((c) => c.flags & 7);
     flagged.length && unflag && await change("Leave it", flagged.map((c) => ["card", c.id, { ...c, flags: c.flags & -8 }]));
     let seen = { ...seenMap() };
-    for (let id of ids) seen[id] = Date.now();
+    for (let id of ids2) seen[id] = Date.now();
     await put("meta", "triage", { seen });
   }
   var kept = () => S.meta.get("partners")?.by ?? {};
@@ -1632,8 +1669,8 @@ ${p.word} is too easy for him now. Write a harder card for it. word: ${p.word} (
       (tr) => tr.onclick = (e) => {
         let id = Number(tr.dataset.c);
         if (e.shiftKey && BR.last) {
-          let ids = shown.map((r) => r.card.id), a = ids.indexOf(BR.last), b = ids.indexOf(id);
-          ids.slice(Math.min(a, b), Math.max(a, b) + 1).forEach((x) => BR.sel.add(x));
+          let ids2 = shown.map((r) => r.card.id), a = ids2.indexOf(BR.last), b = ids2.indexOf(id);
+          ids2.slice(Math.min(a, b), Math.max(a, b) + 1).forEach((x) => BR.sel.add(x));
         } else e.metaKey || e.ctrlKey ? BR.sel.has(id) ? BR.sel.delete(id) : BR.sel.add(id) : BR.sel.size === 1 && BR.sel.has(id) ? BR.sel = /* @__PURE__ */ new Set() : BR.sel = /* @__PURE__ */ new Set([id]);
         BR.last = id, BR.pick = 0, paintSel();
       }
@@ -1777,9 +1814,9 @@ ${p.word} is too easy for him now. Write a harder card for it. word: ${p.word} (
     );
   }
   function moveRow(d) {
-    let ids = results().slice(0, BR.limit).map((x) => x.card.id);
-    if (!ids.length) return;
-    let cur = BR.sel.size === 1 ? [...BR.sel][0] : BR.last, next = nextRow(ids, cur, d);
+    let ids2 = results().slice(0, BR.limit).map((x) => x.card.id);
+    if (!ids2.length) return;
+    let cur = BR.sel.size === 1 ? [...BR.sel][0] : BR.last, next = nextRow(ids2, cur, d);
     next == null || next === cur && BR.sel.size === 1 || (BR.sel = /* @__PURE__ */ new Set([next]), BR.last = next, BR.pick = 0, app.querySelector(`.tr[data-c="${next}"]`) ? paintSel() : paintBrowse(), app.querySelector(`.tr[data-c="${next}"]`)?.scrollIntoView({ block: "nearest" }));
   }
   async function editOpen() {
@@ -1900,9 +1937,11 @@ ${p.word} is too easy for him now. Write a harder card for it. word: ${p.word} (
     if (!(tuning || !now && c.tuned && Date.now() - c.tuned.at < 30 * 864e5)) {
       tuning = !0;
       try {
-        let k = ck(), cards = live().filter((x) => x.revs.length), hs = cards.map((x) => historyOf(x, k.dayOf)).filter((h) => !!h && h.length > 1), reviews = hs.reduce((n, h) => n + h.length, 0);
-        if (reviews < 400) return;
-        let breathe = () => new Promise((ok) => "requestIdleCallback" in window ? requestIdleCallback(() => ok(), { timeout: 200 }) : setTimeout(ok, 16)), r = await optimize(c.w, hs, 160, breathe), better = r.after < r.before * 0.998, w = better ? r.w : c.w, tuned = { at: Date.now(), before: r.before, after: better ? r.after : r.before, better: better ? Math.round((1 - r.after / r.before) * 1e3) / 10 : 0, reviews }, rows = [["conf", c.id, { ...conf(), w, tuned }]];
+        let k = ck(), cards = live().filter((x) => x.revs.length), both = cards.map((x) => ({ id: x.id, h: historyOf(x, k.dayOf) })).filter((x) => !!x.h && x.h.length > 1), reviews = both.reduce((n, { h }) => n + h.filter((r2, i) => i > 0 && r2.day - h[i - 1].day >= 1).length, 0);
+        if (reviews < 1e3) return;
+        let held = (id) => (Math.imul(id % 2147483647 | 0, -1640531535) >>> 0) % 5 === 0, fit = both.filter((x) => !held(x.id)).map((x) => x.h), test = both.filter((x) => held(x.id)).map((x) => x.h);
+        if (!test.length || !fit.length) return;
+        let breathe = () => new Promise((ok) => "requestIdleCallback" in window ? requestIdleCallback(() => ok(), { timeout: 200 }) : setTimeout(ok, 16)), fitted = await optimize(c.w, fit, 160, breathe), r = { w: fitted.w, before: loss(c.w, test), after: loss(fitted.w, test) }, better = r.after < r.before * 0.998, w = better ? r.w : c.w, tuned = { at: Date.now(), before: r.before, after: better ? r.after : r.before, better: better ? Math.round((1 - r.after / r.before) * 1e3) / 10 : 0, reviews }, rows = [["conf", c.id, { ...conf(), w, tuned }]];
         if (better) {
           let f = new Fsrs(w);
           for (let x of cards) {
@@ -1996,17 +2035,18 @@ ${p.word} is too easy for him now. Write a harder card for it. word: ${p.word} (
       if (typing || document.querySelector("dialog[open]") || view !== "review") return;
       if (RV.flags) {
         let f = KEYS.is(e, "rv.red") ? 1 : KEYS.is(e, "rv.green") ? 3 : KEYS.is(e, "rv.noflag") ? 0 : -1;
-        if (f >= 0) return eat(), flagIt(f);
-        if (KEYS.is(e, "rv.flag")) return e.preventDefault(), act("flag");
+        if (f >= 0) return eat(), e.repeat ? void 0 : flagIt(f);
+        if (KEYS.is(e, "rv.flag")) return e.preventDefault(), e.repeat ? void 0 : act("flag");
       }
       let on = t.closest?.("button");
       if ((e.key === " " || e.key === "Enter") && on && on.matches(":focus-visible") && !on.matches(".rw-show,.rw-a")) return;
+      if (e.repeat && ["rv.show", "rv.again", "rv.hard", "rv.good", "rv.easy", "rv.suspend", "rv.flag", "rv.pinyin", "rv.play", "rv.edit"].some((id) => KEYS.is(e, id))) return eat();
       if (KEYS.is(e, "rv.show"))
         return e.preventDefault(), RV.shown ? grade(3) : act("show");
       let g = ["rv.again", "rv.hard", "rv.good", "rv.easy"].findIndex((id) => KEYS.is(e, id));
       if (g >= 0 && RV.shown) return e.preventDefault(), grade(g + 1);
       let a = [["rv.suspend", "suspend"], ["rv.flag", "flag"], ["rv.pinyin", "py"], ["rv.play", "play"], ["rv.edit", "edit"]].find(([id]) => KEYS.is(e, id));
-      a && (eat(), (!e.repeat || a[1] !== "play") && act(a[1]));
+      a && (eat(), act(a[1]));
     },
     !0
   );
@@ -2017,7 +2057,12 @@ ${p.word} is too easy for him now. Write a harder card for it. word: ${p.word} (
   }
   onChange((what) => {
     if (what === "pulled" && settlePairs(), what !== "pulled" || VIEW !== "reviews") return paintDot();
-    view === "review" && !RV.shown && !document.querySelector("dialog[open]") && !VIEW_EL.contains(document.activeElement) && showReview(), view === "browse" && !$(".br-side", app)?.contains(document.activeElement) && paintBrowse();
+    let a = document.activeElement, typing = !!a?.closest?.('input, textarea, select, [contenteditable="true"]'), answered = !!RV.cur && !!S.cards.get(RV.cur.id) && !sameReviews(RV.cur, S.cards.get(RV.cur.id));
+    if (view === "review" && !typing && !document.querySelector("dialog[open]") && (answered || !RV.shown && !VIEW_EL.contains(a))) {
+      let inTab = VIEW_EL.contains(a);
+      showReview(), inTab && !VIEW_EL.contains(document.activeElement) && app.focus({ preventScroll: !0 });
+    }
+    view === "browse" && !$(".br-side", app)?.contains(document.activeElement) && paintBrowse();
   });
   var ready = !1, started = null;
   function start() {
@@ -2044,7 +2089,7 @@ ${p.word} is too easy for him now. Write a harder card for it. word: ${p.word} (
     })();
   }
   BUS.on("view", (v, prev) => {
-    document.getElementById("tab-" + v)?.scrollIntoView({ block: "nearest", inline: "nearest" }), v === "reviews" ? (ready ? (go(view), sync()) : start().then(() => VIEW === "reviews" && ready && go(view)), settlePairs()) : prev === "reviews" && (SOUND.stop(), sitting = !1, dropToast(), closeSide(), document.querySelector("dialog.rx-dlg[open]")?.close()), paintDot();
+    document.getElementById("tab-" + v)?.scrollIntoView({ block: "nearest", inline: "nearest" }), v === "reviews" ? (ready ? (go(view), sync()) : start().then(() => VIEW === "reviews" && ready && go(view)), settlePairs()) : prev === "reviews" && (stopEnd(), SOUND.stop(), sitting = !1, dropToast(), closeSide(), document.querySelector("dialog.rx-dlg[open]")?.close()), paintDot();
   });
   BUS.on("lab", (id) => {
     if (id !== "pinyin" || view !== "review" || !RV.cur) return;
