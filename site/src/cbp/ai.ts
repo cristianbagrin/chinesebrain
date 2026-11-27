@@ -19,10 +19,20 @@ type Env = { CBP?: D1Like; ANTHROPIC_API_KEY?: string; GEMINI_KEY?: string; POLL
 
 /** Google and Anthropic refuse requests from some places (Cloudflare often serves Taiwan from Hong Kong), so their
  *  calls go through the Relay Durable Object, which lives in western North America (worker.js). */
-async function gfetch(env: Env, url: string, init: { method: string; headers: Record<string, string>; body?: string }) {
+async function gfetch(env: Env, url: string, init: { method: string; headers: Record<string, string>; body?: string; signal?: AbortSignal }) {
   if (!env.RELAY) return fetch(url, init);
-  const r = await env.RELAY.get(env.RELAY.idFromName('us'), { locationHint: 'wnam' }).call(url, init);
+  const { signal, ...req } = init;
+  // the Relay's call can't carry a signal: the caller's timeout (the SDK's) ends the wait here instead
+  const r = await Promise.race([env.RELAY.get(env.RELAY.idFromName('us'), { locationHint: 'wnam' }).call(url, req), ...(signal ? [aborted(signal)] : [])]);
   return new Response(r.body, { status: r.status, headers: { 'Content-Type': r.type } });
+}
+/** Rejects (as an AbortError, which the SDK reads as its timeout) once the signal fires. */
+function aborted(signal: AbortSignal) {
+  return new Promise<never>((_, no) => {
+    const fail = () => no(Object.assign(new Error('The request timed out.'), { name: 'AbortError' }));
+    if (signal.aborted) fail();
+    else signal.addEventListener('abort', fail, { once: true });
+  });
 }
 
 /** The provider said "not now" (a free tier's daily or per-minute limit). Try again later. */
@@ -134,7 +144,7 @@ async function claude(env: Env, name: string, prompt: Input, effort: TextOpts['e
     fetch: async (url: string | URL | Request, init?: RequestInit) => {
       const h: Record<string, string> = {};
       new Headers(init?.headers).forEach((v, k) => (h[k] = v));
-      return gfetch(env, String(url instanceof Request ? url.url : url), { method: init?.method ?? 'GET', headers: h, body: typeof init?.body === 'string' ? init.body : undefined });
+      return gfetch(env, String(url instanceof Request ? url.url : url), { method: init?.method ?? 'GET', headers: h, body: typeof init?.body === 'string' ? init.body : undefined, signal: init?.signal ?? undefined });
     },
   });
   let m;
@@ -146,6 +156,7 @@ async function claude(env: Env, name: string, prompt: Input, effort: TextOpts['e
     throw e;
   }
   if (m.stop_reason === 'refusal') throw new Error(`anthropic:${name}: refused`);
+  if (m.stop_reason === 'max_tokens') throw new Error(`anthropic:${name}: the answer was cut off at max_tokens (${maxTokens})`);
   const out = m.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('');
   if (!out) throw new Error(`anthropic:${name}: empty answer (${m.stop_reason})`);
   return { text: out, usage: m.usage as unknown as Record<string, number> };
