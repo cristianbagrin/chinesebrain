@@ -93,7 +93,7 @@ function HB_heat(full,m,W0,cap){
   for(let w=from;w<W;w++){
     const mon=add(first,7*w);
     let one=-1;
-    for(let i=0;i<7;i++) if(add(mon,i).getDate()===1) one=i;
+    for(let i=0;i<7;i++){const d1=add(mon,i);if(d1.getDate()===1&&d1.getFullYear()===y) one=i;}
     if(one>=0&&w>from){cols.push('var(--mg)');for(let i=0;i<7;i++)cells.push('<i class="hm-sp" aria-hidden="true"></i>');s++;}
     else one=-1;
     cols.push('var(--c)');
