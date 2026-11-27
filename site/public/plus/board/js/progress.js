@@ -6,7 +6,7 @@
    month's name and its new cards (a soft bar on its own scale) sit under that month's point on the line. The pace and
    every forecast are computed from board/data each time, so they follow his cards by themselves. Then the habit tracker across the whole year, then his forest (a
    tree over each month; fun.js fills #pr-forest). Months only, never weeks. ---------- */
-const PR={hover:null,C:null,S:null,F:null,G:null,w:0,h:0,k:.92,px:0,py:0};
+const PR={note:null,hover:null,C:null,S:null,F:null,G:null,w:0,h:0,k:.92,px:0,py:0};
 document.getElementById('view-progress').innerHTML=`<div class="pr">
   <section class="pr-hero" aria-label="Words known">
     <p class="side-h">Words known</p>
@@ -209,7 +209,7 @@ function PR_chart(){
   el.innerHTML=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">
     ${g}${cb}<line id="pr-cx" class="pr-cx" x1="0" x2="0" y1="${Tp-14}" y2="${H-B}"/>${fc}
     <path d="${path}" class="pr-line"/>${gp}${pts}${xl}<circle id="pr-hl" class="pr-hl" r="${f1(8*k)}" cx="0" cy="0"/></svg>`;
-  PR.hover=null;
+  PR.hover=null;PR_gtip.hide();
 }
 /* a goal's note: what it is, what it means, when he got (or gets) there. One floating note, the tracker's look. */
 const PR_gtip=(()=>{
@@ -223,22 +223,27 @@ const PR_gtip=(()=>{
       t.style.left=Math.round(Math.max(8,Math.min(innerWidth-w-8,x-w/2)))+'px';
       t.style.top=Math.round(Math.max(8,y-h-16))+'px';
     },
-    hide(){t.hidden=true;}
+    hide(){t.hidden=true;PR.note=null;},
+    has:n=>t.contains(n)
   };
 })();
+// a goal's note opens on a click, a tap or Enter (never on the pointer passing over), and closes on a click outside or Escape
+function PR_note(j){
+  const c=j!=null&&PR.C&&PR.C[j], el=document.getElementById('pr-chart');
+  if(!c||c.t!=='goal'||PR.note===j){PR_gtip.hide();return;}
+  const r=el.getBoundingClientRect();PR_gtip.show(c.p,PR.F,r.left+c.x,r.top+c.y-10*PR.k);PR.note=j;
+}
 function PR_pick(j){
   const cx=document.getElementById('pr-cx'), hl=document.getElementById('pr-hl'), el=document.getElementById('pr-chart');
   if(!cx) return;
   el.querySelectorAll('.pr-gd.on').forEach(d=>d.classList.remove('on'));
-  if(j==null||!PR.C||!PR.C[j]){PR.hover=null;cx.classList.remove('on');hl.classList.remove('on');PR_gtip.hide();PR_head(null);return;}
+  if(j==null||!PR.C||!PR.C[j]){PR.hover=null;cx.classList.remove('on');hl.classList.remove('on');PR_head(null);return;}
   const c=PR.C[j];PR.hover=j;
   cx.setAttribute('x1',c.x);cx.setAttribute('x2',c.x);cx.classList.add('on');
   if(c.t==='goal'){
     hl.classList.remove('on');
     const ds=[...el.querySelectorAll('.pr-gd')], i=PR.C.filter(q=>q.t==='goal').indexOf(c);if(ds[i])ds[i].classList.add('on');
-    const r=el.getBoundingClientRect();PR_gtip.show(c.p,PR.F,r.left+c.x,r.top+c.y-10*PR.k);
   }else{
-    PR_gtip.hide();
     hl.setAttribute('cx',c.x);hl.setAttribute('cy',c.y);hl.classList.add('on');
   }
   PR_head(c);
@@ -257,7 +262,9 @@ function PR_pick(j){
   el.addEventListener('pointermove',e=>{const j=near(e);if(j!==PR.hover)PR_pick(j);});
   el.addEventListener('pointerdown',e=>{const j=near(e);if(j!==PR.hover){PR_pick(j);sfx('tap');}});
   el.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse')PR_pick(null);});
-  document.addEventListener('pointerdown',e=>{if(PR.hover!=null&&!el.contains(e.target))PR_pick(null);});
+  el.addEventListener('click',e=>PR_note(near(e)));
+  document.addEventListener('pointerdown',e=>{if(PR.hover!=null&&!el.contains(e.target))PR_pick(null);if(PR.note!=null&&!el.contains(e.target)&&!PR_gtip.has(e.target))PR_gtip.hide();});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&PR.note!=null)PR_gtip.hide();});
   // arrow keys walk the points left to right
   el.addEventListener('keydown',e=>{
     if(!PR.C)return;
@@ -265,9 +272,10 @@ function PR_pick(j){
     const at=ord.indexOf(PR.hover==null?now:PR.hover);
     if(e.key==='ArrowRight'){e.preventDefault();PR_pick(ord[Math.min(ord.length-1,at+(PR.hover==null?0:1))]);}
     else if(e.key==='ArrowLeft'){e.preventDefault();PR_pick(ord[Math.max(0,at-(PR.hover==null?0:1))]);}
-    else if(e.key==='Escape') PR_pick(null);
+    else if((e.key==='Enter'||e.key===' ')&&!e.isComposing&&e.keyCode!==229&&PR.hover!=null){e.preventDefault();PR_note(PR.hover);}
+    else if(e.key==='Escape'){PR_gtip.hide();PR_pick(null);}
   });
-  el.addEventListener('blur',()=>PR_pick(null));
+  el.addEventListener('blur',()=>{PR_pick(null);PR_gtip.hide();});
   try{new ResizeObserver(()=>{if(VIEW==='progress'&&el.clientWidth&&(el.clientWidth!==PR.w))PR_chart();}).observe(el);}catch(e){}
   addEventListener('resize',()=>{if(VIEW==='progress'&&el.clientWidth)PR_chart();});
 })();

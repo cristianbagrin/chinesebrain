@@ -278,9 +278,11 @@ function monthInfo(y,m){
   return {y,m,mk,cur,si:m,N:new Date(y,m+1,0).getDate(),dates:[...set].sort(),n:set.size,today:cur?(done?'done':txt?'started':'none'):null,
     acc:Math.min(28,crossed+Math.floor(cards/10)),crossed,cards};
 }
-// this year, January to December (the forest starts again each January); months still to come are .future
-function yearMonths(){
+// this year, January to December (the forest starts again each January); months still to come are .future.
+// win (Progress): in January and February the twelve months ending now, so the new year doesn't start nearly empty
+function yearMonths(win){
   const T=P(essayToday()),y=T.getFullYear();
+  if(win)return SPAN.months(essayToday()).map(({y:yy,m})=>Object.assign(monthInfo(yy,m),{future:yy*12+m>y*12+T.getMonth()}));
   return Array.from({length:12},(_,m)=>Object.assign(monthInfo(y,m),{future:m>T.getMonth()}));
 }
 // the months with a tree: this one, and the earlier ones this year that he wrote in
@@ -589,9 +591,13 @@ function forest(el){
     M=el._fo={el,fo:el.querySelector('.fo'),cv:el.querySelector('.fo-cv'),row:el.querySelector('.fo-row'),t:0,slots:[],w:0,h:0,ox:0,oy:0,dpr:1,sig:'',lx:null,ly:0,lt:0};
     M.c=M.cv.getContext('2d');
     try{new ResizeObserver(()=>pfRender(M)).observe(el);}catch(e){}
-    // a finger: a tap on a month (its name or the column above it) shows its note, a tap elsewhere hides it
-    document.addEventListener('pointerup',e=>{if(e.pointerType!=='touch')return;const m=e.target.closest&&e.target.closest('.fo-m');
-      M.row.querySelectorAll('.fo-m.on').forEach(x=>{if(x!==m)x.classList.remove('on');});if(m&&M.row.contains(m))m.classList.toggle('on');});
+    // a click or tap on a month (its name or the column above it), or Enter on it, shows its note; a click elsewhere or Escape hides it
+    const off=m=>M.row.querySelectorAll('.fo-m.on').forEach(x=>{if(x!==m)x.classList.remove('on');});
+    document.addEventListener('click',e=>{const m=e.target.closest&&e.target.closest('.fo-m[tabindex]');
+      off(m&&M.row.contains(m)?m:null);if(m&&M.row.contains(m))m.classList.toggle('on');});
+    M.row.addEventListener('keydown',e=>{const m=e.target.closest&&e.target.closest('.fo-m[tabindex]');
+      if(!m||e.isComposing||e.keyCode===229||(e.key!=='Enter'&&e.key!==' '))return;e.preventDefault();m.click();});
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')off(null);});
   }
   PF.add(M);pfRender(M);
 }
@@ -604,7 +610,11 @@ function pfXs(M,w){
   const rg=g.getBoundingClientRect(),rr=M.row.getBoundingClientRect(),gap=parseFloat(getComputedStyle(g).columnGap)||0;
   if(!rg.width)return even();
   const c=(rg.width-(cols-1)*gap)/cols,pitch=c+gap,first=monday(new Date(y,0,1));
+  // the heatmap says which columns each month holds (kit/span.ts); a month with none yet keeps an even share
+  let mr=null;try{mr=JSON.parse(inn.dataset.mr||'null');}catch(e){}
   return Array.from({length:12},(_,m)=>{
+    const r=mr&&mr[m];
+    if(mr)return r?[rg.left-rr.left+(r[0]+r[1]+1)/2*pitch-gap/2,(r[1]-r[0]+1)*pitch]:[(m+.5)*w/12,w/12];
     const a=Math.floor(days(first,new Date(y,m,1))/7),b=Math.floor(days(first,new Date(y,m+1,0))/7);
     return [rg.left-rr.left+(a+b+1)/2*pitch-gap/2,(b-a+1)*pitch];
   });
@@ -612,7 +622,7 @@ function pfXs(M,w){
 function pfRender(M){
   if(!M.el.isConnected){PF.delete(M);return;}
   const w=M.row.clientWidth,h=parseFloat(getComputedStyle(M.fo).paddingTop)||0;if(!w||!h)return;
-  const ms=yearMonths(),k=kk(),xs=pfXs(M,w);
+  const ms=yearMonths(true),k=kk(),xs=pfXs(M,w);
   const sig=ms.map(m=>m.mk+m.n+m.acc+(m.future?'f':'')).join('|')+w+'x'+h+xs.map(x=>Math.round(x[0])).join(',');
   const [ox,oy]=spill(M.fo,w/12*.6+20*k,h*.35);
   M.dpr=Math.min(2,devicePixelRatio||1);
@@ -623,9 +633,9 @@ function pfRender(M){
     M.sig=sig;
     M.slots=ms.map((mi,i)=>({mi,cx:xs[i][0],sw:xs[i][1],T:null,g:0,w:0}));
     M.row.innerHTML=ms.map((mi,i)=>{const sp=SPECIES[mi.si],s=M.slots[i];
-      // the month's note is plain text under its name, shown while the pointer is on the tree or the name (a tap on a phone)
+      // the month's note is plain text under its name, opened by a click, a tap or Enter on the name or the column above it
       const note=mi.future?'':`<span class="fo-note"><span>${sp.zh} ${sp.n.toLowerCase()}</span><span>${mi.n?`${mi.n} day${mi.n>1?'s':''} written`:'Not planted yet'}</span>${mi.crossed?`<span>${mi.crossed} crossed off</span>`:''}</span>`;
-      return `<span class="fo-m${mi.cur?' now':''}${mi.future?' later':''}" style="left:${(s.cx-s.sw/2).toFixed(1)}px;width:${s.sw.toFixed(1)}px">${MO[mi.m]}${note}</span>`;}).join('');
+      return `<span class="fo-m${mi.cur?' now':''}${mi.future?' later':''}"${mi.future?'':' tabindex="0" role="button"'} style="left:${(s.cx-s.sw/2).toFixed(1)}px;width:${s.sw.toFixed(1)}px">${MO[mi.m]}${note}</span>`;}).join('');
   }
   pfDraw(M,0);
 }

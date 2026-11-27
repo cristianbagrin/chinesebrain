@@ -443,7 +443,9 @@ function CD_paintAll(){
   if(CD.back<0) CD.at=at;
   CD_SH.setAttribute('aria-label','Card: '+w);
   if(CD_SH.dataset.w!==w) CD_EL.querySelectorAll('.opt.kept').forEach(x=>x.classList.remove('kept'));
-  CD_EL.querySelector('.cd-tabs').innerHTML=words.map(x=>{const dx=cardOf(x)||{};return `<button type="button" role="tab" class="cd-tab${dx.text||CD.busy[cardId(x)]?'':' todo'}${CD_past(x)?' past':''}" data-tab="${esc(x)}" aria-selected="${x===w}"><span class="zh" lang="zh-Hant">${esc(x)}</span>${dx.carded?'<i class="cd-tick" aria-label="carded">✓</i>':x===w&&(nu.has(x)||dx.word)?`<i class="cd-tx" data-drop="${esc(x)}" role="button" aria-label="${nu.has(x)?'Have it already':'Drop'} ${esc(x)}">×</i>`:''}</button>`;}).join('');
+  CD_EL.querySelector('.cd-tabs').innerHTML=words.map(x=>{const dx=cardOf(x)||{};const drop=!dx.carded&&x===w&&(nu.has(x)||dx.word);
+    // the × is the tab's neighbor, not inside it (a button in a button): it sits over the tab's right padding
+    return `<span class="cd-tw" role="presentation"><button type="button" role="tab" class="cd-tab${dx.text||CD.busy[cardId(x)]?'':' todo'}${CD_past(x)?' past':''}${drop?' has-x':''}" data-tab="${esc(x)}" aria-selected="${x===w}"><span class="zh" lang="zh-Hant">${esc(x)}</span>${dx.carded?'<i class="cd-tick" aria-label="carded">✓</i>':''}</button>${drop?`<button type="button" class="cd-tx" data-drop="${esc(x)}" aria-label="${nu.has(x)?'Have it already':'Drop'} ${esc(x)}">×</button>`:''}</span>`;}).join('');
   const sel=CD_EL.querySelector('.cd-tab[aria-selected="true"]'); if(sel&&CD.tabT!==w){CD.tabT=w;sel.scrollIntoView({block:'nearest',inline:'center'});}
   CD_tabEdges();
   const img=CD_EL.querySelector('[data-act="img"]'); img.href=imgURL(w);
@@ -635,8 +637,9 @@ CD_EL.querySelector('.cd-ask').addEventListener('submit',e=>{
   inp.value=''; askCard(CD.cur,q);
 });
 document.addEventListener('keydown',e=>{
-  if(VIEW!=='cards'||CD.open===null||!CD.cur||e.isComposing) return;
-  const t=e.target; if(t&&(t.tagName==='INPUT'||t.isContentEditable)) return;
+  if(e.defaultPrevented||KEYS.typing(e.target)) return;
+  if(VIEW!=='cards'||CD.open===null||!CD.cur||e.isComposing||e.keyCode===229) return;
+  const t=e.target;
   const sent=t&&t.classList&&t.classList.contains('cd-sent');
   if(KEYS.is(e,'cd.images')){e.preventDefault();window.open(imgURL(CD.cur),'_blank','noopener');}
   else if(KEYS.is(e,'cd.next')){e.preventDefault();CD_right();}
@@ -646,7 +649,7 @@ document.addEventListener('keydown',e=>{
   else if(sent&&KEYS.is(e,'cd.pinyin')){e.preventDefault();CD_py(t);}
   else if(KEYS.is(e,'cd.write')){
     // Enter writes a card not written yet, else cards it (a focused tab or ‹ › doesn't take Enter for itself)
-    const on=t&&t.closest&&t.closest('button,a'); if(on&&!on.matches('.cd-tab,.cd-ib,.cd-done')) return;
+    const on=t&&t.closest&&t.closest('button,a'); if(on&&!on.matches('.cd-tab,.cd-ib,.cd-done,.cd-tx')) return;
     e.preventDefault();
     const d=cardOf(CD.cur);
     if(!cardOK(d)){if(!CD.busy[cardId(CD.cur)])makeCard(CD.cur,CD_src(CD.cur),{redo:true});}
@@ -671,17 +674,30 @@ document.getElementById('next').addEventListener('click',e=>{
 function NU_try(q){
   const d=cardOf(q.w), c=d&&cardOK(d)?parseCard(d.text):null, ex=c&&(c.mine[0]||c.ex[0]);
   const line=ex&&ex.en?ex.en:`You need the word for “${q.gl||q.w}”.`;
-  const el=document.createElement('div'); el.className='nu-try'; el.setAttribute('role','dialog'); el.setAttribute('aria-label','Try it first');
-  el.innerHTML=`<div class="nt-box"><p class="nt-k">Say it in Chinese first</p><p class="nt-line">${esc(line)}</p>
+  // the Settings window's shell (kit.css dialog.st): × top right, Escape or a click outside closes it, a sheet on a phone;
+  // Back closes it too (kit/go.ts closes every open dialog). Escape and Enter skip to the card; × and outside only close.
+  const el=document.createElement('dialog'); el.className='st st-try'; el.setAttribute('aria-labelledby','nt-k');
+  el.innerHTML=`<div class="st-head"><button type="button" class="st-x" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+    <div class="nt-box"><p class="nt-k" id="nt-k">Say it in Chinese first</p><p class="nt-line">${esc(line)}</p>
     <div class="nt-in" contenteditable="true" role="textbox" aria-label="Your try" lang="zh-Hant" data-ph="Dictate or type, then Enter"></div>
     <div class="nt-row"><button type="button" class="btn" id="nt-go">See the card</button><span class="nt-hint">Esc skips</span></div></div>`;
   document.body.append(el);
-  const box=el.querySelector('.nt-in'); box.focus();
-  const go=()=>{document.removeEventListener('keydown',key,true);el.remove();openCard(q.w,'next');};
-  const key=e=>{if(e.key==='Escape'||(e.key==='Enter'&&!e.shiftKey&&!e.isComposing)){e.preventDefault();e.stopPropagation();go();}};
-  document.addEventListener('keydown',key,true);
-  el.querySelector('#nt-go').onclick=go;
-  el.addEventListener('pointerdown',e=>{if(e.target===el)go();});
+  const box=el.querySelector('.nt-in'), still=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let next=false, shut=0;
+  const hide=open=>{
+    if(!el.open||el.classList.contains('out')) return;
+    next=!!open; el.classList.remove('on'); el.classList.add('out');
+    shut=setTimeout(()=>el.close(),still()?120:200);
+  };
+  el.addEventListener('close',()=>{clearTimeout(shut);el.remove();if(next)openCard(q.w,'next');});
+  el.addEventListener('cancel',e=>{e.preventDefault();hide(true);});
+  el.addEventListener('click',e=>{
+    if(e.target.closest('.st-x')) return hide(false);
+    if(e.target.closest('#nt-go')) return hide(true);
+    if(e.target===el){const r=el.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom) hide(false);}
+  });
+  box.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();hide(true);}});
+  el.showModal(); requestAnimationFrame(()=>el.classList.add('on')); box.focus();
 }
 
 // a sentence showing its pinyin keeps it through repaints (the pinyin is drawn into the text, so it's put back)

@@ -33,7 +33,7 @@
 .q-row{display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap}
 .quiz .btn{padding:calc(8px * var(--k)) calc(20px * var(--k));font-size:var(--fs-s)}
 .q-listen{background:var(--wash);font-size:var(--fs-s);padding:calc(7px * var(--k)) calc(14px * var(--k))}
-.q-listen:hover{background:var(--wash-2)}
+@media (hover:hover){.q-listen:hover{background:var(--wash-2)}}
 .q-heard{font-family:var(--zh);font-size:var(--fs-zh);line-height:var(--lh-zh);color:var(--ink-2)}
 
 /* pips: now is gold; the rest by color and shape (green right, half green partly, red diamond missed, grey no evidence) */
@@ -54,12 +54,12 @@
 .q-nat{font-size:var(--fs-zh);line-height:var(--lh-zh);color:var(--ink);overflow-wrap:anywhere}
 .q-nat u,.q-sn u{text-decoration:underline 2px var(--ink-4);text-underline-offset:calc(6px * var(--k));text-decoration-skip-ink:none}
 .q-you{display:flex;gap:var(--s3);align-items:baseline;font-size:var(--fs-s);line-height:var(--lh-snug);color:var(--ink-3);overflow-wrap:anywhere}
-.q-you .zh{font-size:var(--fs-l);line-height:var(--lh-zh)}
+.q-you .zh{font-size:var(--fs-zh);line-height:var(--lh-zh)}
 .q-k{flex:none;min-width:calc(48px * var(--k));font-size:var(--fs-s);color:var(--ink-3)}
 /* what he typed, in his pen */
 .q-mine .zh{font-family:var(--pen);font-size:calc(var(--essay) * var(--pen-k));-webkit-text-stroke:var(--pen-stroke) currentColor}
 .q-why{font-size:var(--fs-s);line-height:var(--lh);color:var(--ink-2);overflow-wrap:anywhere}
-.q-why .zh{font-size:var(--fs-l)}
+.q-why .zh{font-size:var(--fs-zh);line-height:var(--lh-zh)}
 .q-verdict+.q-row{margin-top:var(--s1)}
 
 /* the finished test: the results light up one by one with the score, then the card folds away (test.js QZ_fold) */
@@ -82,14 +82,14 @@
 /* a monthly-test scene: a photo, with real text laid over it */
 .qscene{position:relative;border-radius:var(--r);overflow:hidden;background:var(--wash);aspect-ratio:4/3;max-width:calc(480px * var(--k));width:100%}
 .qscene img{width:100%;height:100%;object-fit:cover;display:block}
-.qnotice{position:absolute;left:50%;top:50%;width:min(68%,340px);transform:translate(-50%,-52%) rotate(-1.5deg);background:#FFFDF4;color:#1F1B14;padding:clamp(10px,2.4vw,16px) clamp(12px,2.8vw,18px);box-shadow:0 6px 18px rgba(0,0,0,.3);font:400 calc(clamp(15px,2.6vw,17px) * var(--k))/1.6 "LXGW WenKai TC",var(--zh);white-space:pre-line}
+.qnotice{position:absolute;left:50%;top:50%;width:min(68%,340px);transform:translate(-50%,-52%) rotate(-1.5deg);background:#FFFDF4;color:#1F1B14;padding:clamp(10px,2.4vw,16px) clamp(12px,2.8vw,18px);box-shadow:0 6px 18px rgba(0,0,0,.3);font:400 var(--fs-zh)/1.6 "LXGW WenKai TC",var(--zh);white-space:pre-line}
 .qnotice b{display:block;text-align:center;font-size:1.3em;letter-spacing:.08em;margin-bottom:4px}
-.qmenu{position:absolute;right:5%;top:7%;width:min(52%,280px);background:#1D2A24;color:#F4F1E4;border-radius:6px;padding:clamp(8px,1.8vw,14px);box-shadow:0 6px 16px rgba(0,0,0,.35);font:400 calc(clamp(15px,2.4vw,16.5px) * var(--k))/1.55 "LXGW WenKai TC",var(--zh);white-space:pre-line}
+.qmenu{position:absolute;right:5%;top:7%;width:min(52%,280px);background:#1D2A24;color:#F4F1E4;border-radius:6px;padding:clamp(8px,1.8vw,14px);box-shadow:0 6px 16px rgba(0,0,0,.35);font:400 var(--fs-zh)/1.55 "LXGW WenKai TC",var(--zh);white-space:pre-line}
 .qmenu b{display:block;color:#B9F5DC;font-size:1.15em;margin-bottom:2px}
 .qpaper{background:#F4EFE2;color:#1B1813;border-radius:4px;padding:16px 20px;transform:rotate(.5deg);box-shadow:0 3px 10px rgba(0,0,0,.12);display:grid;gap:8px;max-width:calc(480px * var(--k))}
 .qpaper small{font:600 var(--fs-xs)/1 var(--ui);letter-spacing:.14em;text-transform:uppercase;color:#6B6352;border-bottom:2px solid #1B1813;padding-bottom:6px}
 .qpaper b{font:900 calc(clamp(24px,4.6vw,30px) * var(--k))/1.3 "Noto Serif TC","Songti TC",serif}
-.qpaper span{font:400 calc(18px * var(--k))/1.7 "Noto Serif TC","Songti TC",serif;color:#3A352B;white-space:pre-line}
+.qpaper span{font:400 var(--fs-zh)/1.7 "Noto Serif TC","Songti TC",serif;color:#3A352B;white-space:pre-line}
 
 
 /* a TOCFL item: four choices, as in the exam; after answering, the right one green and his wrong one red */
@@ -98,7 +98,7 @@
 .q-ch b{font-weight:600;color:var(--ink-3);font-size:var(--fs-s)}
 .q-ch:active{transform:translateY(1px)}
 @media (hover:hover){.q-ch:hover{border-color:var(--ink-3)}}
-.q-choices.done li{font-size:var(--fs-s);line-height:var(--lh-snug);color:var(--ink-3);padding-left:var(--s2);border-left:2px solid transparent}
+.q-choices.done li{font-size:var(--fs-zh);line-height:var(--lh-zh);color:var(--ink-3);padding-left:var(--s2);border-left:2px solid transparent}
 .q-choices.done li.right{color:var(--ink);border-left-color:var(--green-deep, #2e7d4f)}
 .q-choices.done li.wrong{text-decoration:line-through;border-left-color:var(--red, #c0392b)}
 /* answers to his Todoist questions, above the test */

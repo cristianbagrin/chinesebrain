@@ -368,7 +368,7 @@
     ])
   ], BY = new Map(DEFS.map((d) => [d.id, d])), RETIRED = ["go.today", "go.cards", "go.reviews", "go.browse", "tutor", "back", "forward"], OLD = { "page.today": "shift+t", "page.reviews": "shift+r", "page.cards": "shift+c", "page.essays": "shift+e", "page.progress": "shift+p", "page.tutor": "shift+a" }, TYPING = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])', typing = (t) => !!(t && t.closest?.(TYPING)), openDialogs = () => typeof document > "u" ? [] : [...document.querySelectorAll("dialog[open]")].map((d) => d.id);
   function free(e, dialogs = openDialogs()) {
-    return e.defaultPrevented || e.isComposing || e.repeat || typing(e.target) ? !1 : dialogs.every((id) => id === "settings");
+    return e.defaultPrevented || e.isComposing || e.keyCode === 229 || e.repeat || typing(e.target) ? !1 : dialogs.every((id) => id === "settings");
   }
   var mine = {}, saveHook = null;
   function combo(e) {
@@ -379,7 +379,7 @@
   }
   var keysOf = (id) => mine[id] != null ? mine[id].split(" ").filter(Boolean) : BY.get(id)?.keys ?? [], MODS = ["control", "shift", "alt", "meta", "os", "capslock", "fn"], KEYS2 = {
     defs: DEFS,
-    is: (e, id) => !e.isComposing && keysOf(id).includes(combo(e)),
+    is: (e, id) => !e.isComposing && e.keyCode !== 229 && keysOf(id).includes(combo(e)),
     free,
     typing,
     keys: keysOf,
@@ -712,7 +712,7 @@
       return e.preventDefault(), sfx("tap"), up && sec === "Shortcuts" ? hide() : show("keys");
     if (KEYS2.is(e, "settings"))
       return e.preventDefault(), sfx("tap"), up ? hide() : show();
-    if (up && !sub && !listening && !e.isComposing) {
+    if (up && !sub && !listening && !e.isComposing && e.keyCode !== 229) {
       if (e.key === "Escape" && q)
         return e.preventDefault(), setQ("");
       if (combo(e) === "mod+f" || e.key === "/" && !KEYS2.typing(e.target)) {
@@ -944,6 +944,35 @@
   function left(d, low) {
     let rv = !d?.cleared, es = !(d && (low ? d.sent >= 3 : d.chars > 0)), essay = low ? "three sentences" : "your essay";
     return rv && es ? `Reviews and ${essay}.` : rv ? "Reviews left." : low ? "Three sentences left." : "Your essay is left.";
+  }
+
+  // site/src/cbp/kit/span.ts
+  var span_exports = {};
+  __export(span_exports, {
+    EARLY: () => EARLY,
+    heat: () => heat,
+    months: () => months
+  });
+  var EARLY = 2;
+  function months(today) {
+    let y = +today.slice(0, 4), m = +today.slice(5, 7) - 1;
+    return Array.from({ length: 12 }, (_, i) => {
+      let k = m < EARLY ? m - 11 + i : i;
+      return { y: y + Math.floor(k / 12), m: (k % 12 + 12) % 12 };
+    });
+  }
+  function heat(today, full, cap = 0) {
+    let y = +today.slice(0, 4), early = +today.slice(5, 7) - 1 < EARLY, shown = months(today), cols = columns(y, full && !early ? `${y}-12-31` : today), before = [];
+    full && early ? before = columns(y - 1, `${y - 1}-12-31`).filter((c) => c.month >= shown[0].m) : !full && cap && cols.length < cap && (before = columns(y - 1, `${y - 1}-12-31`));
+    let n0 = before.length;
+    cols = [...before, ...cols];
+    let ranges = shown.map(({ y: yy, m }) => {
+      let a = -1, b = -1;
+      return cols.forEach((c, i) => {
+        c.month !== m || (i < n0 ? y - 1 : y) !== yy || (a < 0 && (a = i), b = i);
+      }), a < 0 ? null : [a, b];
+    });
+    return { cols, n0, ranges };
   }
 
   // site/src/cbp/kit/editor.ts
@@ -1230,7 +1259,7 @@
   // site/src/cbp/kit/main.ts
   Object.assign(window, { EDITOR, KNOWN });
   Object.assign(window, { SOUND, HOLD, RUBY, KEYS: KEYS2, SETTINGS });
-  Object.assign(window, { HABIT: habit_exports });
+  Object.assign(window, { HABIT: habit_exports, SPAN: span_exports });
   Object.assign(window, { TRIES: tries_exports });
   new MutationObserver((recs) => {
     for (let r of recs)

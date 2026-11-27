@@ -113,7 +113,7 @@ const openDialogs = () => (typeof document === 'undefined' ? [] : [...document.q
 /** May an app-wide shortcut (a page, the Tutor) take this key? Not while he types in a field, not for a key a page used
     first, and not over a dialog, Settings apart (it closes for them). */
 export function free(e: KeyboardEvent, dialogs: string[] = openDialogs()) {
-  if (e.defaultPrevented || e.isComposing || e.repeat || typing(e.target)) return false;
+  if (e.defaultPrevented || e.isComposing || e.keyCode === 229 || e.repeat || typing(e.target)) return false;
   return dialogs.every((id) => id === 'settings');
 }
 let mine: Record<string, string> = {};
@@ -141,7 +141,7 @@ const MODS = ['control', 'shift', 'alt', 'meta', 'os', 'capslock', 'fn'];
 
 export const KEYS = {
   defs: DEFS,
-  is: (e: KeyboardEvent, id: string) => !e.isComposing && keysOf(id).includes(combo(e)),
+  is: (e: KeyboardEvent, id: string) => !e.isComposing && e.keyCode !== 229 && keysOf(id).includes(combo(e)),
   free,
   typing,
   keys: keysOf,

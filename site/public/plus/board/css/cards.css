@@ -18,7 +18,9 @@ html:has(#view-cards:not([hidden])) .appbar.lift{box-shadow:none}
 /* the tabs scroll sideways; padding at both ends (and the same scroll padding) keeps a tab's edge and its ring whole
    when it scrolls into view, at any width */
 .cd-tabs{display:flex;gap:4px;min-width:0;overflow-x:auto;scrollbar-width:none;padding:3px 8px;margin:-3px -8px;scroll-padding-inline:32px;overscroll-behavior-x:contain}
+.cd-tw{position:relative;display:flex;flex:none}
 .cd-tab{flex:none;scroll-snap-align:center}
+.cd-tab.has-x{padding-right:34px}
 .cd-tabs{scroll-snap-type:x proximity}
 .cd-tabs.fr{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 32px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 32px),transparent)}
 .cd-tabs.fl{-webkit-mask-image:linear-gradient(to left,#000 calc(100% - 32px),transparent);mask-image:linear-gradient(to left,#000 calc(100% - 32px),transparent)}
@@ -37,7 +39,7 @@ html:has(#view-cards:not([hidden])) .appbar.lift{box-shadow:none}
 .cd-tick{font-style:normal;font-size:var(--fs-s);color:var(--green)}
 .cd-tab.todo .zh{color:var(--ink-4)}
 .cd-tab.todo[aria-selected="true"] .zh{color:var(--ink-3)}
-.cd-tx{font-style:normal;font-size:var(--fs-m);line-height:1;width:20px;height:20px;display:grid;place-items:center;border-radius:50%;margin-right:-6px;color:var(--ink-4);transition:background .15s,color .15s}
+.cd-tx{position:absolute;right:8px;top:calc(50% - 10px);font:inherit;font-style:normal;font-size:var(--fs-m);line-height:1;width:20px;height:20px;display:grid;place-items:center;border-radius:50%;border:0;background:none;padding:0;cursor:pointer;color:var(--ink-4);transition:background .15s,color .15s}
 .cd-tx:hover{background:var(--wash-2);color:var(--ink)}
 .cd-anyw{flex:none;margin-left:6px}
 .cd-anyw input{width:7.5em;font:inherit;font-size:var(--fs-l);font-family:var(--zh);background:transparent;border:0;border-radius:999px;padding:8px 16px;outline:none;color:var(--ink);
@@ -83,7 +85,7 @@ html:has(#view-cards:not([hidden])) .appbar.lift{box-shadow:none}
 .cd-w{font-family:var(--zh);font-weight:700;font-size:var(--fs-3xl);line-height:1;letter-spacing:.02em;margin:0}
 /* pinyin over the big word (Settings › Pinyin shown): smaller for its size, and the reading under it steps aside */
 .cd-w.rb-on.rb-on{line-height:1.45}
-.cd-w rt{font-size:max(.34em,14px);font-weight:400;letter-spacing:.01em}
+.cd-w rt{font-size:max(.34em,calc(14px * var(--k)));font-weight:400;letter-spacing:.01em}
 .cd-head:has(.cd-w.rb-on) .cd-py{display:none}
 .cd-hm{display:flex;flex-direction:column;gap:2px;min-width:0}
 .cd-hm p+p{margin:0}
@@ -151,7 +153,7 @@ html:has(#view-cards:not([hidden])) .appbar.lift{box-shadow:none}
 .cd-thread{display:grid;gap:22px;min-width:0}
 .cd-thread[hidden]{display:none}
 .cd-turn{display:grid;gap:10px}
-.cd-me{justify-self:start;font-size:var(--fs-m);line-height:var(--lh);background:var(--wash);padding:7px 14px;border-radius:14px 14px 14px 4px}
+.cd-me{justify-self:start;font-size:var(--fs-zh);line-height:var(--lh-zh);background:var(--wash);padding:7px 14px;border-radius:14px 14px 14px 4px}
 .cd-a{display:grid;gap:var(--para);font-size:var(--fs-m);line-height:var(--lh)}
 .cd-a p+p{margin:0}
 .cd-a ul{margin:0;padding-left:1.2em;display:grid;gap:var(--s1)}
@@ -196,8 +198,11 @@ html:has(#view-cards:not([hidden])) .appbar.lift{box-shadow:none}
 @media (hover:none){.cd-tab:hover:not([aria-selected=true]){background:none;color:var(--ink-3)}.cd-tx:hover{background:none;color:var(--ink-4)}.cd-ib:hover{background:none}}
 
 /* try first: one line, his try, then the card */
-.nu-try{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:color-mix(in srgb,var(--bg) 70%,transparent);backdrop-filter:blur(3px)}
-.nt-box{width:min(520px,calc(100vw - 32px));background:var(--surface);border-radius:var(--r-l);padding:var(--s5);box-shadow:var(--sh-dlg);display:grid;gap:var(--s3)}
+dialog.st.st-try{width:min(520px,calc(100vw - 32px));height:auto;max-height:calc(100dvh - 64px);overflow:auto}
+dialog.st.st-try[open]{display:block}
+.nt-box{padding:var(--s5);display:grid;gap:var(--s3)}
+.st-try .nt-k{padding-right:calc(36px + var(--s3))}
+@media (max-width:640px){dialog.st.st-try{width:100%;max-height:92dvh}dialog.st.st-try[open]{display:flex;flex-direction:column}.st-try .st-head{justify-content:flex-end;padding:var(--s3) var(--s3) 0}.st-try .nt-box{padding-top:var(--s2);padding-bottom:calc(var(--s5) + env(safe-area-inset-bottom,0px))}.st-try .nt-k{padding-right:0}}
 .nt-k{margin:0;font-size:var(--fs-s);font-weight:500;color:var(--ink-3)}
 .nt-line{margin:0;font-size:var(--fs-l);color:var(--ink);line-height:var(--lh-snug)}
 .nt-in{min-height:48px;border:1px solid var(--hair);border-radius:var(--r);padding:var(--s2) var(--s3);font-family:var(--zh);font-size:var(--fs-zh);outline:none}
@@ -208,6 +213,7 @@ html:has(#view-cards:not([hidden])) .appbar.lift{box-shadow:none}
 /* a finger: every control on the bar is at least 44px to hit */
 @media (pointer:coarse){
   .cd-tab{min-height:44px}
-  .cd-tx{width:32px;height:32px;margin-right:-10px}
+  .cd-tx{width:32px;height:32px;top:calc(50% - 16px);right:4px}
+  .cd-tab.has-x{padding-right:42px}
   .cd-ib{width:44px;height:44px}
 }
