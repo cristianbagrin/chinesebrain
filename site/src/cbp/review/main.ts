@@ -871,7 +871,9 @@ function pickPartner(btn: HTMLElement, f: Flagged, after: () => void) {
     const q = inp.value.trim();
     if (!q) return void (l.innerHTML = best.map((p) => row(p.nid, p.word, p.why)).join(''));
     const seen = new Set<string>([w]), out: string[] = [];
-    for (const x of filterBy(items(), { ...blank(), q }, ck())) {
+    // the words that hold what he typed first, then the ones whose sentence or notes do
+    const own = (x: Item) => (x.word.includes(q) ? 0 : 1);
+    for (const x of filterBy(items(), { ...blank(), q }, ck()).sort((a, b) => own(a) - own(b))) {
       if (!x.word || seen.has(x.word) || way.has(x.note.id)) continue;
       seen.add(x.word);
       out.push(row(x.note.id, x.word, best.find((p) => p.word === x.word)?.why ?? ''));
@@ -1533,7 +1535,7 @@ async function paintSel() {
   ).filter(([, v]) => v);
   side.innerHTML = `<div class="sd-top"><span class="sd-w zh">${esc(x.word)}</span><button type="button" class="dlg-x" aria-label="Close">${XICON}</button></div>
     <p class="sd-sub"><span class="sd-st st-${x.state}"><i class="sdot"></i>${STATE_NAME[x.state]}</span>${sib.length > 1 ? '' : `<span>${esc(x.tmpl)}</span>`}</p>
-    ${sib.length > 1 ? `<div class="sd-cards" role="radiogroup" aria-label="Cards">${sib.map((c) => cardRow(c, c.id === focus.id)).join('')}</div>` : ''}
+    ${sib.length > 1 ? `<div class="sd-cards" role="radiogroup" aria-label="Cards">${sib.map((c) => cardRow(c, c.id === focus.id, sibNids.length > 1)).join('')}</div>` : ''}
     <div class="sd-face"><div class="sd-seg" role="radiogroup" aria-label="Side"><button type="button" role="radio" data-face="q" aria-checked="${BR.face === 'q'}">Front</button><button type="button" role="radio" data-face="a" aria-checked="${BR.face === 'a'}">Back</button></div><div class="host sd-host"></div></div>
     <dl class="sd-facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
     <div class="sd-act"><button type="button" class="btn-q" data-s="susp">${focus.queue === -1 ? 'Unsuspend' : 'Suspend'}</button><button type="button" class="btn-q${f === 1 ? ' on' : ''}" data-s="red"><i class="fd fd1"></i>Red</button><button type="button" class="btn-q${f === 3 ? ' on' : ''}" data-s="green"><i class="fd fd3"></i>Green</button></div>
@@ -1599,7 +1601,8 @@ async function paintSel() {
 }
 /** ↑ ↓ in Browse: the next row (or the previous) opens, as a click would; the first ↓ opens the top row. */
 function moveRow(d: number) {
-  const ids = [...app.querySelectorAll<HTMLElement>('.tr[data-c]')].map((tr) => Number(tr.dataset.c));
+  // the rows as the search and filters stand now (a keystroke's repaint may still be waiting for its frame)
+  const ids = results().slice(0, BR.limit).map((x) => x.card.id);
   if (!ids.length) return;
   const cur = BR.sel.size === 1 ? [...BR.sel][0] : BR.last;
   const next = nextRow(ids, cur, d);
@@ -1607,7 +1610,8 @@ function moveRow(d: number) {
   BR.sel = new Set([next]);
   BR.last = next;
   BR.pick = 0;
-  void paintSel();
+  if (!app.querySelector(`.tr[data-c="${next}"]`)) paintBrowse();
+  else void paintSel();
   app.querySelector(`.tr[data-c="${next}"]`)?.scrollIntoView({ block: 'nearest' });
 }
 /** E in Browse: the Edit window for the card the panel shows (the panel's own Note closes first, its edit kept). */
@@ -1623,12 +1627,14 @@ async function editOpen() {
   sfx('tap');
   editDialog(S.notes.get(n.id) ?? n);
 }
-/** One of the word's cards as a row in its panel: its sentence (the note's), then its card type. */
-function cardRow(c: Card, on: boolean) {
+/** One of the word's cards as a row in its panel: its sentence (the note's, when the word has more than one note), then
+ *  its card type. */
+function cardRow(c: Card, on: boolean, notes: boolean) {
   const n = S.notes.get(c.nid)!, t = typeOf(n)!;
   const say = rowText(n.flds[fieldIndex(t, 'Chinese')] ?? '', wordOfNote(n));
   const st = items().find((i) => i.card.id === c.id)?.state;
-  return `<button type="button" role="radio" class="sd-row${st ? ' st-' + st : ''}" data-pc="${c.id}" aria-checked="${on}"><span class="sd-rs zh">${esc(say)}</span><span class="sd-rt">${esc(t.templates.find((x) => x.ord === c.ord)?.name ?? '')}</span></button>`;
+  const kind = esc(t.templates.find((x) => x.ord === c.ord)?.name ?? '');
+  return `<button type="button" role="radio" class="sd-row${st ? ' st-' + st : ''}" data-pc="${c.id}" aria-checked="${on}">${notes ? `<span class="sd-rs zh">${esc(say)}</span><span class="sd-rt">${kind}</span>` : `<span class="sd-rs">${kind}</span>`}</button>`;
 }
 const reopen = () => {
   const side = $('.br-side', app);

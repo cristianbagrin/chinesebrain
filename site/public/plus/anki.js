@@ -1319,8 +1319,8 @@ ${pairPrompt(a, b, p.why)}`;
     let l = $(".cb-l", pop), inp = $("input", pop), row = (nid, word, why) => `<button type="button" class="cb-r" data-n="${nid}" data-why="${esc2(why)}"><span class="zh">${esc2(word)}</span>${why ? `<span class="cb-why">${esc2(why)}</span>` : ""}</button>`, paintL = () => {
       let q = inp.value.trim();
       if (!q) return void (l.innerHTML = best.map((p) => row(p.nid, p.word, p.why)).join(""));
-      let seen = /* @__PURE__ */ new Set([w]), out = [];
-      for (let x of apply(items(), { ...blank(), q }, ck()))
+      let seen = /* @__PURE__ */ new Set([w]), out = [], own = (x) => x.word.includes(q) ? 0 : 1;
+      for (let x of apply(items(), { ...blank(), q }, ck()).sort((a, b) => own(a) - own(b)))
         if (!(!x.word || seen.has(x.word) || way.has(x.note.id)) && (seen.add(x.word), out.push(row(x.note.id, x.word, best.find((p) => p.word === x.word)?.why ?? "")), out.length >= 8))
           break;
       l.innerHTML = out.join("") || '<p class="cb-none">Nothing matches.</p>';
@@ -1705,7 +1705,7 @@ ${p.word} is too easy for him now. Write a harder card for it. word: ${p.word} (
     ].filter(([, v]) => v);
     side.innerHTML = `<div class="sd-top"><span class="sd-w zh">${esc2(x.word)}</span><button type="button" class="dlg-x" aria-label="Close">${XICON}</button></div>
     <p class="sd-sub"><span class="sd-st st-${x.state}"><i class="sdot"></i>${STATE_NAME[x.state]}</span>${sib.length > 1 ? "" : `<span>${esc2(x.tmpl)}</span>`}</p>
-    ${sib.length > 1 ? `<div class="sd-cards" role="radiogroup" aria-label="Cards">${sib.map((c) => cardRow(c, c.id === focus.id)).join("")}</div>` : ""}
+    ${sib.length > 1 ? `<div class="sd-cards" role="radiogroup" aria-label="Cards">${sib.map((c) => cardRow(c, c.id === focus.id, sibNids.length > 1)).join("")}</div>` : ""}
     <div class="sd-face"><div class="sd-seg" role="radiogroup" aria-label="Side"><button type="button" role="radio" data-face="q" aria-checked="${BR.face === "q"}">Front</button><button type="button" role="radio" data-face="a" aria-checked="${BR.face === "a"}">Back</button></div><div class="host sd-host"></div></div>
     <dl class="sd-facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>
     <div class="sd-act"><button type="button" class="btn-q" data-s="susp">${focus.queue === -1 ? "Unsuspend" : "Suspend"}</button><button type="button" class="btn-q${f === 1 ? " on" : ""}" data-s="red"><i class="fd fd1"></i>Red</button><button type="button" class="btn-q${f === 3 ? " on" : ""}" data-s="green"><i class="fd fd3"></i>Green</button></div>
@@ -1743,10 +1743,10 @@ ${p.word} is too easy for him now. Write a harder card for it. word: ${p.word} (
     );
   }
   function moveRow(d) {
-    let ids = [...app.querySelectorAll(".tr[data-c]")].map((tr) => Number(tr.dataset.c));
+    let ids = results().slice(0, BR.limit).map((x) => x.card.id);
     if (!ids.length) return;
     let cur = BR.sel.size === 1 ? [...BR.sel][0] : BR.last, next = nextRow(ids, cur, d);
-    next == null || next === cur && BR.sel.size === 1 || (BR.sel = /* @__PURE__ */ new Set([next]), BR.last = next, BR.pick = 0, paintSel(), app.querySelector(`.tr[data-c="${next}"]`)?.scrollIntoView({ block: "nearest" }));
+    next == null || next === cur && BR.sel.size === 1 || (BR.sel = /* @__PURE__ */ new Set([next]), BR.last = next, BR.pick = 0, app.querySelector(`.tr[data-c="${next}"]`) ? paintSel() : paintBrowse(), app.querySelector(`.tr[data-c="${next}"]`)?.scrollIntoView({ block: "nearest" }));
   }
   async function editOpen() {
     let side = $(".br-side", app), c = side && !side.hidden ? S.cards.get(Number(side.dataset.c)) : null, n = c && S.notes.get(c.nid);
@@ -1756,9 +1756,9 @@ ${p.word} is too easy for him now. Write a harder card for it. word: ${p.word} (
     let ed = $(".sd-ed", side);
     ed && (ed.innerHTML = ""), sfx("tap"), editDialog(S.notes.get(n.id) ?? n);
   }
-  function cardRow(c, on) {
-    let n = S.notes.get(c.nid), t = typeOf(n), say = rowText(n.flds[fieldIndex(t, "Chinese")] ?? "", wordOfNote(n)), st = items().find((i) => i.card.id === c.id)?.state;
-    return `<button type="button" role="radio" class="sd-row${st ? " st-" + st : ""}" data-pc="${c.id}" aria-checked="${on}"><span class="sd-rs zh">${esc2(say)}</span><span class="sd-rt">${esc2(t.templates.find((x) => x.ord === c.ord)?.name ?? "")}</span></button>`;
+  function cardRow(c, on, notes) {
+    let n = S.notes.get(c.nid), t = typeOf(n), say = rowText(n.flds[fieldIndex(t, "Chinese")] ?? "", wordOfNote(n)), st = items().find((i) => i.card.id === c.id)?.state, kind = esc2(t.templates.find((x) => x.ord === c.ord)?.name ?? "");
+    return `<button type="button" role="radio" class="sd-row${st ? " st-" + st : ""}" data-pc="${c.id}" aria-checked="${on}">${notes ? `<span class="sd-rs zh">${esc2(say)}</span><span class="sd-rt">${kind}</span>` : `<span class="sd-rs">${kind}</span>`}</button>`;
   }
   var reopen = () => {
     let side = $(".br-side", app);
