@@ -143,6 +143,8 @@
       const ss = both.map((x) => fromSentence(x, learn));
       s = { chinese: ss.map((x) => x.chinese).join('<br>'), py: ss.map((x) => x.py).join('\n') };
     }
+    // a card whose sentences came without pinyin: none here (only "- " left), so Add asks for it (pinyinOf)
+    if (!/\p{L}/u.test(s.py || '')) s.py = '';
     const st = { n: k, chinese: s.chinese, word: esc(ww), mnemonic: '', type: 'Chinese', picture: '', notes: '', audio: '', audioFor: '', py: s.py, pyFor: s.py ? plain(s.chinese) : '', saved: false };
     const dr = draft.get(w, k);
     if (dr) Object.assign(st, Object.fromEntries(FIELDS.map(([f]) => [f, dr[f] ?? st[f]])), { audio: dr.audio || '', audioFor: dr.audioFor || '', type: dr.type || st.type, dirty: true });
