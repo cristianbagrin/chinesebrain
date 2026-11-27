@@ -6,11 +6,12 @@
 // Adding cards happens on the Cards page only (plus/review.js, its note goes into the collection: src/cbp/anki.ts).
 import { S, load, put, putMany, sync, api, onChange, type Note, type NoteType, type ColMeta } from './store.ts';
 import { render, strip, wordOf, sortText, fieldIndex, showable, type Row } from './render.ts';
-import { index, apply as filterBy, sortBy, byWord, blank, active, STATES, type Item, type Filters, type Range, type Sort, type State, type Due } from './filter.ts';
+import { index, apply as filterBy, sortBy, byWord, blank, active, STATES, nextRow, wordRows, rowText, type Item, type Filters, type Range, type Sort, type State, type Due } from './filter.ts';
 import { answer, clock, queue, label, missed3, right3, historyOf, type Card, type Conf, type Rev } from '../sched.ts';
 import { Fsrs, optimize, loss } from '../fsrs.ts';
 import { exportAnki } from './export.ts';
 import { triage, verdict, type Ease, type Flagged } from './triage.ts';
+import { rank, missing, pairPrompt, type Cand, type Kept, type Ranked } from './partners.ts';
 
 // the board's own globals (site/public/plus/board/js/core.js, cards.js)
 declare const VIEWS: string[];
@@ -360,6 +361,7 @@ function showReview(): void {
       ${nextLearn ? `<p class="rw-later">One more at ${new Date(nextLearn.due * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>` : ''}
       <div class="rw-again">${anyNew ? '<button type="button" class="btn-q" data-more="new">Ten more new</button>' : ''}${ahead() ? '<button type="button" class="btn-q" data-more="ahead">Review ahead</button>' : ''}</div>${triageHtml()}</section>`;
     bindTriage(app, () => showReview());
+    void askPartners();
     app.querySelectorAll<HTMLElement>('[data-more]').forEach(
       (b) =>
         (b.onclick = () => {
@@ -626,13 +628,13 @@ const pairKey = (a: number, b: number) => [a, b].sort().join('-');
  *  instead, or never makes it, nothing was suspended. */
 /** A pair (kind absent: "A、B", two notes) or one word written again ('hard': simpler; 'easy': harder; key "word ↻").
  *  Either way the new note's arrival rests the old cards. */
-type Pair = { words: string; nids: number[]; at: number; kind?: Ease; word?: string };
+type Pair = { words: string; nids: number[]; at: number; kind?: Ease; word?: string; why?: string };
 const pairs = (): Pair[] => (S.meta.get('combine')?.list as Pair[]) ?? [];
-async function combine(x: number, y: number) {
+async function combine(x: number, y: number, why = '') {
   const [a, b] = [S.notes.get(x), S.notes.get(y)];
   if (!a || !b) return;
   const words = `${wordOfNote(a)}、${wordOfNote(b)}`;
-  await put('meta', 'combine', { list: [...pairs().filter((p) => p.words !== words), { words, nids: [x, y], at: Date.now() }] });
+  await put('meta', 'combine', { list: [...pairs().filter((p) => p.words !== words), { words, nids: [x, y], at: Date.now(), ...(why ? { why } : {}) }] });
   // openCard moves to the Cards page itself (setView first made that page open on the card it had before)
   try {
     openCard(words, 'any');
@@ -664,7 +666,8 @@ async function settlePairs() {
     settling = false;
   }
 }
-// the card Claude writes for a pair is about the difference (the Cards page's prompt, with this added for a pair)
+// the card Claude writes for a pair: two sentences, each using both words (the Cards page's prompt, with partners.ts
+// pairPrompt added for a pair)
 if (typeof cardPrompt === 'function') {
   const base = cardPrompt;
   cardPrompt = (kit, word) => {
@@ -672,10 +675,7 @@ if (typeof cardPrompt === 'function') {
     if (!p) return base(kit, word);
     if (p.kind) return `${base(kit, word)}\n\n${remakePrompt(p)}`;
     const [a, b] = p.words.split('、');
-    return `${base(kit, word)}
-
-=== A PAIR ===
-${a} and ${b} are both easy for him now. This card replaces their two cards: it is about the difference between them, the one thing he could still mix up. word: ${word}. pinyin: both readings. meaning: the difference, in a few words. ex: exactly two sentences, one where only ${a} fits and one where only ${b} fits. know: 2 or 3 points on when a Taiwanese person reaches for which. One char: line per distinct character, no how: lines, no second: line.`;
+    return `${base(kit, word)}\n\n${pairPrompt(a, b, p.why)}`;
   };
 }
 
@@ -692,38 +692,78 @@ function flaggedList(): Flagged[] {
 async function keep(nids: number | number[], unflag: boolean) {
   const ids = Array.isArray(nids) ? nids : [nids];
   const flagged = ids.flatMap(cardsOf).filter((c) => c.flags & 7);
-  if (flagged.length && unflag) await change('Keep', flagged.map((c) => ['card', c.id, { ...c, flags: c.flags & ~7 }]));
+  if (flagged.length && unflag) await change('Leave it', flagged.map((c) => ['card', c.id, { ...c, flags: c.flags & ~7 }]));
   const seen = { ...seenMap() };
   for (const id of ids) seen[id] = Date.now();
   await put('meta', 'triage', { seen });
 }
-/** The best partner for a word that's too easy: one of his notes sharing a character with it, itself too easy, or right
- *  three times running, or all grown up (21 days+). Never a pair he turned down before, nor one already being combined. */
-function partner(f: Flagged, list: Flagged[]): number | null {
-  const note = S.notes.get(f.nid);
-  if (!note) return null;
-  const no = mergeNo(), way = onTheWay(), easy = new Set(list.filter((x) => x.ease === 'easy').map((x) => x.nid));
-  let best: [number, number] | null = null;
-  for (const n of nearNotes(note)) {
-    if (no.has(pairKey(note.id, n.id)) || way.has(n.id)) continue;
+// ---------- Combine: partners for a word that's too easy, ranked by Claude (partners.ts, combine.ts) ----------
+/** Claude's lists, word → partners (meta `partners`, synced, so every device has them). */
+const kept = (): Kept => (S.meta.get('partners')?.by as Kept) ?? {};
+/** Every word of his that could be a partner: one entry per note with cards still coming up, and how easy it is now. */
+function cands(list: Flagged[]): Cand[] {
+  const easy = new Set(list.filter((x) => x.ease === 'easy').map((x) => x.nid));
+  const out: Cand[] = [];
+  for (const n of S.notes.values()) {
     const cs = cardsOf(n.id).filter((c) => c.queue >= 0);
     if (!cs.length) continue;
-    const score = easy.has(n.id) ? 3 : cs.some(right3) ? 2 : cs.every((c) => c.type === 2 && c.ivl >= 21) ? 1 : 0;
-    if (score && (!best || score > best[1])) best = [n.id, score];
+    out.push({ nid: n.id, word: wordOfNote(n), easy: easy.has(n.id) ? 3 : cs.some(right3) ? 2 : cs.every((c) => c.type === 2 && c.ivl >= 21) ? 1 : 0 });
   }
-  return best?.[0] ?? null;
+  return out;
 }
-/** A word's quick actions. Too hard: Rewrite (a simpler card on the Cards page) or five minutes on it. Too easy: one card
- *  about it and its partner, else Retire (its easy cards rest). Keep takes it off the list. */
+/** A too-easy word's partners, best first: never a pair he turned down, a note already on its way to a combined card, or
+ *  another note of the same word. Code's guess only while Claude hasn't answered. */
+function partners(f: Flagged, list: Flagged[], n = 5): Ranked[] {
+  const note = S.notes.get(f.nid);
+  if (!note) return [];
+  const w = wordOfNote(note), no = mergeNo(), skip = new Set(onTheWay());
+  const cs = cands(list);
+  for (const c of cs) if (no.has(pairKey(note.id, c.nid)) || c.word === w) skip.add(c.nid);
+  return rank(w, kept()[w]?.list, cs, skip, n);
+}
+/** Asks Claude once for every too-easy word that has no list yet (in the background: on load, on the end screen, in
+ *  Browse); the answer is kept and whatever shows the list is drawn again. A failure waits 10 minutes before trying again. */
+let asking = false, askedAt = 0;
+async function askPartners() {
+  if (!ready || asking || !navigator.onLine || Date.now() - askedAt < 10 * 60e3) return;
+  const list = flaggedList();
+  const want = missing(list.filter((f) => f.ease === 'easy').map((f) => wordOfNote(S.notes.get(f.nid)!)).filter(Boolean), kept());
+  if (!want.length) return;
+  asking = true;
+  askedAt = Date.now();
+  try {
+    const pool = [...new Set(cands(list).map((c) => c.word).filter(Boolean))];
+    const r = (await api('anki/partners', { targets: want, pool })) as { partners: Record<string, { w: string; why: string }[]> };
+    const by = { ...kept() }, at = Date.now();
+    for (const [w, l] of Object.entries(r.partners ?? {})) by[w] = { at, list: l };
+    await put('meta', 'partners', { by });
+    askedAt = 0;
+    if (VIEW === 'reviews' && !document.querySelector('.cb-pick')) {
+      if (view === 'review' && !RV.cur) showReview();
+      else if (view === 'browse') reopen();
+    }
+  } catch (e) {
+    console.error(e);
+  } finally {
+    asking = false;
+  }
+}
+const CHEV = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="m7 10 5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+/** A word's quick actions, each saying what it does. Too hard: Simpler card (written again on the Cards page) or Go deeper
+ *  (five minutes on it). Too easy: Combine with its best partner (the chevron: other partners, or any word of his),
+ *  Harder card, Retire (its easy cards rest). Leave it takes the word off the list. */
 function quickActs(f: Flagged, list: Flagged[]) {
   const b = (q: string, text: string, main = false) => `<button type="button" class="btn-q${main ? ' tg-go' : ''}" data-q="${q}">${text}</button>`;
   let h: string;
-  if (f.ease === 'hard') h = b('rewrite', 'Rewrite', true) + b('deeper', 'Five minutes');
+  if (f.ease === 'hard') h = b('rewrite', 'Simpler card', true) + b('deeper', 'Go deeper');
   else {
-    const p = partner(f, list), pw = p ? wordOfNote(S.notes.get(p)!) : '';
-    h = p ? b(`pair:${p}`, `Combine with <span class="zh">${esc(pw)}</span>`, true) + b('retire', 'Retire') : b('retire', 'Retire', true) + b('harder', 'Harder');
+    const p = partners(f, list, 1)[0];
+    const more = `<button type="button" class="btn-q tg-more-p" data-q="pick" aria-label="Other partners" aria-haspopup="dialog">${CHEV}</button>`;
+    h = p
+      ? `<span class="tg-split">${b(`pair:${p.nid}`, `Combine with <span class="zh">${esc(p.word)}</span>`, true)}${more}</span>${b('harder', 'Harder card')}${b('retire', 'Retire')}`
+      : `${b('pick', 'Combine with…', true)}${b('harder', 'Harder card')}${b('retire', 'Retire')}`;
   }
-  return `<span class="tg-a" data-t="${f.nid}">${h}${b('keep', 'Keep')}</span>`;
+  return `<span class="tg-a" data-t="${f.nid}">${h}${b('keep', 'Leave it')}</span>`;
 }
 const LIST_N = 4;
 /** The end screen's list: Too hard, then Too easy, the newest first; the rest one tap away in Browse. */
@@ -748,6 +788,7 @@ function bindTriage(root: ParentNode, after: () => void) {
         const nid = Number(b.closest<HTMLElement>('[data-t]')!.dataset.t);
         const f = flaggedList().find((x) => x.nid === nid);
         if (!f) return after();
+        if (b.dataset.q === 'pick') return pickPartner(b, f, after);
         if ((await quickAct(f, b.dataset.q!)) !== false) after();
       }),
   );
@@ -806,9 +847,67 @@ async function quickAct(f: Flagged, q: string): Promise<boolean | void> {
     return false;
   }
   if (q.startsWith('pair:')) {
-    await combine(f.nid, Number(q.slice(5)));
+    const id = Number(q.slice(5));
+    await combine(f.nid, id, partners(f, flaggedList(), 50).find((p) => p.nid === id)?.why);
     return false;
   }
+}
+/** Another partner than the first: Claude's next best, or any word of his, found by typing (Chinese or pinyin, as Browse's
+ *  search does). One popover under the chevron; a pick goes to the Cards page as Combine does. */
+function pickPartner(btn: HTMLElement, f: Flagged, after: () => void) {
+  if (PICK?.btn === btn) return void closePick();
+  closePick();
+  const me = S.notes.get(f.nid);
+  if (!me) return;
+  const w = wordOfNote(me), best = partners(f, flaggedList(), 6), way = onTheWay();
+  const pop = document.createElement('div');
+  pop.className = 'cb-pick';
+  pop.setAttribute('role', 'dialog');
+  pop.setAttribute('aria-label', `Combine ${w} with`);
+  pop.innerHTML = `<label class="br-s cb-s">${SEARCH}<input type="search" placeholder="Any word" aria-label="Any word" spellcheck="false" autocomplete="off" enterkeyhint="go" lang="zh-Hant"></label><div class="cb-l"></div>`;
+  const l = $('.cb-l', pop), inp = $<HTMLInputElement>('input', pop);
+  const row = (nid: number, word: string, why: string) => `<button type="button" class="cb-r" data-n="${nid}" data-why="${esc(why)}"><span class="zh">${esc(word)}</span>${why ? `<span class="cb-why">${esc(why)}</span>` : ''}</button>`;
+  const paintL = () => {
+    const q = inp.value.trim();
+    if (!q) return void (l.innerHTML = best.map((p) => row(p.nid, p.word, p.why)).join(''));
+    const seen = new Set<string>([w]), out: string[] = [];
+    // the words that hold what he typed first, then the ones whose sentence or notes do
+    const own = (x: Item) => (x.word.includes(q) ? 0 : 1);
+    for (const x of filterBy(items(), { ...blank(), q }, ck()).sort((a, b) => own(a) - own(b))) {
+      if (!x.word || seen.has(x.word) || way.has(x.note.id)) continue;
+      seen.add(x.word);
+      out.push(row(x.note.id, x.word, best.find((p) => p.word === x.word)?.why ?? ''));
+      if (out.length >= 8) break;
+    }
+    l.innerHTML = out.join('') || '<p class="cb-none">Nothing matches.</p>';
+  };
+  paintL();
+  inp.oninput = paintL;
+  inp.onkeydown = (e) => e.key === 'Enter' && (e.preventDefault(), $<HTMLElement>('.cb-r', l)?.click());
+  l.onclick = async (e) => {
+    const r = (e.target as HTMLElement).closest<HTMLElement>('.cb-r');
+    if (!r) return;
+    closePick();
+    sfx('tap');
+    await combine(f.nid, Number(r.dataset.n), r.dataset.why ?? '');
+  };
+  document.body.append(pop);
+  // under the chevron (above it when there's no room below), inside the window
+  const at = btn.getBoundingClientRect(), pw = pop.offsetWidth, ph = pop.offsetHeight;
+  pop.style.left = `${Math.max(16, Math.min(innerWidth - pw - 16, at.right - pw))}px`;
+  pop.style.top = `${at.bottom + 6 + ph > innerHeight - 8 && at.top - 6 - ph > 8 ? at.top - 6 - ph : at.bottom + 6}px`;
+  if (!TOUCH) inp.focus();
+  const away = (e: Event) => !pop.contains(e.target as Node) && e.target !== btn && !btn.contains(e.target as Node) && closePick();
+  setTimeout(() => addEventListener('pointerdown', away, true));
+  PICK = { el: pop, away, after, btn };
+}
+let PICK: { el: HTMLElement; away: (e: Event) => void; after: () => void; btn: HTMLElement } | null = null;
+function closePick() {
+  if (!PICK) return false;
+  removeEventListener('pointerdown', PICK.away, true);
+  PICK.el.remove();
+  PICK = null;
+  return true;
 }
 /** The word written again on the Cards page; once he cards it, its old cards rest (settlePairs). */
 async function remake(nid: number, kind: Ease) {
@@ -949,14 +1048,41 @@ function editor(host: HTMLElement, note0: Note, onClose?: () => void) {
 let ED: { host: HTMLElement; voice: (again: boolean) => Promise<void> } | null = null;
 const clean = (h: string) => h.replace(/^(<br>)+$/, '').replace(/\s+data-[\w-]+="[^"]*"/g, '').replace(/ class="rv-sel"/g, '');
 
+/** The notes of a word, oldest first: a word can have more than one flashcard. */
+const notesOfWord = (n: Note) => {
+  const w = wordOfNote(n);
+  return w ? [...S.notes.values()].filter((x) => wordOfNote(x) === w).sort((a, b) => a.id - b.id) : [n];
+};
+const ARROW = (d: number) => `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="${d < 0 ? 'm14.5 6-6 6 6 6' : 'm9.5 6 6 6-6 6'}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 function editDialog(note: Note) {
   const d = document.createElement('dialog');
   d.className = 'rx-dlg';
   d.tabIndex = -1;
-  // no title: the word is right there in its field
-  d.innerHTML = `<div class="dlg-top"><button type="button" class="dlg-x" aria-label="Close">${XICON}</button></div><div class="dlg-ed"></div>`;
+  // no title: the word is right there in its field. A word with more than one flashcard: ‹ › (← →) go through them
+  const sibs = notesOfWord(note);
+  let at = Math.max(0, sibs.findIndex((x) => x.id === note.id));
+  d.innerHTML = `<div class="dlg-top">${sibs.length > 1 ? `<span class="dlg-nav"><button type="button" class="ib" data-d="-1" aria-label="Previous card">${ARROW(-1)}</button><button type="button" class="ib" data-d="1" aria-label="Next card">${ARROW(1)}</button></span>` : ''}<button type="button" class="dlg-x" aria-label="Close">${XICON}</button></div><div class="dlg-ed"></div>`;
   document.body.append(d);
-  const done = editor($('.dlg-ed', d), note, () => d.close());
+  let done = editor($('.dlg-ed', d), note, () => d.close());
+  const nav = () => d.querySelectorAll<HTMLButtonElement>('[data-d]').forEach((b) => (b.disabled = at + Number(b.dataset.d) < 0 || at + Number(b.dataset.d) >= sibs.length));
+  // the edit so far is kept (one undo step), then the word's other card opens in its place
+  const step = async (k: number) => {
+    const to = at + k, n = sibs[to] && S.notes.get(sibs[to].id);
+    if (!n) return;
+    await done();
+    at = to;
+    done = editor($('.dlg-ed', d), n, () => d.close());
+    nav();
+    d.scrollTop = 0;
+    sfx('tap');
+  };
+  nav();
+  d.querySelectorAll<HTMLElement>('[data-d]').forEach((b) => (b.onclick = () => void step(Number(b.dataset.d))));
+  d.addEventListener('keydown', (e) => {
+    if (sibs.length < 2 || e.isComposing || (e.target as HTMLElement).closest?.('input, textarea, select, [contenteditable="true"]')) return;
+    const k = KEYS.is(e, 'ed.prev') ? -1 : KEYS.is(e, 'ed.next') ? 1 : 0;
+    if (k) e.preventDefault(), void step(k);
+  });
   $('.dlg-x', d).onclick = () => d.close();
   d.addEventListener('click', (e) => e.target === d && d.close());
   d.addEventListener('close', async () => {
@@ -964,6 +1090,12 @@ function editDialog(note: Note) {
     d.remove();
     if (RV.cur) RV.cur = S.cards.get(RV.cur.id) ?? null;
     if (view === 'review') showReview();
+    else if (view === 'browse' && $('.br', app)) {
+      // the panel follows to the card he was on last
+      const last = sibs[at] && cardsOf(sibs[at].id)[0];
+      if (last && sibs.length > 1) BR.pick = last.id;
+      reopen();
+    }
   });
   d.showModal();
   // the window opens with nothing focused for typing, so his shortcuts work at once; a click puts the caret in a field
@@ -1372,7 +1504,7 @@ async function paintSel() {
   // every card of the word, across its notes (a word with a second card has two notes)
   const rowWord = row ? wordOfCard(row) : '';
   const sibNids = !row || perCard() ? [] : rowWord ? [...S.notes.values()].filter((n) => wordOfNote(n) === rowWord).map((n) => n.id).sort((a, b) => a - b) : [row.nid];
-  const sib = sibNids.flatMap((nid) => cardsOf(nid)).filter((c) => typeOf(S.notes.get(c.nid)!));
+  const sib = wordRows(sibNids, live()).filter((c) => typeOf(S.notes.get(c.nid)!));
   const focus = row && BR.pick && sib.some((c) => c.id === BR.pick) ? S.cards.get(BR.pick)! : row;
   if (!focus) {
     if (!side.hidden) await closeSide();
@@ -1403,7 +1535,7 @@ async function paintSel() {
   ).filter(([, v]) => v);
   side.innerHTML = `<div class="sd-top"><span class="sd-w zh">${esc(x.word)}</span><button type="button" class="dlg-x" aria-label="Close">${XICON}</button></div>
     <p class="sd-sub"><span class="sd-st st-${x.state}"><i class="sdot"></i>${STATE_NAME[x.state]}</span>${sib.length > 1 ? '' : `<span>${esc(x.tmpl)}</span>`}</p>
-    ${sib.length > 1 ? `<div class="sd-seg sd-cards" role="radiogroup" aria-label="Card">${sib.map((c) => `<button type="button" role="radio" data-pc="${c.id}" aria-checked="${c.id === focus.id}">${esc(typeOf(S.notes.get(c.nid)!)?.templates.find((t) => t.ord === c.ord)?.name ?? '')}${sibNids.length > 1 ? ` ${sibNids.indexOf(c.nid) + 1}` : ''}</button>`).join('')}</div>` : ''}
+    ${sib.length > 1 ? `<div class="sd-cards" role="radiogroup" aria-label="Cards">${sib.map((c) => cardRow(c, c.id === focus.id, sibNids.length > 1)).join('')}</div>` : ''}
     <div class="sd-face"><div class="sd-seg" role="radiogroup" aria-label="Side"><button type="button" role="radio" data-face="q" aria-checked="${BR.face === 'q'}">Front</button><button type="button" role="radio" data-face="a" aria-checked="${BR.face === 'a'}">Back</button></div><div class="host sd-host"></div></div>
     <dl class="sd-facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
     <div class="sd-act"><button type="button" class="btn-q" data-s="susp">${focus.queue === -1 ? 'Unsuspend' : 'Suspend'}</button><button type="button" class="btn-q${f === 1 ? ' on' : ''}" data-s="red"><i class="fd fd1"></i>Red</button><button type="button" class="btn-q${f === 3 ? ' on' : ''}" data-s="green"><i class="fd fd3"></i>Green</button></div>
@@ -1467,6 +1599,43 @@ async function paintSel() {
       }),
   );
 }
+/** ↑ ↓ in Browse: the next row (or the previous) opens, as a click would; the first ↓ opens the top row. */
+function moveRow(d: number) {
+  // the rows as the search and filters stand now (a keystroke's repaint may still be waiting for its frame)
+  const ids = results().slice(0, BR.limit).map((x) => x.card.id);
+  if (!ids.length) return;
+  const cur = BR.sel.size === 1 ? [...BR.sel][0] : BR.last;
+  const next = nextRow(ids, cur, d);
+  if (next == null || (next === cur && BR.sel.size === 1)) return;
+  BR.sel = new Set([next]);
+  BR.last = next;
+  BR.pick = 0;
+  if (!app.querySelector(`.tr[data-c="${next}"]`)) paintBrowse();
+  else void paintSel();
+  app.querySelector(`.tr[data-c="${next}"]`)?.scrollIntoView({ block: 'nearest' });
+}
+/** E in Browse: the Edit window for the card the panel shows (the panel's own Note closes first, its edit kept). */
+async function editOpen() {
+  const side = $('.br-side', app), c = side && !side.hidden ? S.cards.get(Number(side.dataset.c)) : null;
+  const n = c && S.notes.get(c.nid);
+  if (!n) return;
+  const close = BR.close;
+  BR.close = null;
+  await close?.();
+  const ed = $('.sd-ed', side);
+  if (ed) ed.innerHTML = '';
+  sfx('tap');
+  editDialog(S.notes.get(n.id) ?? n);
+}
+/** One of the word's cards as a row in its panel: its sentence (the note's, when the word has more than one note), then
+ *  its card type. */
+function cardRow(c: Card, on: boolean, notes: boolean) {
+  const n = S.notes.get(c.nid)!, t = typeOf(n)!;
+  const say = rowText(n.flds[fieldIndex(t, 'Chinese')] ?? '', wordOfNote(n));
+  const st = items().find((i) => i.card.id === c.id)?.state;
+  const kind = esc(t.templates.find((x) => x.ord === c.ord)?.name ?? '');
+  return `<button type="button" role="radio" class="sd-row${st ? ' st-' + st : ''}" data-pc="${c.id}" aria-checked="${on}">${notes ? `<span class="sd-rs zh">${esc(say)}</span><span class="sd-rt">${kind}</span>` : `<span class="sd-rs">${kind}</span>`}</button>`;
+}
 const reopen = () => {
   const side = $('.br-side', app);
   if (side) delete side.dataset.c;
@@ -1475,6 +1644,7 @@ const reopen = () => {
 /** The word's quick actions in its panel, when it's too easy or too hard. */
 function quickHelp(nid: number) {
   const list = flaggedList(), f = list.find((x) => x.nid === nid);
+  if (f?.ease === 'easy') void askPartners();
   return f ? `<div class="sd-help"><span class="sd-hl">${EASE_NAME[f.ease]}</span>${quickActs(f, list)}</div>` : '';
 }
 async function closeSide() {
@@ -1766,6 +1936,7 @@ addEventListener(
       return KEYS.is(e, 'redo') ? redo() : undo();
     }
     if (e.key === 'Escape') {
+      if (closePick()) return e.stopImmediatePropagation();
       if (RV.flags) return e.stopImmediatePropagation(), (RV.flags = false), paintFlags();
       if (view === 'browse' && BR.tray && !document.querySelector('dialog[open]')) return e.stopImmediatePropagation(), (BR.tray = ''), paintChips(), paintTray();
       if (view === 'browse' && BR.sel.size && !document.querySelector('dialog[open]')) return e.stopImmediatePropagation(), (BR.sel = new Set()), closeSide(), paintSel();
@@ -1774,6 +1945,17 @@ addEventListener(
     // an editor open (the dialog or Browse's side): the sentence's audio, made if there is none (or made again)
     // (a held key repeats: only the first press counts, or one V made two recordings and played both)
     if (!typing && ED?.host.isConnected && (KEYS.is(e, 'rv.voice') || KEYS.is(e, 'rv.revoice'))) return eat(), e.repeat ? undefined : ED.voice(KEYS.is(e, 'rv.revoice'));
+    // Combine: Browse by keyboard: ↑ ↓ through the rows (from the search box too), E edits the open row's card
+    if (view === 'browse' && !document.querySelector('dialog[open]')) {
+      const inQ = !!t.closest?.('.br-q');
+      if ((!typing || inQ) && (KEYS.is(e, 'br.down') || KEYS.is(e, 'br.up'))) {
+        eat();
+        if (inQ) t.blur();
+        return moveRow(KEYS.is(e, 'br.down') ? 1 : -1);
+      }
+      if (!typing && !e.repeat && KEYS.is(e, 'br.edit')) return eat(), void editOpen();
+    }
+    // (end Combine)
     if (typing || document.querySelector('dialog[open]') || view !== 'review') return;
     // the flag picker, while open, takes its own keys
     if (RV.flags) {
@@ -1844,6 +2026,8 @@ function start() {
     paintDot();
     void settlePairs();
     setTimeout(prefetch, 4000);
+    // Combine: partners for the words already too easy, asked once in the background
+    setTimeout(() => void askPartners(), 8000);
     // the monthly fit, when the device is idle
     setTimeout(() => tune().catch(() => {}), 20_000);
   })());

@@ -83,6 +83,19 @@
 .tg-a .tg-go{color:var(--ink);font-weight:550;background:var(--wash)}
 .tg-a .zh{font-size:var(--fs-m);font-weight:400}
 .tg-more{margin:var(--s1) 0 0 calc(-1 * var(--s3))}
+/* Combine with X, and the chevron beside it: the other partners, or any word */
+.tg-split{display:inline-flex;align-items:center;gap:1px}
+.tg-split .tg-go{border-radius:999px 4px 4px 999px}
+.tg-a .tg-more-p{padding:8px 9px;border-radius:4px 999px 999px 4px;background:var(--wash);color:var(--ink-2);display:inline-grid;place-items:center}
+.cb-pick{position:fixed;z-index:30;width:min(320px,calc(100vw - 32px));background:var(--surface);border-radius:var(--r);box-shadow:var(--sh-pop);padding:var(--s3) var(--s4);animation:rx-fade .16s var(--ease)}
+.cb-s.br-s{max-width:none;background:var(--bg);margin-bottom:var(--s2);min-height:40px}
+.cb-s input{flex:1;min-width:0;border:0;background:none;padding:9px 0;font-size:var(--fs-m);outline:0;color:var(--ink)}
+.cb-l{display:grid;gap:2px;max-height:min(50vh,360px);overflow:auto;margin:0 calc(-1 * var(--s2))}
+.cb-r{display:flex;align-items:baseline;gap:var(--s3);width:100%;border:0;background:none;border-radius:var(--r-s);padding:8px var(--s2);text-align:left;cursor:pointer;color:var(--ink)}
+.cb-r .zh{font-size:var(--fs-m);flex:none}
+.cb-why{font-size:var(--fs-s);color:var(--ink-3);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cb-none{margin:0;padding:8px var(--s2);color:var(--ink-3);font-size:var(--fs-s)}
+@media (hover:hover){.cb-r:hover{background:var(--wash)}}
 .sd-help .tg-a{margin-left:calc(-1 * var(--s2))}
 
 /* missed three times: five minutes on it */
@@ -110,6 +123,8 @@
 .rx-dlg::backdrop{background:var(--dim);animation:rx-fade .2s}
 @keyframes rx-fade{from{opacity:0}}
 .dlg-top{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:flex-end;padding:12px 12px var(--s2) 28px;background:var(--bg)}
+/* Edit, a word with more than one card: ‹ › go through them (← →) */
+.dlg-nav{display:flex;gap:2px;margin:0 auto 0 -12px}
 .dlg-ed{padding:0 28px 28px}
 .dlg-x{border:0;background:none;width:36px;height:36px;padding:0;border-radius:50%;font-size:var(--fs-l);line-height:1;color:var(--ink-3);cursor:pointer;display:grid;place-items:center;flex:none;transition:background .12s,color .12s}
 .dlg-x svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round}
@@ -179,6 +194,8 @@
 .td.c-r,.td.c-lapses,.th .c-r,.th .c-lapses{text-align:right}
 .tr.st-suspended .td,.tr.st-buried .td{color:var(--ink-4)}
 .tr.sel{background:var(--surface);box-shadow:inset 0 0 0 1px var(--hair)}
+/* ↑ ↓ keep the open row in sight, clear of the bar and the sticky header */
+.tr{scroll-margin:calc(var(--bar) + 56px) 0 calc(var(--s5) + env(safe-area-inset-bottom,0px))}
 @media (hover:hover){.tr:not(.th):not(.sel):hover{background:var(--wash)}}
 @container (max-width:720px){.tr{grid-template-columns:minmax(0,1.8fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,.9fr) minmax(0,.6fr)}.td.c-card,.td.c-lapses{display:none}.c-kind{display:block}}
 @container (max-width:460px){.tr{grid-template-columns:minmax(0,1.5fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,.8fr)}.td.c-r{display:none}}
@@ -198,8 +215,15 @@
 .sd-seg{display:flex;width:fit-content;margin:0 0 var(--s1) auto;gap:2px;background:var(--wash);border-radius:999px;padding:3px}
 .sd-seg button{border:0;background:none;border-radius:999px;padding:5px 14px;font-size:var(--fs-s);font-weight:500;line-height:var(--lh-snug);color:var(--ink-3);cursor:pointer;transition:background .15s,color .15s}
 .sd-seg button[aria-checked=true]{background:var(--surface);color:var(--ink);box-shadow:var(--sh-1)}
-.sd-cards{margin:0 0 var(--s3);max-width:100%;overflow-x:auto;scrollbar-width:none}
-.sd-cards button{white-space:nowrap}
+.sd-cards{display:grid;gap:2px;margin:0 0 var(--s3);padding:3px;border-radius:var(--r);background:var(--wash)}
+/* a word with more than one card: one row each (its sentence, its card type), the chosen one raised, as a segment is */
+.sd-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:var(--s3);width:100%;min-height:44px;border:0;border-radius:calc(var(--r) - 3px);background:none;padding:6px 12px;text-align:left;color:var(--ink-3);cursor:pointer;transition:background .15s,color .15s}
+.sd-rs{font-size:var(--fs-m);line-height:var(--lh-snug);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sd-rt{font-size:var(--fs-s);font-weight:500;white-space:nowrap}
+.sd-row[aria-checked=true]{background:var(--surface);color:var(--ink);box-shadow:var(--sh-1)}
+.sd-row[aria-checked=true] .sd-rt{color:var(--ink-3)}
+.sd-row.st-suspended .sd-rs{text-decoration:line-through;text-decoration-color:var(--ink-4)}
+@media (hover:hover){.sd-row:not([aria-checked=true]):hover{color:var(--ink-2);background:var(--wash-2)}}
 .sd-host{zoom:.92;min-height:120px} /* the card drawn small, but nothing on it under --fs-xs */
 .sd-host.loud{cursor:pointer}
 .sd-facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:var(--s3) var(--s4);margin:0 0 var(--s4)}

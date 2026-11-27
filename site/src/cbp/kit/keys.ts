@@ -54,6 +54,17 @@ export const DEFS: Def[] = [
     ['rv.voice', 'Play the sentence', 'v'],
     ['rv.revoice', 'Make its audio again', 'shift+v'],
   ]),
+  // Combine: Browse's rows by keyboard, E edits the open one; in Edit, ← and → go through the word's cards (no caret in a field)
+  ...D('Browse', undefined, [
+    ['br.down', 'Next row', 'arrowdown'],
+    ['br.up', 'Previous row', 'arrowup'],
+    ['br.edit', 'Edit', 'e'],
+  ]),
+  ...D('Reviews', 'editing', [
+    ['ed.prev', 'Previous card of the word', 'arrowleft'],
+    ['ed.next', 'Next card of the word', 'arrowright'],
+  ]),
+  // (end Combine)
   ...D('Cards', undefined, [
     ['cd.prev', 'Back', 'arrowleft'],
     ['cd.next', 'Next word', 'arrowright'],

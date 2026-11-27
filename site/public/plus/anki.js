@@ -326,9 +326,9 @@
     return g.length === 3 && g.every((x) => x >= 2) && g[2] >= 3;
   };
   function historyOf(c, dayOf) {
-    let revs = c.revs, kept = revs.filter((r) => r[1] >= 1 && r[1] <= 4 && r[6] !== 4 && r[6] !== 5 && !(r[6] === 3 && r[2] === 0 && r[4] === 0)), reset = -1;
+    let revs = c.revs, kept2 = revs.filter((r) => r[1] >= 1 && r[1] <= 4 && r[6] !== 4 && r[6] !== 5 && !(r[6] === 3 && r[2] === 0 && r[4] === 0)), reset = -1;
     revs.forEach((r, i) => r[6] === 4 && r[1] === 0 && r[2] === 0 && (reset = i));
-    let after = reset >= 0 ? kept.filter((r) => r[0] > revs[reset][0]) : kept, start2 = -1;
+    let after = reset >= 0 ? kept2.filter((r) => r[0] > revs[reset][0]) : kept2, start2 = -1;
     for (let i = 0; i < after.length; i++) after[i][6] === 0 && (i === 0 || after[i - 1][6] !== 0) && (start2 = i);
     return start2 < 0 ? null : after.slice(start2).map((r) => ({ day: dayOf(r[0]), g: r[1] }));
   }
@@ -568,6 +568,12 @@
     }
     return out;
   }
+  function nextRow(ids, cur, d) {
+    if (!ids.length) return null;
+    let i = ids.indexOf(cur);
+    return ids[i < 0 ? d > 0 ? 0 : ids.length - 1 : Math.max(0, Math.min(ids.length - 1, i + d))];
+  }
+  var wordRows = (nids, cards) => [...new Set(nids)].sort((a, b) => a - b).flatMap((nid) => cards.filter((c) => c.nid === nid).sort((a, b) => a.ord - b.ord)), rowText = (sentence, word) => strip(String(sentence ?? "").replace(/<br\s*\/?>|<\/div>|<\/p>/gi, " ")).replace(/\s+/g, " ").trim() || word;
 
   // site/src/cbp/review/export.ts
   var US = "", secs = (ms) => Math.floor(ms / 1e3);
@@ -799,6 +805,30 @@ CREATE INDEX ix_notes_csum ON notes (csum);`;
     return [...by.values()].sort((a, b) => b.at - a.at);
   }
 
+  // site/src/cbp/review/partners.ts
+  var HAN2 = /\p{Script=Han}/u, chars = (w) => new Set([...w].filter((c) => HAN2.test(c)));
+  function rank(target, ai, cands2, skip, n = 5) {
+    let ok = cands2.filter((c) => !skip.has(c.nid) && c.word && c.word !== target);
+    if (ai) {
+      let by = /* @__PURE__ */ new Map();
+      for (let c of ok) (!by.has(c.word) || c.easy > by.get(c.word).easy) && by.set(c.word, c);
+      let out2 = [];
+      for (let a of ai) {
+        let c = by.get(a.w);
+        c && !out2.some((x) => x.word === c.word) && out2.push({ nid: c.nid, word: c.word, why: a.why, by: "ai" });
+      }
+      return out2.slice(0, n);
+    }
+    let mine = chars(target), scored = ok.map((c) => ({ c, shared: [...chars(c.word)].filter((x) => mine.has(x)).length })).filter((x) => x.shared && x.c.easy > 0).sort((a, b) => b.c.easy - a.c.easy || b.shared - a.shared || a.c.word.length - b.c.word.length), out = [];
+    for (let { c } of scored) out.some((x) => x.word === c.word) || out.push({ nid: c.nid, word: c.word, why: "", by: "code" });
+    return out.slice(0, n);
+  }
+  var STALE = 30 * 864e5, missing = (targets, kept2, now = Date.now()) => [...new Set(targets)].filter((w) => !kept2[w] || now - kept2[w].at > STALE);
+  function pairPrompt(a, b, why = "") {
+    return `=== TWO WORDS, ONE CARD ===
+${a} and ${b} are both easy for him now. This card replaces their old cards and teaches them together, the way they meet in real life${why ? ` (${why})` : ""}. word: ${a}\u3001${b} (exactly this). meaning: ${a} \u2026; ${b} \u2026 (short). ex: exactly two, and EACH one uses BOTH ${a} and ${b}, naturally, as a Taiwanese person would say it: one sentence, or a short exchange on one line (A\uFF1A\u2026 B\uFF1A\u2026). Nothing forced: if a sentence needs a stretch to hold both, write a different one. Taiwan usage, Traditional characters, words he knows apart from these two; **bold** ${a} and ${b} each time. know: 1 or 2 points on how the two go together (the collocation, the situation, the contrast). One char: line per distinct character, no how: lines, no second: line.`;
+  }
+
   // site/src/cbp/review/main.ts
   var $ = (s, el = document) => el.querySelector(s), esc2 = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]), TOUCH = matchMedia("(hover: none)").matches, TAB = document.createElement("button");
   TAB.type = "button";
@@ -976,7 +1006,7 @@ img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!imp
       let nextLearn = live().filter((x) => x.queue === 1).sort((a, b) => a.due - b.due)[0], anyNew = live().some((x) => x.queue === 0);
       app.innerHTML = `${prog}<section class="rw rw-end"><p class="rw-done zh">\u4ECA\u5929\u8907\u7FD2\u5B8C\u4E86</p>
       ${nextLearn ? `<p class="rw-later">One more at ${new Date(nextLearn.due * 1e3).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>` : ""}
-      <div class="rw-again">${anyNew ? '<button type="button" class="btn-q" data-more="new">Ten more new</button>' : ""}${ahead() ? '<button type="button" class="btn-q" data-more="ahead">Review ahead</button>' : ""}</div>${triageHtml()}</section>`, bindTriage(app, () => showReview()), app.querySelectorAll("[data-more]").forEach(
+      <div class="rw-again">${anyNew ? '<button type="button" class="btn-q" data-more="new">Ten more new</button>' : ""}${ahead() ? '<button type="button" class="btn-q" data-more="ahead">Review ahead</button>' : ""}</div>${triageHtml()}</section>`, bindTriage(app, () => showReview()), askPartners(), app.querySelectorAll("[data-more]").forEach(
         (b) => b.onclick = () => {
           let m = more();
           b.dataset.more === "new" ? m.fresh += 10 : m.ahead = !0, sfx("tap"), showReview();
@@ -1123,22 +1153,22 @@ img{max-width:100%!important;max-height:min(38vh,400px)!important;width:auto!imp
   function endDeeper() {
     clearInterval(deeperTimer), RV.panel = "", showReview();
   }
-  var HAN2 = /\p{Script=Han}/u;
+  var HAN3 = /\p{Script=Han}/u;
   function nearNotes(note) {
-    let w = wordOfNote(note), chars = new Set([...w].filter((x) => HAN2.test(x))), out = /* @__PURE__ */ new Map();
+    let w = wordOfNote(note), chars2 = new Set([...w].filter((x) => HAN3.test(x))), out = /* @__PURE__ */ new Map();
     for (let n of S.notes.values()) {
       if (n.id === note.id) continue;
       let o = wordOfNote(n);
-      o && o !== w && !out.has(o) && [...o].some((x) => chars.has(x)) && out.set(o, n);
+      o && o !== w && !out.has(o) && [...o].some((x) => chars2.has(x)) && out.set(o, n);
     }
     return [...out.values()];
   }
   var nearWords = (note) => nearNotes(note).map((n) => wordOfNote(n)), mergeNo = () => new Set(S.meta.get("mergeNo")?.pairs ?? []), pairKey = (a, b) => [a, b].sort().join("-"), pairs = () => S.meta.get("combine")?.list ?? [];
-  async function combine(x, y) {
+  async function combine(x, y, why = "") {
     let [a, b] = [S.notes.get(x), S.notes.get(y)];
     if (!a || !b) return;
     let words2 = `${wordOfNote(a)}\u3001${wordOfNote(b)}`;
-    await put("meta", "combine", { list: [...pairs().filter((p) => p.words !== words2), { words: words2, nids: [x, y], at: Date.now() }] });
+    await put("meta", "combine", { list: [...pairs().filter((p) => p.words !== words2), { words: words2, nids: [x, y], at: Date.now(), ...why ? { why } : {} }] });
     try {
       openCard(words2, "any");
     } catch {
@@ -1175,8 +1205,7 @@ ${remakePrompt(p)}`;
       let [a, b] = p.words.split("\u3001");
       return `${base(kit, word)}
 
-=== A PAIR ===
-${a} and ${b} are both easy for him now. This card replaces their two cards: it is about the difference between them, the one thing he could still mix up. word: ${word}. pinyin: both readings. meaning: the difference, in a few words. ex: exactly two sentences, one where only ${a} fits and one where only ${b} fits. know: 2 or 3 points on when a Taiwanese person reaches for which. One char: line per distinct character, no how: lines, no second: line.`;
+${pairPrompt(a, b, p.why)}`;
     };
   }
   var TH = () => conf().leechThreshold ?? 8, seenMap = () => S.meta.get("triage")?.seen ?? {}, onTheWay = () => new Set(pairs().flatMap((p) => p.nids)), tagsOf = (nid) => S.notes.get(nid)?.tags;
@@ -1185,32 +1214,53 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
   }
   async function keep(nids, unflag) {
     let ids = Array.isArray(nids) ? nids : [nids], flagged = ids.flatMap(cardsOf).filter((c) => c.flags & 7);
-    flagged.length && unflag && await change("Keep", flagged.map((c) => ["card", c.id, { ...c, flags: c.flags & -8 }]));
+    flagged.length && unflag && await change("Leave it", flagged.map((c) => ["card", c.id, { ...c, flags: c.flags & -8 }]));
     let seen = { ...seenMap() };
     for (let id of ids) seen[id] = Date.now();
     await put("meta", "triage", { seen });
   }
-  function partner(f, list) {
-    let note = S.notes.get(f.nid);
-    if (!note) return null;
-    let no = mergeNo(), way = onTheWay(), easy = new Set(list.filter((x) => x.ease === "easy").map((x) => x.nid)), best = null;
-    for (let n of nearNotes(note)) {
-      if (no.has(pairKey(note.id, n.id)) || way.has(n.id)) continue;
+  var kept = () => S.meta.get("partners")?.by ?? {};
+  function cands(list) {
+    let easy = new Set(list.filter((x) => x.ease === "easy").map((x) => x.nid)), out = [];
+    for (let n of S.notes.values()) {
       let cs = cardsOf(n.id).filter((c) => c.queue >= 0);
-      if (!cs.length) continue;
-      let score = easy.has(n.id) ? 3 : cs.some(right3) ? 2 : cs.every((c) => c.type === 2 && c.ivl >= 21) ? 1 : 0;
-      score && (!best || score > best[1]) && (best = [n.id, score]);
+      cs.length && out.push({ nid: n.id, word: wordOfNote(n), easy: easy.has(n.id) ? 3 : cs.some(right3) ? 2 : cs.every((c) => c.type === 2 && c.ivl >= 21) ? 1 : 0 });
     }
-    return best?.[0] ?? null;
+    return out;
   }
+  function partners(f, list, n = 5) {
+    let note = S.notes.get(f.nid);
+    if (!note) return [];
+    let w = wordOfNote(note), no = mergeNo(), skip = new Set(onTheWay()), cs = cands(list);
+    for (let c of cs) (no.has(pairKey(note.id, c.nid)) || c.word === w) && skip.add(c.nid);
+    return rank(w, kept()[w]?.list, cs, skip, n);
+  }
+  var asking = !1, askedAt = 0;
+  async function askPartners() {
+    if (!ready || asking || !navigator.onLine || Date.now() - askedAt < 10 * 6e4) return;
+    let list = flaggedList(), want = missing(list.filter((f) => f.ease === "easy").map((f) => wordOfNote(S.notes.get(f.nid))).filter(Boolean), kept());
+    if (want.length) {
+      asking = !0, askedAt = Date.now();
+      try {
+        let pool = [...new Set(cands(list).map((c) => c.word).filter(Boolean))], r = await api("anki/partners", { targets: want, pool }), by = { ...kept() }, at = Date.now();
+        for (let [w, l] of Object.entries(r.partners ?? {})) by[w] = { at, list: l };
+        await put("meta", "partners", { by }), askedAt = 0, VIEW === "reviews" && !document.querySelector(".cb-pick") && (view === "review" && !RV.cur ? showReview() : view === "browse" && reopen());
+      } catch (e) {
+        console.error(e);
+      } finally {
+        asking = !1;
+      }
+    }
+  }
+  var CHEV = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="m7 10 5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   function quickActs(f, list) {
     let b = (q, text, main = !1) => `<button type="button" class="btn-q${main ? " tg-go" : ""}" data-q="${q}">${text}</button>`, h;
-    if (f.ease === "hard") h = b("rewrite", "Rewrite", !0) + b("deeper", "Five minutes");
+    if (f.ease === "hard") h = b("rewrite", "Simpler card", !0) + b("deeper", "Go deeper");
     else {
-      let p = partner(f, list), pw = p ? wordOfNote(S.notes.get(p)) : "";
-      h = p ? b(`pair:${p}`, `Combine with <span class="zh">${esc2(pw)}</span>`, !0) + b("retire", "Retire") : b("retire", "Retire", !0) + b("harder", "Harder");
+      let p = partners(f, list, 1)[0], more2 = `<button type="button" class="btn-q tg-more-p" data-q="pick" aria-label="Other partners" aria-haspopup="dialog">${CHEV}</button>`;
+      h = p ? `<span class="tg-split">${b(`pair:${p.nid}`, `Combine with <span class="zh">${esc2(p.word)}</span>`, !0)}${more2}</span>${b("harder", "Harder card")}${b("retire", "Retire")}` : `${b("pick", "Combine with\u2026", !0)}${b("harder", "Harder card")}${b("retire", "Retire")}`;
     }
-    return `<span class="tg-a" data-t="${f.nid}">${h}${b("keep", "Keep")}</span>`;
+    return `<span class="tg-a" data-t="${f.nid}">${h}${b("keep", "Leave it")}</span>`;
   }
   var LIST_N = 4;
   function triageHtml() {
@@ -1225,6 +1275,7 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
       (b) => b.onclick = async () => {
         let nid = Number(b.closest("[data-t]").dataset.t), f = flaggedList().find((x) => x.nid === nid);
         if (!f) return after();
+        if (b.dataset.q === "pick") return pickPartner(b, f, after);
         await quickAct(f, b.dataset.q) !== !1 && after();
       }
     ), root.querySelectorAll("[data-all]").forEach(
@@ -1253,8 +1304,39 @@ ${a} and ${b} are both easy for him now. This card replaces their two cards: it 
       return RV.panel = "deeper", RV.deeperFor = f.cards[0].id, sfx("tap"), view !== "review" ? go("review") : showReview(), !1;
     if (q === "rewrite" || q === "harder")
       return await remake(f.nid, q === "rewrite" ? "hard" : "easy"), !1;
-    if (q.startsWith("pair:"))
-      return await combine(f.nid, Number(q.slice(5))), !1;
+    if (q.startsWith("pair:")) {
+      let id = Number(q.slice(5));
+      return await combine(f.nid, id, partners(f, flaggedList(), 50).find((p) => p.nid === id)?.why), !1;
+    }
+  }
+  function pickPartner(btn, f, after) {
+    if (PICK?.btn === btn) return void closePick();
+    closePick();
+    let me = S.notes.get(f.nid);
+    if (!me) return;
+    let w = wordOfNote(me), best = partners(f, flaggedList(), 6), way = onTheWay(), pop = document.createElement("div");
+    pop.className = "cb-pick", pop.setAttribute("role", "dialog"), pop.setAttribute("aria-label", `Combine ${w} with`), pop.innerHTML = `<label class="br-s cb-s">${SEARCH}<input type="search" placeholder="Any word" aria-label="Any word" spellcheck="false" autocomplete="off" enterkeyhint="go" lang="zh-Hant"></label><div class="cb-l"></div>`;
+    let l = $(".cb-l", pop), inp = $("input", pop), row = (nid, word, why) => `<button type="button" class="cb-r" data-n="${nid}" data-why="${esc2(why)}"><span class="zh">${esc2(word)}</span>${why ? `<span class="cb-why">${esc2(why)}</span>` : ""}</button>`, paintL = () => {
+      let q = inp.value.trim();
+      if (!q) return void (l.innerHTML = best.map((p) => row(p.nid, p.word, p.why)).join(""));
+      let seen = /* @__PURE__ */ new Set([w]), out = [], own = (x) => x.word.includes(q) ? 0 : 1;
+      for (let x of apply(items(), { ...blank(), q }, ck()).sort((a, b) => own(a) - own(b)))
+        if (!(!x.word || seen.has(x.word) || way.has(x.note.id)) && (seen.add(x.word), out.push(row(x.note.id, x.word, best.find((p) => p.word === x.word)?.why ?? "")), out.length >= 8))
+          break;
+      l.innerHTML = out.join("") || '<p class="cb-none">Nothing matches.</p>';
+    };
+    paintL(), inp.oninput = paintL, inp.onkeydown = (e) => e.key === "Enter" && (e.preventDefault(), $(".cb-r", l)?.click()), l.onclick = async (e) => {
+      let r = e.target.closest(".cb-r");
+      r && (closePick(), sfx("tap"), await combine(f.nid, Number(r.dataset.n), r.dataset.why ?? ""));
+    }, document.body.append(pop);
+    let at = btn.getBoundingClientRect(), pw = pop.offsetWidth, ph = pop.offsetHeight;
+    pop.style.left = `${Math.max(16, Math.min(innerWidth - pw - 16, at.right - pw))}px`, pop.style.top = `${at.bottom + 6 + ph > innerHeight - 8 && at.top - 6 - ph > 8 ? at.top - 6 - ph : at.bottom + 6}px`, TOUCH || inp.focus();
+    let away = (e) => !pop.contains(e.target) && e.target !== btn && !btn.contains(e.target) && closePick();
+    setTimeout(() => addEventListener("pointerdown", away, !0)), PICK = { el: pop, away, after, btn };
+  }
+  var PICK = null;
+  function closePick() {
+    return PICK ? (removeEventListener("pointerdown", PICK.away, !0), PICK.el.remove(), PICK = null, !0) : !1;
   }
   async function remake(nid, kind) {
     let n = S.notes.get(nid);
@@ -1277,10 +1359,10 @@ ${p.word} is too easy for him now. Write a harder card for it. word: ${p.word} (
     return edKey(name) !== "chinese" ? name : /radical/i.test(t.name) ? "Character" : /phrase/i.test(t.name) ? "Phrase" : "Sentence";
   }
   function editor(host, note0, onClose) {
-    let t = typeOf(note0), start2 = clone(note0), note = note0, rank = (name) => {
+    let t = typeOf(note0), start2 = clone(note0), note = note0, rank2 = (name) => {
       let i = ED_ORDER.indexOf(edKey(name));
       return i < 0 ? ED_ORDER.length : i;
-    }, fields = t.fields.slice().sort((a, b) => rank(a.name) - rank(b.name) || a.ord - b.ord), ai = t.fields.find((f) => /^audio$/i.test(f.name))?.ord ?? -1, si = t.fields.find((f) => /^chinese$/i.test(f.name))?.ord ?? fields[0]?.ord ?? 0;
+    }, fields = t.fields.slice().sort((a, b) => rank2(a.name) - rank2(b.name) || a.ord - b.ord), ai = t.fields.find((f) => /^audio$/i.test(f.name))?.ord ?? -1, si = t.fields.find((f) => /^chinese$/i.test(f.name))?.ord ?? fields[0]?.ord ?? 0;
     host.innerHTML = `<div class="ed rv-fields">${fields.map((f) => {
       let k = edKey(f.name), id = `ed-l-${note.id}-${f.ord}`;
       if (f.ord === ai) return `<div class="rv-f" hidden data-o="${f.ord}">${note.flds[f.ord] ?? ""}</div>`;
@@ -1335,13 +1417,29 @@ ${p.word} is too easy for him now. Write a harder card for it. word: ${p.word} (
       JSON.stringify(now.flds) !== JSON.stringify(start2.flds) && (await put("note", now.id, now), H.undo.push({ name: "Edit", rows: [["note", now.id, start2, clone(S.notes.get(now.id))]] }), H.redo = []);
     };
   }
-  var ED = null, clean = (h) => h.replace(/^(<br>)+$/, "").replace(/\s+data-[\w-]+="[^"]*"/g, "").replace(/ class="rv-sel"/g, "");
+  var ED = null, clean = (h) => h.replace(/^(<br>)+$/, "").replace(/\s+data-[\w-]+="[^"]*"/g, "").replace(/ class="rv-sel"/g, ""), notesOfWord = (n) => {
+    let w = wordOfNote(n);
+    return w ? [...S.notes.values()].filter((x) => wordOfNote(x) === w).sort((a, b) => a.id - b.id) : [n];
+  }, ARROW = (d) => `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="${d < 0 ? "m14.5 6-6 6 6 6" : "m9.5 6 6 6-6 6"}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   function editDialog(note) {
     let d = document.createElement("dialog");
-    d.className = "rx-dlg", d.tabIndex = -1, d.innerHTML = `<div class="dlg-top"><button type="button" class="dlg-x" aria-label="Close">${XICON}</button></div><div class="dlg-ed"></div>`, document.body.append(d);
-    let done = editor($(".dlg-ed", d), note, () => d.close());
-    $(".dlg-x", d).onclick = () => d.close(), d.addEventListener("click", (e) => e.target === d && d.close()), d.addEventListener("close", async () => {
-      await done(), d.remove(), RV.cur && (RV.cur = S.cards.get(RV.cur.id) ?? null), view === "review" && showReview();
+    d.className = "rx-dlg", d.tabIndex = -1;
+    let sibs = notesOfWord(note), at = Math.max(0, sibs.findIndex((x) => x.id === note.id));
+    d.innerHTML = `<div class="dlg-top">${sibs.length > 1 ? `<span class="dlg-nav"><button type="button" class="ib" data-d="-1" aria-label="Previous card">${ARROW(-1)}</button><button type="button" class="ib" data-d="1" aria-label="Next card">${ARROW(1)}</button></span>` : ""}<button type="button" class="dlg-x" aria-label="Close">${XICON}</button></div><div class="dlg-ed"></div>`, document.body.append(d);
+    let done = editor($(".dlg-ed", d), note, () => d.close()), nav = () => d.querySelectorAll("[data-d]").forEach((b) => b.disabled = at + Number(b.dataset.d) < 0 || at + Number(b.dataset.d) >= sibs.length), step = async (k) => {
+      let to = at + k, n = sibs[to] && S.notes.get(sibs[to].id);
+      n && (await done(), at = to, done = editor($(".dlg-ed", d), n, () => d.close()), nav(), d.scrollTop = 0, sfx("tap"));
+    };
+    nav(), d.querySelectorAll("[data-d]").forEach((b) => b.onclick = () => void step(Number(b.dataset.d))), d.addEventListener("keydown", (e) => {
+      if (sibs.length < 2 || e.isComposing || e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+      let k = KEYS.is(e, "ed.prev") ? -1 : KEYS.is(e, "ed.next") ? 1 : 0;
+      k && (e.preventDefault(), step(k));
+    }), $(".dlg-x", d).onclick = () => d.close(), d.addEventListener("click", (e) => e.target === d && d.close()), d.addEventListener("close", async () => {
+      if (await done(), d.remove(), RV.cur && (RV.cur = S.cards.get(RV.cur.id) ?? null), view === "review") showReview();
+      else if (view === "browse" && $(".br", app)) {
+        let last = sibs[at] && cardsOf(sibs[at].id)[0];
+        last && sibs.length > 1 && (BR.pick = last.id), reopen();
+      }
     }), d.showModal(), d.focus();
   }
   async function upload(files, f, save) {
@@ -1586,7 +1684,7 @@ ${p.word} is too easy for him now. Write a harder card for it. word: ${p.word} (
       let anySusp = sel.some((c) => c.queue === -1);
       bulk.innerHTML = `<span class="bk-n">${rows.length} ${perCard() ? "cards" : "words"}</span><button type="button" class="btn-q" data-b="${anySusp ? "unsusp" : "susp"}">${anySusp ? "Unsuspend" : "Suspend"}</button><button type="button" class="btn-q" data-b="red"><i class="fd fd1"></i>Red</button><button type="button" class="btn-q" data-b="green"><i class="fd fd3"></i>Green</button><button type="button" class="btn-q bk-del" data-b="del">Delete</button><button type="button" class="dlg-x" data-b="none" aria-label="Clear selection">${XICON}</button>`, bulk.querySelectorAll("[data-b]").forEach((b) => b.onclick = () => bulkAct(b.dataset.b, sel));
     }
-    let side = $(".br-side", app), row = rows.length === 1 ? rows[0] : null, rowWord = row ? wordOfCard(row) : "", sibNids = !row || perCard() ? [] : rowWord ? [...S.notes.values()].filter((n) => wordOfNote(n) === rowWord).map((n) => n.id).sort((a, b) => a - b) : [row.nid], sib = sibNids.flatMap((nid) => cardsOf(nid)).filter((c) => typeOf(S.notes.get(c.nid))), focus = row && BR.pick && sib.some((c) => c.id === BR.pick) ? S.cards.get(BR.pick) : row;
+    let side = $(".br-side", app), row = rows.length === 1 ? rows[0] : null, rowWord = row ? wordOfCard(row) : "", sibNids = !row || perCard() ? [] : rowWord ? [...S.notes.values()].filter((n) => wordOfNote(n) === rowWord).map((n) => n.id).sort((a, b) => a - b) : [row.nid], sib = wordRows(sibNids, live()).filter((c) => typeOf(S.notes.get(c.nid))), focus = row && BR.pick && sib.some((c) => c.id === BR.pick) ? S.cards.get(BR.pick) : row;
     if (!focus) {
       side.hidden || await closeSide();
       return;
@@ -1607,7 +1705,7 @@ ${p.word} is too easy for him now. Write a harder card for it. word: ${p.word} (
     ].filter(([, v]) => v);
     side.innerHTML = `<div class="sd-top"><span class="sd-w zh">${esc2(x.word)}</span><button type="button" class="dlg-x" aria-label="Close">${XICON}</button></div>
     <p class="sd-sub"><span class="sd-st st-${x.state}"><i class="sdot"></i>${STATE_NAME[x.state]}</span>${sib.length > 1 ? "" : `<span>${esc2(x.tmpl)}</span>`}</p>
-    ${sib.length > 1 ? `<div class="sd-seg sd-cards" role="radiogroup" aria-label="Card">${sib.map((c) => `<button type="button" role="radio" data-pc="${c.id}" aria-checked="${c.id === focus.id}">${esc2(typeOf(S.notes.get(c.nid))?.templates.find((t) => t.ord === c.ord)?.name ?? "")}${sibNids.length > 1 ? ` ${sibNids.indexOf(c.nid) + 1}` : ""}</button>`).join("")}</div>` : ""}
+    ${sib.length > 1 ? `<div class="sd-cards" role="radiogroup" aria-label="Cards">${sib.map((c) => cardRow(c, c.id === focus.id, sibNids.length > 1)).join("")}</div>` : ""}
     <div class="sd-face"><div class="sd-seg" role="radiogroup" aria-label="Side"><button type="button" role="radio" data-face="q" aria-checked="${BR.face === "q"}">Front</button><button type="button" role="radio" data-face="a" aria-checked="${BR.face === "a"}">Back</button></div><div class="host sd-host"></div></div>
     <dl class="sd-facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>
     <div class="sd-act"><button type="button" class="btn-q" data-s="susp">${focus.queue === -1 ? "Unsuspend" : "Suspend"}</button><button type="button" class="btn-q${f === 1 ? " on" : ""}" data-s="red"><i class="fd fd1"></i>Red</button><button type="button" class="btn-q${f === 3 ? " on" : ""}" data-s="green"><i class="fd fd3"></i>Green</button></div>
@@ -1644,13 +1742,31 @@ ${p.word} is too easy for him now. Write a harder card for it. word: ${p.word} (
       }
     );
   }
+  function moveRow(d) {
+    let ids = results().slice(0, BR.limit).map((x) => x.card.id);
+    if (!ids.length) return;
+    let cur = BR.sel.size === 1 ? [...BR.sel][0] : BR.last, next = nextRow(ids, cur, d);
+    next == null || next === cur && BR.sel.size === 1 || (BR.sel = /* @__PURE__ */ new Set([next]), BR.last = next, BR.pick = 0, app.querySelector(`.tr[data-c="${next}"]`) ? paintSel() : paintBrowse(), app.querySelector(`.tr[data-c="${next}"]`)?.scrollIntoView({ block: "nearest" }));
+  }
+  async function editOpen() {
+    let side = $(".br-side", app), c = side && !side.hidden ? S.cards.get(Number(side.dataset.c)) : null, n = c && S.notes.get(c.nid);
+    if (!n) return;
+    let close = BR.close;
+    BR.close = null, await close?.();
+    let ed = $(".sd-ed", side);
+    ed && (ed.innerHTML = ""), sfx("tap"), editDialog(S.notes.get(n.id) ?? n);
+  }
+  function cardRow(c, on, notes) {
+    let n = S.notes.get(c.nid), t = typeOf(n), say = rowText(n.flds[fieldIndex(t, "Chinese")] ?? "", wordOfNote(n)), st = items().find((i) => i.card.id === c.id)?.state, kind = esc2(t.templates.find((x) => x.ord === c.ord)?.name ?? "");
+    return `<button type="button" role="radio" class="sd-row${st ? " st-" + st : ""}" data-pc="${c.id}" aria-checked="${on}">${notes ? `<span class="sd-rs zh">${esc2(say)}</span><span class="sd-rt">${kind}</span>` : `<span class="sd-rs">${kind}</span>`}</button>`;
+  }
   var reopen = () => {
     let side = $(".br-side", app);
     side && delete side.dataset.c, paintBrowse();
   };
   function quickHelp(nid) {
     let list = flaggedList(), f = list.find((x) => x.nid === nid);
-    return f ? `<div class="sd-help"><span class="sd-hl">${EASE_NAME[f.ease]}</span>${quickActs(f, list)}</div>` : "";
+    return f?.ease === "easy" && askPartners(), f ? `<div class="sd-help"><span class="sd-hl">${EASE_NAME[f.ease]}</span>${quickActs(f, list)}</div>` : "";
   }
   async function closeSide() {
     let side = app.querySelector(".br-side"), close = BR.close;
@@ -1835,8 +1951,14 @@ ${p.word} is too easy for him now. Write a harder card for it. word: ${p.word} (
       if (!typing && (KEYS.is(e, "undo") || KEYS.is(e, "redo")))
         return eat(), document.querySelector("dialog[open]") ? void 0 : KEYS.is(e, "redo") ? redo() : undo();
       if (e.key === "Escape")
-        return RV.flags ? (e.stopImmediatePropagation(), RV.flags = !1, paintFlags()) : view === "browse" && BR.tray && !document.querySelector("dialog[open]") ? (e.stopImmediatePropagation(), BR.tray = "", paintChips(), paintTray()) : view === "browse" && BR.sel.size && !document.querySelector("dialog[open]") ? (e.stopImmediatePropagation(), BR.sel = /* @__PURE__ */ new Set(), closeSide(), paintSel()) : void 0;
+        return closePick() ? e.stopImmediatePropagation() : RV.flags ? (e.stopImmediatePropagation(), RV.flags = !1, paintFlags()) : view === "browse" && BR.tray && !document.querySelector("dialog[open]") ? (e.stopImmediatePropagation(), BR.tray = "", paintChips(), paintTray()) : view === "browse" && BR.sel.size && !document.querySelector("dialog[open]") ? (e.stopImmediatePropagation(), BR.sel = /* @__PURE__ */ new Set(), closeSide(), paintSel()) : void 0;
       if (!typing && ED?.host.isConnected && (KEYS.is(e, "rv.voice") || KEYS.is(e, "rv.revoice"))) return eat(), e.repeat ? void 0 : ED.voice(KEYS.is(e, "rv.revoice"));
+      if (view === "browse" && !document.querySelector("dialog[open]")) {
+        let inQ = !!t.closest?.(".br-q");
+        if ((!typing || inQ) && (KEYS.is(e, "br.down") || KEYS.is(e, "br.up")))
+          return eat(), inQ && t.blur(), moveRow(KEYS.is(e, "br.down") ? 1 : -1);
+        if (!typing && !e.repeat && KEYS.is(e, "br.edit")) return eat(), void editOpen();
+      }
       if (typing || document.querySelector("dialog[open]") || view !== "review") return;
       if (RV.flags) {
         let f = KEYS.is(e, "rv.red") ? 1 : KEYS.is(e, "rv.green") ? 3 : KEYS.is(e, "rv.noflag") ? 0 : -1;
@@ -1883,7 +2005,7 @@ ${p.word} is too easy for him now. Write a harder card for it. word: ${p.word} (
         v = sessionStorage.getItem("cbp-rx") || "review";
       } catch {
       }
-      VIEW === "reviews" && go(["review", "browse", "designs"].includes(v) ? v : "review"), SETTINGS.redraw(), paintDot(), settlePairs(), setTimeout(prefetch, 4e3), setTimeout(() => tune().catch(() => {
+      VIEW === "reviews" && go(["review", "browse", "designs"].includes(v) ? v : "review"), SETTINGS.redraw(), paintDot(), settlePairs(), setTimeout(prefetch, 4e3), setTimeout(() => void askPartners(), 8e3), setTimeout(() => tune().catch(() => {
       }), 2e4);
     })();
   }

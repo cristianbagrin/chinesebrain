@@ -323,6 +323,17 @@
       ["rv.voice", "Play the sentence", "v"],
       ["rv.revoice", "Make its audio again", "shift+v"]
     ]),
+    // Combine: Browse's rows by keyboard, E edits the open one; in Edit, ← and → go through the word's cards (no caret in a field)
+    ...D("Browse", void 0, [
+      ["br.down", "Next row", "arrowdown"],
+      ["br.up", "Previous row", "arrowup"],
+      ["br.edit", "Edit", "e"]
+    ]),
+    ...D("Reviews", "editing", [
+      ["ed.prev", "Previous card of the word", "arrowleft"],
+      ["ed.next", "Next card of the word", "arrowright"]
+    ]),
+    // (end Combine)
     ...D("Cards", void 0, [
       ["cd.prev", "Back", "arrowleft"],
       ["cd.next", "Next word", "arrowright"],
@@ -448,6 +459,8 @@
   var hm = (v) => `${+v.slice(0, 2) - 12}:${v.slice(3)} pm`;
   LAB.define("nudge", "Evening nudge", [["off", "Off"], ...Array.from({ length: 14 }, (_, i) => `${17 + (i >> 1)}:${i % 2 ? "30" : "00"}`).map((v) => [v, hm(v)])], "21:00", "Habit", A);
   var ORDER = ["text-size", "pinyin", "autoplay", "card-model", "card-ahead", "pinyin-model", "idea-model", "draw-model", "deeper-model", "test-model", "grade-model", "essay-model", "tutor-model"];
+  LAB.define("combine-model", "Combine partners", M, "haiku", "AI", A);
+  ORDER.splice(ORDER.indexOf("deeper-model") + 1, 0, "combine-model");
   var token = () => lsGet("cb-token") ?? "", acctIds = () => Object.values(LAB.defs).filter((d) => d.scope === "account").map((d) => d.id), pushT = 0;
   LAB.push = () => {
     clearTimeout(pushT), pushT = window.setTimeout(() => {

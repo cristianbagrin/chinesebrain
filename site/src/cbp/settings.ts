@@ -19,6 +19,9 @@ export const SETTINGS: Record<string, { options: string[]; def: string }> = {
   'grade-model': { options: MODEL, def: 'sonnet' },
   'essay-model': { options: MODEL, def: 'opus' },
   'tutor-model': { options: MODEL, def: 'sonnet' },
+  // Combine: partner words for a word that's too easy (combine.ts): a ranking, so the cheapest model by default
+  'combine-model': { options: MODEL, def: 'haiku' },
+  // (end Combine)
   // Habit: the evening nudge's time (his local time: push.ts tz), every half hour 5 pm to 11:30 pm, or off (src/cbp/push.ts)
   nudge: { options: ['off', ...Array.from({ length: 14 }, (_, i) => `${17 + (i >> 1)}:${i % 2 ? '30' : '00'}`)], def: '21:00' },
   // (end Habit)
@@ -57,7 +60,7 @@ export async function save(env: Env, body: { values?: unknown; keys?: unknown })
 }
 
 /** The model a job runs on, as ai.text wants it ('anthropic:claude-opus-5-5'); the default if nothing is saved. */
-export async function modelFor(env: Env, id: 'test-model' | 'grade-model' | 'essay-model' | 'tutor-model' | 'pinyin-model') {
+export async function modelFor(env: Env, id: 'test-model' | 'grade-model' | 'essay-model' | 'tutor-model' | 'pinyin-model' | 'combine-model') {
   const v = (await settings(env)).values[id];
   return `anthropic:claude-${v}-5-5`;
 }
