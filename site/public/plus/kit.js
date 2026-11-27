@@ -460,7 +460,7 @@
   var hm = (v) => `${+v.slice(0, 2) - 12}:${v.slice(3)} pm`;
   LAB.define("nudge", "Evening nudge", [["off", "Off"], ...Array.from({ length: 14 }, (_, i) => `${17 + (i >> 1)}:${i % 2 ? "30" : "00"}`).map((v) => [v, hm(v)])], "21:00", "Habit", A);
   var ORDER = ["text-size", "pinyin", "autoplay", "card-model", "card-ahead", "pinyin-model", "idea-model", "draw-model", "deeper-model", "test-model", "grade-model", "essay-model", "tutor-model"];
-  LAB.define("combine-model", "Combine partners", M, "haiku", "AI", A);
+  LAB.define("combine-model", "Combine partners", M, "sonnet", "AI", A);
   ORDER.splice(ORDER.indexOf("deeper-model") + 1, 0, "combine-model");
   var token = () => lsGet("cb-token") ?? "", acctIds = () => Object.values(LAB.defs).filter((d) => d.scope === "account").map((d) => d.id), pushT = 0;
   LAB.push = () => {
