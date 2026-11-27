@@ -142,7 +142,9 @@ export function plan(src: string, essays: Record<string, Doc>, reviews: Record<s
       const bad = all.find((m, k) => got[k]?.i !== m.i);
       errs.push(`DAY ${b.day}: 「${bad?.mine.trim()}」 would land in the wrong place; give more of his words`);
     }
-    writes.push({ col: 'reviews', id: pad(b.day), op: 'set', data: { day: b.day, review: today, marks } });
+    // his tries on the marks (tries.ts) stay with them
+    const tries = reviews[pad(b.day)]?.tries;
+    writes.push({ col: 'reviews', id: pad(b.day), op: 'set', data: { day: b.day, review: today, marks, ...(tries ? { tries } : {}) } });
     for (const m of fresh) {
       if (!m.listed) continue;
       if (Object.values(improve).some((x) => Number(x.day) === b.day && String(x.mine ?? '').trim() === m.mine.trim())) continue;
@@ -360,7 +362,8 @@ export function planJson(e: Doc, marks: VMark[], uses: unknown, reviews: Record<
   const kept = old ? anchor(text, (old.marks as Mark[]) ?? []).filter((o) => !marks.some((m) => m.i < o.j && o.i < m.j)) : [];
   const all = [...kept, ...marks].sort((a, c) => a.i - c.i);
   const stored = all.map((m) => Object.fromEntries((['t', 'mine', 'nat', 'note', 'p'] as const).filter((k) => (m as Doc)[k]).map((k) => [k, (m as Doc)[k]])) as Mark);
-  writes.push({ col: 'reviews', id: pad(day), op: 'set', data: { day, review: today, marks: stored } });
+  // his tries on the marks (tries.ts) stay with them
+  writes.push({ col: 'reviews', id: pad(day), op: 'set', data: { day, review: today, marks: stored, ...(old?.tries ? { tries: old.tries } : {}) } });
   const ids = new Set(Object.keys(improve));
   for (const m of marks) {
     if (!m.list) continue;

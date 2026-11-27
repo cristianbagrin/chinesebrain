@@ -1191,10 +1191,47 @@
   }
   var KNOWN = { of, needsPinyin };
 
+  // site/src/cbp/tries.ts
+  var tries_exports = {};
+  __export(tries_exports, {
+    bare: () => bare,
+    credit: () => credit,
+    itemFor: () => itemFor,
+    markKey: () => markKey,
+    record: () => record,
+    same: () => same,
+    stateOf: () => stateOf
+  });
+  function markKey(m) {
+    let h = 2166136261;
+    for (let c of String(m.mine ?? "") + "" + String(m.nat ?? "")) h = Math.imul(h ^ c.codePointAt(0), 16777619);
+    return "m" + (h >>> 0).toString(36);
+  }
+  var bare = (s) => String(s ?? "").normalize("NFKC").replace(/[\s\p{P}\p{S}]+/gu, "").toLowerCase(), same = (attempt, fix) => !!bare(attempt) && bare(attempt) === bare(fix), stateOf = (tries, m) => {
+    let v = tries?.[markKey(m)];
+    return v === "right" || v === "wrong" || v === "shown" ? v : void 0;
+  };
+  function record(tries, m, t) {
+    let cur = { ...tries ?? {} }, k = markKey(m);
+    return (!cur[k] || cur[k] === "shown" && t !== "shown") && (cur[k] = t), cur;
+  }
+  var pkey = (p) => String(p ?? "").toLowerCase().replace(/[\s.,;:!?，。、；：！？()（）"“”'‘’「」…-]+/g, "");
+  function itemFor(items, m) {
+    let open = items.filter((x) => x && !x.done && !x.removed), mine2 = String(m.mine ?? "").trim();
+    return open.find((x) => Number(x.day) === Number(m.day) && String(x.mine ?? "").trim() === mine2) ?? (m.p ? open.find((x) => x.p && pkey(x.p) === pkey(m.p)) : void 0);
+  }
+  function credit(x, day, s, ok, now = (/* @__PURE__ */ new Date()).toISOString()) {
+    let tried = [.../* @__PURE__ */ new Set([...x.tried ?? [], day])].slice(-20);
+    if (!ok) return { tried };
+    let uses = [...(x.uses ?? []).filter((y) => y.day !== day), { day, s }].slice(-6), data = { uses, tried };
+    return new Set(uses.map((y) => y.day)).size >= 3 && Object.assign(data, { done: !0, doneAt: now, proof: { day, s }, retired: !0 }), data;
+  }
+
   // site/src/cbp/kit/main.ts
   Object.assign(window, { EDITOR, KNOWN });
   Object.assign(window, { SOUND, HOLD, RUBY, KEYS: KEYS2, SETTINGS });
   Object.assign(window, { HABIT: habit_exports });
+  Object.assign(window, { TRIES: tries_exports });
   new MutationObserver((recs) => {
     for (let r of recs)
       for (let n of r.addedNodes) {

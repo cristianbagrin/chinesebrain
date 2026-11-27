@@ -26,6 +26,9 @@ Object.assign(window, { SOUND, HOLD, RUBY, KEYS, SETTINGS });
 // Habit
 Object.assign(window, { HABIT });
 // (end Habit)
+// Essay marks as prompts first: the answer check and each mark's outcome (tries.ts), for essays.js
+import * as TRIES from '../tries.ts';
+Object.assign(window, { TRIES });
 
 // a toast (core.js, cards.js, the reviews' own) shows above an open dialog: the window is modal, so one on the page behind
 // would sit under it, inert, until it closed. Added while a modal dialog is open, it goes into that dialog (still fixed to

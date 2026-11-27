@@ -87,8 +87,29 @@ function ES_hlHTML(s){
 function ES_segHTML(s){
   // well done, or nothing to say: his text, plain
   if(s.t==='good'||!s.nat) return `<span data-o="${s.i}">${mix(s.mine)}</span>`;
+  // a mark he hasn't dealt with yet shows only what's wrong: his own words under the highlighter (the fix waits in the
+  // tip for his try); My version still shows the corrected text whole (css: .es-c.try)
+  const fresh=!ES_tryOf(s), fix=ES_hlHTML(s);
   // what he wrote shows in the tip, or inline (struck) with My version
-  return `<span class="es-c ${s.t}" data-k="${s.id}" data-i="${s.i}"><s class="x-out">${mix(s.mine)}</s><span class="es-n" tabindex="0" role="button" style="${ES_messy(s.id)}">${ES_hlHTML(s)}</span></span>`;
+  return `<span class="es-c ${s.t}${fresh?' try':''}" data-k="${s.id}" data-i="${s.i}"><s class="x-out">${mix(s.mine)}</s><span class="es-n" tabindex="0" role="button" style="${ES_messy(s.id)}">${fresh?`<u class="d es-own">${mix(s.mine)}</u><span class="es-fx">${fix}</span>`:fix}</span></span>`;
+}
+/* ---------- prompts first (TRIES, site/src/cbp/tries.ts): a mark asks him to fix it before it shows the fix. Its outcome
+   (right, wrong, shown) is kept on the day's review doc (`tries`), and a try counts toward its To improve item. ---------- */
+const ES_tryOf=s=>typeof TRIES==='undefined'?'shown':TRIES.stateOf(ES.reviews[s.day]&&ES.reviews[s.day].tries,s);
+function ES_setTry(s,t){
+  const rv=ES.reviews[s.day]; if(!rv||typeof TRIES==='undefined') return;
+  rv.tries=TRIES.record(rv.tries,s,t);
+  if(ES.db) ES.db.collection('reviews').doc('d'+String(s.day).padStart(3,'0')).update({tries:rv.tries}).catch(e=>console.error(e));
+  // the mark in the essay now reads corrected; the diary's html is noted so the snapshot's echo changes nothing
+  const c=ES_D.querySelector(`.es-c[data-k="${s.id}"]`);
+  if(c){const on=c.classList.contains('on');c.insertAdjacentHTML('afterend',ES_segHTML(s));c.remove();if(on)ES_D.querySelector(`.es-c[data-k="${s.id}"]`)?.classList.add('on');}
+  const h=ES_html(); if(h!=null) ES_D._h=h;
+}
+// his try into To improve: right is a use of the item the mark belongs to, wrong a miss (TRIES.credit)
+function ES_credit(s,ok){
+  const x=TRIES.itemFor(Object.values(ES.items||{}),s); if(!x) return;
+  IM_write(x.id,TRIES.credit(x,+s.day,s.nat.trim(),ok));
+  try{IM_render();}catch(e){}
 }
 // editing shows his own words; the spots Claude corrected keep a faint mark until he changes them
 // a past day open to edit: one block per paragraph, as Today's box (write.js PARA_*), the corrected spots still marked
@@ -149,12 +170,11 @@ function ES_dayHTML(e,wk){
     <header class="es-dh"><b>Day ${e.day}</b><span>${fmtDate(e.date)}</span><span class="saved" data-saved="${e.date}" aria-live="polite"></span></header>
     <div class="es-text pen" lang="zh-Hant" data-day="${e.day}" tabindex="0">${ES_essayHTML(e)}</div>${ES_stampHTML(e)}</article>`;
 }
-function ES_render(){
-  if(VIEW!=='essays'||ES.editDay!=null){ES.stale=true;return;}
-  ES.stale=false;
+// the diary's html (null: no essays yet)
+function ES_html(){
   const all=sorted();
   ES.seg={};
-  if(!all.length){ES_closeTip();ES_D._h=null;ES_D.innerHTML=ES.loaded?'<p class="es-none">Your essays show up here.</p>':'';return;}
+  if(!all.length) return null;
   // the newest days, rounded out to whole weeks
   let n=Math.min(ES.show,all.length);
   if(n<all.length){const wk=K(monday(P(all[n-1].date)));while(n<all.length&&K(monday(P(all[n].date)))===wk)n++;}
@@ -162,6 +182,13 @@ function ES_render(){
   all.slice(0,n).forEach(e=>{const mon=monday(P(e.date)),k=K(mon);let w=weeks[weeks.length-1];if(!w||w.k!==k){w={k,mon,days:[]};weeks.push(w);}w.days.push(e);});
   const html=weeks.map(w=>{const n=ES_weekNo(w.mon),l='Week '+n;return `<section class="es-wk" aria-label="${l}"><header class="es-wh"><h2>${l}</h2>${ES_dots(w.mon,have)}</header>${w.days.map(e=>ES_dayHTML(e,n)).join('')}</section>`;}).join('')
     +(all.length>n?'<button class="es-more btn-q" id="es-more" type="button">Earlier weeks</button>':'');
+  return html;
+}
+function ES_render(){
+  if(VIEW!=='essays'||ES.editDay!=null){ES.stale=true;return;}
+  ES.stale=false;
+  const html=ES_html();
+  if(html==null){ES_closeTip();ES_D._h=null;ES_D.innerHTML=ES.loaded?'<p class="es-none">Your essays show up here.</p>':'';return;}
   // the same diary (a snapshot that changed nothing here): leave it, and any open tip, alone. Pins come from ES_refreshPins.
   if(ES_D._h===html) return;
   ES_closeTip(); ES_D._h=html; ES_D.innerHTML=html;
@@ -294,10 +321,15 @@ async function ES_meanHTML(s){
   if(ws.length===1&&ws[0].w===s.nat.trim()) return esc(ws[0].g);
   return ws.map(w=>`<span class="zh" lang="zh-Hant">${esc(w.w)}</span> ${esc(w.g)}`).join('<br>');
 }
-function ES_markTip(s){
-  const word=s.t==='word', on=!!IM_listed(s);
-  const was=word?`<span class="es-tm en">${esc(s.mine.trim())}</span>`:`<s class="x-out es-tm" lang="zh-Hant">${mix(s.mine.trim())}</s>`;
-  return `<p class="es-tx">${was}<span class="es-ta" aria-hidden="true">→</span></p>`
+// res: the try he just made ({t:'right'|'wrong', a: what he typed})
+function ES_markTip(s,res){
+  const word=s.t==='word', on=!!IM_listed(s), st=res?res.t:ES_tryOf(s);
+  // not dealt with yet: his words, a field to fix them, and Show
+  if(!st) return `<p class="es-tx"><span class="es-tm${word?' en':''}"${word?'':' lang="zh-Hant"'}>${word?esc(s.mine.trim()):mix(s.mine.trim())}</span></p>`
+    +`<div class="es-try"><input class="es-ti" type="text" lang="zh-Hant" enterkeyhint="done" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Your fix"><button class="es-show" type="button">Show</button></div>`;
+  const was=res&&res.t==='wrong'?`<s class="x-out es-tm" lang="zh-Hant">${mix(res.a.trim())}</s>`
+    :word?`<span class="es-tm en">${esc(s.mine.trim())}</span>`:`<s class="x-out es-tm" lang="zh-Hant">${mix(s.mine.trim())}</s>`;
+  return `<p class="es-tx">${st==='right'?`<span class="es-ok" aria-label="right">${ES_ICON_ON}</span>`:''}${was}<span class="es-ta" aria-hidden="true">→</span></p>`
     +`<p class="es-tf" lang="zh-Hant" data-fill="fix">${ES_hlHTML(s)}</p>`
     +(s.note?`<p class="es-tn">${zh(s.note)}</p>`:'')
     +`<p class="es-tg" data-fill="mean" hidden></p>`
@@ -351,6 +383,7 @@ function ES_openTip(c,pin,px,py){
   let r=rs[0];
   if(py!=null) r=rs.reduce((b,q)=>Math.abs((q.top+q.bottom)/2-py)<Math.abs((b.top+b.bottom)/2-py)?q:b,rs[0]);
   const tip=ES_showTip(s.id,ES_markTip(s),r,px,e=>{
+    if(e.target.closest('.es-show')){sfx('tap');ES_setTry(s,'shown');ES_fullTip(tip,s);return;}
     if(!e.target.closest('#es-add')) return;
     IM_toggle(s);
     const on=!!IM_listed(s), b=tip.querySelector('#es-add');
@@ -358,6 +391,26 @@ function ES_openTip(c,pin,px,py){
     b.setAttribute('aria-pressed',on);b.innerHTML=ES_addLabel(on);
   },pin,rs);
   c.classList.add('on');
+  const inp=tip.querySelector('.es-ti');
+  if(!inp){ES_fullTip(tip,s,null,true);return;}
+  // typing in it keeps the tip open; Enter checks (never mid-composition: Chinese is typed through an input method)
+  inp.addEventListener('focus',()=>{ES.pinned=true;});
+  inp.addEventListener('keydown',e=>{
+    if(e.key!=='Enter'||e.isComposing||e.keyCode===229) return;
+    e.preventDefault();
+    const a=inp.value; if(!a.trim()) return;
+    const ok=TRIES.same(a,s.nat);
+    ES_setTry(s,ok?'right':'wrong');
+    ES_credit(s,ok);
+    if(ok){sfx('save');const b=inp.getBoundingClientRect();celebrate('crossoff',{x:b.left+Math.min(b.width/2,60),y:b.top+b.height/2});}
+    else sfx('tap');
+    ES_fullTip(tip,s,{t:ok?'right':'wrong',a});
+  });
+  if(pin&&ES_FINE) inp.focus({preventScroll:true});
+}
+// the whole tip: the fix with its pinyin, why, the meaning, and the button
+function ES_fullTip(tip,s,res,drawn){
+  if(!drawn){tip.innerHTML=ES_markTip(s,res);ES_place();}
   ES_fixHTML(s).then(h=>ES_fill(tip,'fix',h)).catch(()=>{});
   ES_meanHTML(s).then(h=>ES_fill(tip,'mean',h)).catch(()=>{});
 }
@@ -600,7 +653,8 @@ ES_D.addEventListener('keydown',e=>{
 document.addEventListener('click',e=>{if(ES.tip&&!e.target.closest('#es-tip')&&!e.target.closest('#ess-days'))ES_closeTip();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')ES_closeTip();});
 // the tip follows its words when the page reflows (a phone turning, the window resizing)
-addEventListener('resize',()=>{if(ES.tip)ES_closeTip();});
+// (a phone's keyboard coming up for his try resizes the window: the tip stays, and follows)
+addEventListener('resize',()=>{if(!ES.tip)return;if(document.activeElement&&document.activeElement.closest&&document.activeElement.closest('#es-tip'))ES_place();else ES_closeTip();});
 // his own text inline is off by default (the essay reads clean); the choice stays on this device
 const ES_MINE=document.getElementById('mine');
 function ES_showMine(on){ES_MINE.setAttribute('aria-checked',String(on));ES_D.classList.toggle('es-hide-mine',!on);}
