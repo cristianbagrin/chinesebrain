@@ -677,7 +677,8 @@ async function stagingEnter(request, env) {
 
 /** The CBP owner's Chinese Brain words, for the nightly: the account with the `plus.write` switch (Chris). */
 async function ownerBrain(env) {
-  const r = await env.FLAGS.prepare("SELECT who FROM flags WHERE flag = 'plus.write' AND who != '*' LIMIT 1").first();
+  // the first account given the switch (by when, then id), so the nightly always reads the same one
+  const r = await env.FLAGS.prepare("SELECT who FROM flags WHERE flag = 'plus.write' AND who != '*' ORDER BY at, who LIMIT 1").first();
   if (!r) return null;
   const acct = env.ACCOUNT.get(env.ACCOUNT.idFromString(r.who));
   const brain = (since) => acct.brainSince(since);
@@ -798,7 +799,9 @@ async function plusUpload(request, env) {
     const { account, secret } = byToken(env, bearer);
     const me = await account.call(secret, 'who');
     if (me?.fail) return json({ error: me.fail.message, code: me.fail.code }, me.fail.status);
-    if (!(await flagsOf(env, accountId(bearer))).includes('plus')) return json({ error: 'Not found.', code: 'not_found' }, 404);
+    const flags = await flagsOf(env, accountId(bearer));
+    if (!flags.includes('plus')) return json({ error: 'Not found.', code: 'not_found' }, 404);
+    if (!flags.includes('plus.write')) return json({ error: 'Read-only for now.', code: 'read_only' }, 403);
     return json({ url: await cards.keepMedia(env, await request.arrayBuffer(), request.headers.get('Content-Type') ?? '') });
   } catch (e) {
     if (e instanceof Fail) return json({ error: e.message, code: e.code }, e.status);
@@ -834,12 +837,13 @@ async function api(request, env, path) {
     const q = new URL(request.url).searchParams;
     try {
       if (request.method === 'POST') {
+        // every change under plus/ needs the account's `plus.write` switch too
+        if (!flags.includes('plus.write')) throw new Fail(403, 'read_only', 'Read-only for now.');
         // the taste test (src/cbp/taste.ts)
         if (path === 'plus/taste/pick') return taste.pick(env, String(body.item ?? ''), body.n === 'none' ? 'none' : Number(body.n));
         if (path === 'plus/taste/note') return taste.note(env, String(body.item ?? ''), String(body.note ?? ''));
         // the board's own documents, once the website is the source and this account may change them
         if (path === 'plus/db') {
-          if (!flags.includes('plus.write')) throw new Fail(403, 'read_only', 'Read-only for now.');
           // Cards: a note's audio is made here on every save, whatever device saved it (src/cbp/cards.ts voiced)
           if (body.col === 'notes' && body.op === 'set' && body.data) body.data = await cards.voiced(env, String(body.id), body.data);
           // (end Cards)
@@ -1185,26 +1189,30 @@ export default {
   // needs judging calls Claude.
   //   10 pm  the nightly (src/cbp/nightly.ts): Chinese Brain marks, the finished test filed, cards, the day's test;
   //          then, if it filed a monthly test, that test's lessons
-  //   5 am   yesterday's essay (its day ended at 4) marked with its bookkeeping; Monday, then the week's pass over it;
-  //          the 1st, the month's pass and right after it the monthly test (it takes the place of that day's test);
-  //          the media sweep
+  //   5 am   yesterday's essay (its day ended at 4) marked with its bookkeeping; then the week's pass over it (tried
+  //          Monday to Wednesday until it runs once that week); the month's pass (tried the 1st to the 7th until it runs
+  //          once that month); the media sweep
+  //   5:30   the monthly test (the 1st to the 7th, until it is sent or skipped; it takes the place of that day's test),
+  //          on its own tick so the 1st's 5 am run isn't carrying the month's pass and the test at once
   async scheduled(event, env, ctx) {
     const t = new Date(event.scheduledTime + 8 * 3600e3), hour = t.getUTCHours();
     // Habit: one trigger every half hour (wrangler.jsonc). Each run checks the evening nudge (src/cbp/push.ts); the
     // night jobs below run only at 10 pm and 5 am, as their own two triggers did before.
     if (event.cron === '*/30 * * * *') {
       ctx.waitUntil(push.nudge(env, { now: event.scheduledTime }).then((r) => r && console.log('nudge', JSON.stringify(r)), (e) => console.error('nudge', e)));
-      if (t.getUTCMinutes() >= 30 || (hour !== 22 && hour !== 5)) return;
+      if (!(hour === 22 && t.getUTCMinutes() < 30) && hour !== 5) return;
     }
     // (end Habit)
     const todo = [];
+    // each job keeps in meta what it did, so trying it on several days runs it once (jobs.ts)
     if (hour === 22) todo.push(['nightly', () => ownerBrain(env).then((b) => nightly.nightly(env, b))], ['monthly-test lessons', () => jobs.afterTest(env)]);
-    else {
-      todo.push(['essay', () => jobs.essays(env)]);
-      if (t.getUTCDay() === 1) todo.push(['weekly', () => jobs.weekly(env)]);
-      if (t.getUTCDate() === 1) todo.push(['monthly', () => jobs.monthly(env)]);
-      // the monthly test runs once the month's pass is done; while he's halfway through a test it waits a day (to the 7th)
+    else if (t.getUTCMinutes() >= 30) {
+      // the monthly test, after the month's pass at 5:00; while he's halfway through a test it waits a day (to the 7th)
       if (t.getUTCDate() <= 7) todo.push(['monthly-test', () => jobs.monthlyTest(env)]);
+    } else {
+      todo.push(['essay', () => jobs.essays(env)]);
+      if (t.getUTCDay() >= 1 && t.getUTCDay() <= 3) todo.push(['weekly', () => jobs.weekly(env)]);
+      if (t.getUTCDate() <= 7) todo.push(['monthly', () => jobs.monthly(env)]);
       todo.push(['clean', () => cards.clean(env)]);
     }
     ctx.waitUntil((async () => {
