@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { walk, reviewDays, merge, left, sentences, han, met, monday, dayOf, blank, hold, goal, type Day } from '../site/src/cbp/habit.ts';
+import { walk, reviewDays, merge, left, sentences, han, met, monday, dayOf, blank, hold, goal, columns, type Day } from '../site/src/cbp/habit.ts';
 import { encrypt, vapid, b64u, unb64u, nudge, TIMES } from '../site/src/cbp/push.ts';
 import { SETTINGS } from '../site/src/cbp/settings.ts';
 
@@ -237,4 +237,28 @@ test('the ring fills toward the next milestone', () => {
   assert.equal(goal(29, true), 30);
   assert.equal(goal(365, false), 400);
   assert.equal(goal(420, true), 500);
+});
+
+test('heatmap columns: every month starts its own column, at its own weekday rows', () => {
+  const C = columns(2026, '2026-11-27');
+  const at = (d: string) => C.findIndex((c) => c.days.includes(d));
+  // Oct 1 2026 is a Thursday: Sep 28–30 keep their column (Thu–Sun empty), October starts the next one at Thursday's row
+  const sep = C[at('2026-09-30')], oct = C[at('2026-10-01')];
+  assert.deepEqual(sep.days, ['2026-09-28', '2026-09-29', '2026-09-30', null, null, null, null]);
+  assert.deepEqual(oct.days, [null, null, null, '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04']);
+  assert.equal(at('2026-10-01'), at('2026-09-30') + 1);
+  assert.ok(oct.first && !sep.first);
+  // Nov 1 2026 is a Sunday: alone at the bottom of its own column, after Oct 26–31
+  assert.deepEqual(C[at('2026-10-31')].days, ['2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31', null]);
+  assert.deepEqual(C[at('2026-11-01')].days, [null, null, null, null, null, null, '2026-11-01']);
+  assert.deepEqual(C[at('2026-11-02')].days.slice(0, 1), ['2026-11-02']);
+  // a month that starts on a Monday adds no column (Jun 1 2026)
+  assert.equal(at('2026-06-01'), at('2026-05-31') + 1);
+  assert.deepEqual(C[at('2026-05-31')].days.slice(6), ['2026-05-31']);
+  // Jan 1 (a Thursday) starts the year at its own row; the last column ends on the given day
+  assert.deepEqual(C[0].days.slice(0, 4), [null, null, null, '2026-01-01']);
+  assert.equal(C.at(-1)!.days.filter(Boolean).at(-1), '2026-11-27');
+  // one name a month, twelve over the whole year
+  assert.equal(columns(2026, '2026-12-31').filter((c) => c.first).length, 12);
+  assert.ok(C.every((c) => c.days.filter(Boolean).every((d) => +d!.slice(5, 7) - 1 === c.month)));
 });

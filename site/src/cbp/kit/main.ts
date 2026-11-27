@@ -3,7 +3,7 @@
 //   SOUND     one voice at a time (sound.ts)            HOLD   press and hold, with a fill (hold.ts)
 //   RUBY      pinyin above the characters (ruby.ts)      KEYS   every shortcut, his to change (keys.ts)
 //   SETTINGS  the one Settings panel (settings.ts); the choices themselves are LAB's (core.js)
-//   go.ts     Shift+T, R, B, C, E, P open Today, Reviews, Browse, Cards, Essays, Progress; ⌘[ ⌘] back and forward
+//   go.ts     Shift+1…5 and Shift+B open the pages; each place is a browser history entry (back, forward, swipe)
 // The type tokens and the styles for these are in board/css/base.css and board/css/kit.css.
 import { SOUND } from './sound.ts';
 import { HOLD } from './hold.ts';
@@ -26,6 +26,9 @@ Object.assign(window, { SOUND, HOLD, RUBY, KEYS, SETTINGS });
 // Habit
 Object.assign(window, { HABIT });
 // (end Habit)
+// Essay marks as prompts first: the answer check and each mark's outcome (tries.ts), for essays.js
+import * as TRIES from '../tries.ts';
+Object.assign(window, { TRIES });
 
 // a toast (core.js, cards.js, the reviews' own) shows above an open dialog: the window is modal, so one on the page behind
 // would sit under it, inert, until it closed. Added while a modal dialog is open, it goes into that dialog (still fixed to

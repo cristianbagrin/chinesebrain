@@ -41,6 +41,22 @@ const K = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 export const addDays = (s: string, n: number) => K(P(s) + n * 864e5);
 /** Monday of the week a day is in. */
 export const monday = (s: string) => addDays(s, -((new Date(P(s)).getUTCDay() + 6) % 7));
+/** The heatmap's columns for a year, Jan 1 to `end` (inclusive): one column a week, Monday on top, and every month starts
+ *  its own column. When a month begins mid-week, that week's days of the month before stay in their column (the rest of
+ *  it empty) and the new month's days begin in the next column at their own weekday rows. A slot is a day or null. */
+export function columns(year: number, end: string): { month: number; first: boolean; days: (string | null)[] }[] {
+  const out: { month: number; first: boolean; days: (string | null)[] }[] = [];
+  let col: (string | null)[] | null = null;
+  for (let d = `${year}-01-01`; d <= end && d.startsWith(String(year)); d = addDays(d, 1)) {
+    const row = (new Date(P(d)).getUTCDay() + 6) % 7, month = +d.slice(5, 7) - 1;
+    if (!col || row === 0 || d.endsWith('-01')) {
+      col = Array(7).fill(null);
+      out.push({ month, first: d.endsWith('-01'), days: col });
+    }
+    col[row] = d;
+  }
+  return out;
+}
 /** The habit day of a moment (ms) where he is (minutes east of UTC; Taipei 480), turning over at `rollover` o'clock. */
 export const dayOf = (ms: number, tzMin = 480, rollover = 4) => K(ms + tzMin * 60e3 - rollover * 3600e3);
 

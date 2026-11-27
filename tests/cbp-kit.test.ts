@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { DEFS, KEYS, RETIRED, clash, free } from '../site/src/cbp/kit/keys.ts';
 import { hit, marked, words } from '../site/src/cbp/kit/find.ts';
-import { swipe } from '../site/src/cbp/kit/swipe.ts';
+import { placeHash, parsePlace, entryFor } from '../site/src/cbp/kit/place.ts';
 
 // a keydown, as the handlers see it
 const key = (k: string, o: Record<string, unknown> = {}) =>
@@ -91,28 +91,30 @@ test('saved page keys equal to the old Shift+letter defaults are dropped; his ow
   KEYS.reset();
 });
 
-test('trackpad swipe: one step a gesture, past the threshold, sideways only', () => {
-  const s = swipe({ need: 90, quiet: 220 });
-  // fingers right: back, once, however long the momentum runs
-  let t = 0, got: number[] = [];
-  for (let i = 0; i < 40; i++) got.push(s.feed(-12, 1, (t += 16)).d);
-  assert.deepEqual(got.filter(Boolean), [-1]);
-  // a pause ends the gesture; fingers left: forward
-  t += 300;
-  got = [];
-  for (let i = 0; i < 20; i++) got.push(s.feed(10, 0, (t += 16)).d);
-  assert.deepEqual(got.filter(Boolean), [1]);
-  // a short nudge doesn't step, and lets the page scroll
-  t += 300;
-  assert.deepEqual([1, 2, 3].map(() => s.feed(-20, 0, (t += 16)).d), [0, 0, 0]);
-  // a scroll that drifts sideways later is still a scroll
-  t += 300;
-  const up = [s.feed(0, 30, (t += 16)), ...Array.from({ length: 20 }, () => s.feed(-30, 2, (t += 16)))];
-  assert.ok(up.every((f) => f.d === 0 && !f.mine));
-  // diagonal (no clear sideways lead) never counts
-  t += 300;
-  assert.ok(Array.from({ length: 20 }, () => s.feed(-20, 18, (t += 16))).every((f) => f.d === 0));
-  // a gesture that starts over something that scrolls sideways is its own
-  t += 300;
-  assert.ok(Array.from({ length: 20 }, () => s.feed(-30, 0, (t += 16), true)).every((f) => f.d === 0 && !f.mine));
+test('places round-trip through the address, and each move is one history entry', () => {
+  const places = [
+    { v: 'today', sub: '' },
+    { v: 'reviews', sub: 'review' },
+    { v: 'reviews', sub: 'browse' },
+    { v: 'reviews', sub: 'designs' },
+    { v: 'cards', sub: '' },
+    { v: 'cards', sub: '進行' },
+    { v: 'essays', sub: '' },
+    { v: 'progress', sub: '' },
+  ];
+  for (const p of places) assert.deepEqual(parsePlace(placeHash(p)), p);
+  assert.equal(placeHash({ v: 'reviews', sub: 'review' }), '#reviews');
+  assert.equal(placeHash({ v: 'reviews', sub: 'browse' }), '#reviews/browse');
+  // the browser hands the hash back percent-encoded
+  assert.deepEqual(parsePlace('#cards/%E9%80%B2%E8%A1%8C'), { v: 'cards', sub: '進行' });
+  assert.deepEqual(parsePlace('#reviews/nonsense'), { v: 'reviews', sub: 'review' });
+  assert.deepEqual(parsePlace(''), { v: '', sub: '' });
+  // the first place replaces; the same place twice is nothing; a new one is pushed; Back/Forward only replace
+  assert.equal(entryFor(null, places[0], false), 'replace');
+  assert.equal(entryFor(places[2], { v: 'reviews', sub: 'browse' }, false), 'none');
+  assert.equal(entryFor(places[1], places[2], false), 'push');
+  assert.equal(entryFor(places[1], places[2], true), 'replace');
+  // the Cards page gets its word a moment after it opens: the same entry
+  assert.equal(entryFor(places[4], places[5], false), 'replace');
+  assert.equal(entryFor(places[5], { v: 'cards', sub: '準時' }, false), 'push');
 });

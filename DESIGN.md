@@ -61,6 +61,11 @@ Reasons marked *inferred* weren't said by Chris; check them with him before lean
   need scrolling, `fitCard` (review/main.ts) draws the whole card smaller with `zoom` on `.rw-card .host` (never below
   60%), again once its pictures load, its pinyin is drawn, or the window changes size.**
   Why (*inferred*, from the Nov 27 change back): a width zoom made big cards scroll under the answer buttons.
+- **Back and forward are the browser's own.** Each place (a page; Reviews' Review, Browse, Card designs; the Cards word) is
+  a history entry with its address (`#reviews/browse`, `#cards/進行`; kit/go.ts, kit/place.ts): a new place pushes, the same
+  place twice is nothing, in-place tweaks replace. Dialogs are no entries; Back closes an open one. Never imitate swipes or
+  catch ⌘[ ⌘]. Why: "This should be a default basic feature, like when going between pages in a browser."
+  <!-- 2026-11-27, wave 9 -->
 - **Empty states use `.empty` (a line in ink-2, a second in ink-3, centered).**
 
 ## Motion

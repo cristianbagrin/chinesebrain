@@ -18,9 +18,6 @@ export const DEFS: Def[] = [
     ['shortcuts', 'Shortcuts', 'f12'],
     ['undo', 'Undo', 'mod+z'],
     ['redo', 'Redo', 'mod+shift+z mod+y'],
-    // the pages he was on, like a browser's back and forward (go.ts)
-    ['back', 'Back', 'mod+['],
-    ['forward', 'Forward', 'mod+]'],
   ]),
   // to a page from anywhere: Shift and its place in the tabs, Shift+1 Today … Shift+5 Progress, Shift+6 the Tutor pane (again:
   // away); Browse, inside Reviews, is Shift+B (go.ts). Not while he types in a field, nor over a dialog other than Settings
@@ -104,7 +101,8 @@ export const DEFS: Def[] = [
 const BY = new Map(DEFS.map((d) => [d.id, d]));
 /** Ids from before the Shift+letter page keys (Nov 27): bare T, C, R, B and A. A binding saved for one of them is dropped
     on load, so the page keys start from their new defaults and the next save leaves the old ids out. */
-export const RETIRED = ['go.today', 'go.cards', 'go.reviews', 'go.browse', 'tutor'];
+// back and forward: the browser's own now (go.ts)
+export const RETIRED = ['go.today', 'go.cards', 'go.reviews', 'go.browse', 'tutor', 'back', 'forward'];
 /** The page keys' defaults before Shift+digits (Nov 27, wave 8). A saved key equal to one of these is a leftover (the
     Settings list once saved the swapped-in default), so it's dropped and the new default shows; a key he picked stays. */
 export const OLD: Record<string, string> = { 'page.today': 'shift+t', 'page.reviews': 'shift+r', 'page.cards': 'shift+c', 'page.essays': 'shift+e', 'page.progress': 'shift+p', 'page.tutor': 'shift+a' };

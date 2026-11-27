@@ -11,7 +11,7 @@ import { answer, clock, queue, label, missed3, right3, historyOf, type Card, typ
 import { Fsrs, optimize, loss } from '../fsrs.ts';
 import { exportAnki } from './export.ts';
 import { triage, verdict, type Ease, type Flagged } from './triage.ts';
-import { rank, missing, pairPrompt, type Cand, type Kept, type Ranked } from './partners.ts';
+import { rank, missing, pairPrompt, harder, strength, settles, restOf, learnOf, type Cand, type Kept, type Ranked, type Pair } from './partners.ts';
 
 // the board's own globals (site/public/plus/board/js/core.js, cards.js)
 declare const VIEWS: string[];
@@ -297,10 +297,10 @@ function go(v: View) {
   try {
     sessionStorage.setItem('cbp-rx', v);
   } catch {}
-  // where he is, for Back and Forward (kit/go.ts)
+  // where he is: an entry in the browser's history (kit/go.ts)
   BUS.emit('place');
 }
-// Back and Forward come back to Review, Browse or Card designs through this (kit/go.ts)
+// the browser's Back and Forward come back to Review, Browse or Card designs through this (kit/go.ts)
 Object.assign(window, { RX_go: (v: View) => v !== view && go(v) });
 function paint() {
   if (!ready) return;
@@ -623,42 +623,46 @@ const nearWords = (note: Note) => nearNotes(note).map((n) => wordOfNote(n));
 // ---------- a partner for a word that's too easy: one card about the difference ----------
 const mergeNo = () => new Set<string>((S.meta.get('mergeNo')?.pairs as string[]) ?? []);
 const pairKey = (a: number, b: number) => [a, b].sort().join('-');
-/** One card about the difference: Claude writes it on the Cards page and he makes the note there, as with any card. Once
- *  that note reaches the collection, the two old cards rest (suspended; Undo brings them back). If he drops the card
- *  instead, or never makes it, nothing was suspended. */
-/** A pair (kind absent: "A、B", two notes) or one word written again ('hard': simpler; 'easy': harder; key "word ↻").
- *  Either way the new note's arrival rests the old cards. */
-type Pair = { words: string; nids: number[]; at: number; kind?: Ease; word?: string; why?: string };
+/** A combined card (partners.ts Pair, key "A、B", A too easy): Claude writes it on the Cards page for the harder of the
+ *  two for him (`learn`), two sentences using both, and he makes the note there, as with any card. Once that note is
+ *  added, the too-easy word's old cards rest (suspended; Undo brings them back); the partner's are never touched. If he
+ *  drops the card instead, or never makes it, nothing was suspended. One word written again ('hard': simpler; 'easy':
+ *  harder; key "word ↻") works the same way. */
 const pairs = (): Pair[] => (S.meta.get('combine')?.list as Pair[]) ?? [];
+/** How a note's word stands in his reviews (its weakest card), for harder(). */
+const strengthOf = (nid: number) => strength(items().filter((i) => i.note.id === nid));
 async function combine(x: number, y: number, why = '') {
   const [a, b] = [S.notes.get(x), S.notes.get(y)];
   if (!a || !b) return;
   const words = `${wordOfNote(a)}、${wordOfNote(b)}`;
-  await put('meta', 'combine', { list: [...pairs().filter((p) => p.words !== words), { words, nids: [x, y], at: Date.now(), ...(why ? { why } : {}) }] });
+  const learn = harder(strengthOf(x), strengthOf(y)) === 'easy' ? wordOfNote(a) : wordOfNote(b);
+  await put('meta', 'combine', { list: [...pairs().filter((p) => p.words !== words), { words, nids: [x, y], at: Date.now(), learn, ...(why ? { why } : {}) }] });
   // openCard moves to the Cards page itself (setView first made that page open on the card it had before)
   try {
     openCard(words, 'any');
   } catch {}
 }
 /** The pairs waiting on a combined card: its note arrived (the old cards rest), it was dropped, or it's two weeks old. */
-let settling = false;
+let settling = false, loudTill = 0;
 async function settlePairs() {
+  // just added on the Cards page (added()): the toast shows there too
+  const loud = Date.now() < loudTill;
   const list = pairs();
   if (!ready || settling || !list.length) return;
   settling = true;
   try {
     const wait: Pair[] = [];
     for (const p of list) {
-      const parts = p.words.split('、');
-      const made = [...S.notes.values()].find((n) => n.id > p.at - 60e3 && !p.nids.includes(n.id) && (p.kind ? wordOfNote(n) === p.word : parts.every((w) => wordOfNote(n).includes(w))));
+      const made = [...S.notes.values()].find((n) => n.id > p.at - 60e3 && !p.nids.includes(n.id) && settles(p, wordOfNote(n)));
       const doc = typeof CD !== 'undefined' && typeof cardId === 'function' ? CD.docs[cardId(p.words)] : undefined;
       if (made) {
-        const old = p.nids.flatMap(cardsOf).filter((c) => c.queue >= 0 || c.flags & 7);
+        const rest = restOf(p), easy = rest.map((id) => S.notes.get(id)).filter(Boolean).map((n) => wordOfNote(n!)).join('、');
+        const old = rest.flatMap(cardsOf).filter((c) => c.queue >= 0 || c.flags & 7);
         if (old.length) {
           await change(p.kind ? 'Rewrite' : 'Combine', old.map((c) => ['card', c.id, { ...c, queue: -1, flags: c.flags & ~7 }]));
-          if (VIEW === 'reviews') toast(`<span class="zh">${esc(p.kind ? p.word : p.words)}</span>: the old cards rest`, true);
+          if (loud || VIEW === 'reviews') later(() => toast(`<span class="zh">${esc(easy || p.word || '')}</span>: old cards suspended`, true));
         }
-        await keep(p.nids, false);
+        await keep(rest, false);
       } else if (!doc?.dropped && Date.now() - p.at < 14 * 864e5) wait.push(p);
     }
     if (wait.length !== list.length) await put('meta', 'combine', { list: wait });
@@ -666,6 +670,24 @@ async function settlePairs() {
     settling = false;
   }
 }
+/** After the board's own toast (the word carded, with its Undo), so one doesn't wipe out the other. */
+declare let TOAST: unknown;
+function later(f: () => void, tries = 12) {
+  if (tries > 0 && typeof TOAST !== 'undefined' && TOAST) return void setTimeout(() => later(f, tries - 1), 500);
+  f();
+}
+/** The Cards page added a note (review.js): if it is a combined card or a word written again, the new note comes into the
+ *  collection now and the old cards rest at once, with Undo, wherever he is. */
+async function added(key: string) {
+  if (!key.includes('、') && !key.endsWith(' ↻')) return;
+  if (!ready) await start();
+  if (!pairs().some((p) => p.words === key)) return;
+  loudTill = Date.now() + 20_000;
+  await sync();
+  await settlePairs();
+}
+/** For the Cards page (review.js): the word a combined card teaches, and the hook for its Add. */
+Object.assign(window, { CBP_learn: (key: string) => { const p = pairs().find((x) => x.words === key); return p ? learnOf(p) : ''; }, CBP_added: (key: string) => void added(key).catch((e) => console.error(e)) });
 // the card Claude writes for a pair: two sentences, each using both words (the Cards page's prompt, with partners.ts
 // pairPrompt added for a pair)
 if (typeof cardPrompt === 'function') {
@@ -675,7 +697,7 @@ if (typeof cardPrompt === 'function') {
     if (!p) return base(kit, word);
     if (p.kind) return `${base(kit, word)}\n\n${remakePrompt(p)}`;
     const [a, b] = p.words.split('、');
-    return `${base(kit, word)}\n\n${pairPrompt(a, b, p.why)}`;
+    return `${base(kit, word)}\n\n${pairPrompt(a, b, p.why, learnOf(p))}`;
   };
 }
 

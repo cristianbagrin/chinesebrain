@@ -45,9 +45,56 @@ export const STALE = 30 * 864e5;
 /** The too-easy words with no fresh list yet: the ones to ask about (in one call). */
 export const missing = (targets: string[], kept: Kept, now = Date.now()) => [...new Set(targets)].filter((w) => !kept[w] || now - kept[w].at > STALE);
 
-/** The Cards page's prompt for two words on one card: two example sentences (or two short exchanges), each using BOTH
- *  words, so he learns them together, as they meet in real life. Added after the page's own prompt (cards.js). */
-export function pairPrompt(a: string, b: string, why = '') {
+/** How a word stands in his reviews, its weakest card: FSRS difficulty (highest), stability and recall (lowest), lapses
+ *  (most). null: never studied. */
+export type Strength = { d: number | null; s: number | null; r: number | null; lapses: number };
+export function strength(cards: { d: number | null; s: number | null; r: number | null; lapses: number }[]): Strength {
+  const lo = (k: 's' | 'r') => (cards.some((c) => c[k] == null) ? null : cards.length ? Math.min(...cards.map((c) => c[k]!)) : null);
+  const ds = cards.map((c) => c.d).filter((x): x is number => x != null);
+  return { d: ds.length ? Math.max(...ds) : null, s: lo('s'), r: lo('r'), lapses: Math.max(0, ...cards.map((c) => c.lapses)) };
+}
+/** Of a combined pair, the word the card teaches: the harder one for him, by his own reviews. Each measure votes (higher
+ *  difficulty, lower stability, lower recall, more lapses; a word never studied is the harder); the partner wins a tie,
+ *  since the too-easy word is the one he has already. */
+export function harder(easy: Strength, partner: Strength): 'easy' | 'partner' {
+  let v = 0;
+  const vote = (a: number | null, b: number | null, more: boolean, near: number) => {
+    if (a == null && b == null) return;
+    if (a == null) return void (v += more ? -1 : 1);
+    if (b == null) return void (v += more ? 1 : -1);
+    if (Math.abs(a - b) <= near) return;
+    v += (a > b) === more ? 1 : -1;
+  };
+  // positive: the too-easy word is harder
+  vote(easy.d, partner.d, true, 0.3);
+  vote(easy.s, partner.s, false, 0.05 * Math.max(easy.s ?? 0, partner.s ?? 0));
+  vote(easy.r, partner.r, false, 0.02);
+  if (easy.lapses !== partner.lapses) v += easy.lapses > partner.lapses ? 1 : -1;
+  return v > 0 ? 'easy' : 'partner';
+}
+
+/** A combined card waiting to be made (meta `combine`): its Cards page key "A、B" (A the too-easy word), the notes [A's,
+ *  B's], and `learn`, the one word it teaches. Or one word written again (kind, key "字 ↻"). */
+export type Pair = { words: string; nids: number[]; at: number; kind?: 'hard' | 'easy'; word?: string; why?: string; learn?: string };
+/** The word a pair's new note teaches: `learn`; for one written again, its word; pairs from before `learn` (wave 8): the
+ *  last of the two, the partner. */
+export const learnOf = (p: Pair) => p.kind ? (p.word ?? '') : p.learn || p.words.split('、').at(-1) || '';
+/** Does a new note with this word settle the pair? Its word is the one the card teaches (before `learn`: either word, or
+ *  both together). */
+export function settles(p: Pair, word: string): boolean {
+  if (!word) return false;
+  if (p.kind || p.learn) return word === learnOf(p);
+  const parts = p.words.split('、');
+  return parts.includes(word) || parts.every((w) => word.includes(w));
+}
+/** The notes whose cards rest once it's settled: the too-easy word's only (never the partner's). */
+export const restOf = (p: Pair) => p.nids.slice(0, 1);
+
+/** The Cards page's prompt for two words on one card: it teaches `learn`, the harder of the two for him, with two example
+ *  sentences (or two short exchanges) that each use BOTH words, as they meet in real life. Added after the page's own
+ *  prompt (cards.js). */
+export function pairPrompt(a: string, b: string, why = '', learn = b) {
+  const other = learn === a ? b : a;
   return `=== TWO WORDS, ONE CARD ===
-${a} and ${b} are both easy for him now. This card replaces their old cards and teaches them together, the way they meet in real life${why ? ` (${why})` : ''}. word: ${a}、${b} (exactly this). meaning: ${a} …; ${b} … (short). ex: exactly two, and EACH one uses BOTH ${a} and ${b}, naturally, as a Taiwanese person would say it: one sentence, or a short exchange on one line (A：… B：…). Nothing forced: if a sentence needs a stretch to hold both, write a different one. Taiwan usage, Traditional characters, words he knows apart from these two; **bold** ${a} and ${b} each time. know: 1 or 2 points on how the two go together (the collocation, the situation, the contrast). One char: line per distinct character, no how: lines, no second: line.`;
+${other} is easy for him now; ${learn} is the harder of the two for him. This card teaches ${learn}, with ${other} beside it, the way they meet in real life${why ? ` (${why})` : ''}. word: ${learn} (exactly this, only this word). meaning: ${learn} … (short). ex: exactly two, and EACH one uses BOTH ${learn} and ${other}, naturally, as a Taiwanese person would say it: one sentence, or a short exchange on one line (A：… B：…). Nothing forced: if a sentence needs a stretch to hold both, write a different one. Taiwan usage, Traditional characters, words he knows apart from these two; **bold** ${learn} each time (not ${other}). know: 1 or 2 points on how the two go together (the collocation, the situation, the contrast). One char: line per distinct character of ${learn}, no how: lines, no second: line.`;
 }

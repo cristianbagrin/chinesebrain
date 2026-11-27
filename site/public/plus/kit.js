@@ -76,7 +76,7 @@
     btn2.classList.add("hold"), btn2.style.setProperty("--hold-ms", `${ms}ms`);
     let t = 0, x = 0, y = 0, fired = !1, by = "", reset = () => {
       clearTimeout(t), t = 0, by = "", btn2.classList.remove("holding");
-    }, start = (e, how) => {
+    }, start2 = (e, how) => {
       t || (fired = !1, by = how, btn2.classList.toggle("hold-still", R()), requestAnimationFrame(() => by && btn2.classList.add("holding")), t = window.setTimeout(() => {
         t = 0, fired = !0, btn2.classList.remove("holding"), btn2.classList.add("held"), setTimeout(() => btn2.classList.remove("held"), 260);
         try {
@@ -86,7 +86,7 @@
         o.hold(e);
       }, ms));
     }, down = (e) => {
-      e.button !== 0 || btn2.disabled || (x = e.clientX, y = e.clientY, start(e, "ptr"));
+      e.button !== 0 || btn2.disabled || (x = e.clientX, y = e.clientY, start2(e, "ptr"));
     }, move = (e) => {
       by === "ptr" && Math.hypot(e.clientX - x, e.clientY - y) > 10 && reset();
     }, up = () => by === "ptr" && reset(), click = (e) => {
@@ -96,7 +96,7 @@
       }
       o.tap?.(e);
     }, kdown = (e) => {
-      e.key !== " " && e.key !== "Enter" || (e.preventDefault(), e.repeat || start(e, "key"));
+      e.key !== " " && e.key !== "Enter" || (e.preventDefault(), e.repeat || start2(e, "key"));
     }, kup = (e) => {
       if (e.key !== " " && e.key !== "Enter" || by !== "key") return;
       e.preventDefault();
@@ -286,10 +286,7 @@
       ["settings", "Settings", "mod+,"],
       ["shortcuts", "Shortcuts", "f12"],
       ["undo", "Undo", "mod+z"],
-      ["redo", "Redo", "mod+shift+z mod+y"],
-      // the pages he was on, like a browser's back and forward (go.ts)
-      ["back", "Back", "mod+["],
-      ["forward", "Forward", "mod+]"]
+      ["redo", "Redo", "mod+shift+z mod+y"]
     ]),
     // to a page from anywhere: Shift and its place in the tabs, Shift+1 Today … Shift+5 Progress, Shift+6 the Tutor pane (again:
     // away); Browse, inside Reviews, is Shift+B (go.ts). Not while he types in a field, nor over a dialog other than Settings
@@ -369,7 +366,7 @@
       ["im.up", "Move up", "mod+shift+arrowup"],
       ["im.down", "Move down", "mod+shift+arrowdown"]
     ])
-  ], BY = new Map(DEFS.map((d) => [d.id, d])), RETIRED = ["go.today", "go.cards", "go.reviews", "go.browse", "tutor"], OLD = { "page.today": "shift+t", "page.reviews": "shift+r", "page.cards": "shift+c", "page.essays": "shift+e", "page.progress": "shift+p", "page.tutor": "shift+a" }, TYPING = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])', typing = (t) => !!(t && t.closest?.(TYPING)), openDialogs = () => typeof document > "u" ? [] : [...document.querySelectorAll("dialog[open]")].map((d) => d.id);
+  ], BY = new Map(DEFS.map((d) => [d.id, d])), RETIRED = ["go.today", "go.cards", "go.reviews", "go.browse", "tutor", "back", "forward"], OLD = { "page.today": "shift+t", "page.reviews": "shift+r", "page.cards": "shift+c", "page.essays": "shift+e", "page.progress": "shift+p", "page.tutor": "shift+a" }, TYPING = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])', typing = (t) => !!(t && t.closest?.(TYPING)), openDialogs = () => typeof document > "u" ? [] : [...document.querySelectorAll("dialog[open]")].map((d) => d.id);
   function free(e, dialogs = openDialogs()) {
     return e.defaultPrevented || e.isComposing || e.repeat || typing(e.target) ? !1 : dialogs.every((id) => id === "settings");
   }
@@ -758,19 +755,21 @@
   });
   var SETTINGS = { open: (to) => show(to), close: (now) => hide(now), redraw: () => dlg.open && !sub && draw(), page };
 
-  // site/src/cbp/kit/swipe.ts
-  function swipe({ need = 90, quiet = 220, ratio = 1.5 } = {}) {
-    let acc = 0, last = -1 / 0, spent = !1, other = !1;
-    return {
-      need,
-      quiet,
-      /** One wheel event, in px; `blocked`: this one is over something that takes sideways itself. */
-      feed(dx, dy, t, blocked = !1) {
-        t - last > quiet && (acc = 0, spent = !1, other = !1), last = t;
-        let side = Math.abs(dx) > Math.abs(dy) * ratio;
-        return !other && !spent && acc === 0 && (blocked || !side && Math.abs(dy) > 1) && (other = !0), other ? { d: 0, acc: 0, mine: !1 } : spent ? { d: 0, acc: 0, mine: !0 } : side ? (acc += dx, Math.abs(acc) < need ? { d: 0, acc, mine: !0 } : (spent = !0, { d: acc < 0 ? -1 : 1, acc, mine: !0 })) : { d: 0, acc, mine: !1 };
-      }
-    };
+  // site/src/cbp/kit/place.ts
+  function placeHash(p) {
+    return p.v === "reviews" ? p.sub && p.sub !== "review" ? `#reviews/${p.sub}` : "#reviews" : p.v === "cards" ? p.sub ? `#cards/${encodeURIComponent(p.sub)}` : "#cards" : "#" + p.v;
+  }
+  function parsePlace(hash) {
+    let h = String(hash || "").replace(/^#/, ""), i = h.indexOf("/"), v = i < 0 ? h : h.slice(0, i), sub2 = i < 0 ? "" : h.slice(i + 1);
+    try {
+      sub2 = decodeURIComponent(sub2);
+    } catch {
+    }
+    return v === "reviews" ? { v, sub: ["browse", "designs"].includes(sub2) ? sub2 : "review" } : v === "cards" ? { v, sub: sub2.trim() } : { v, sub: "" };
+  }
+  var samePlace = (a, b) => !!a && !!b && a.v === b.v && a.sub === b.sub;
+  function entryFor(was, now, restoring2) {
+    return samePlace(was, now) ? "none" : !was || restoring2 || was.v === "cards" && now.v === "cards" && !was.sub ? "replace" : "push";
   }
 
   // site/src/cbp/kit/go.ts
@@ -781,7 +780,7 @@
     ["page.cards", "cards"],
     ["page.essays", "essays"],
     ["page.progress", "progress"]
-  ], TYPING2 = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
+  ];
   addEventListener("keydown", (e) => {
     let hit2 = TO.find(([id]) => KEYS2.is(e, id));
     if (!hit2 || !VIEWS.includes(hit2[1]) || !KEYS2.free(e)) return;
@@ -797,88 +796,65 @@
     let b = sub2 && document.querySelector(`#view-reviews [data-v="${sub2}"]`);
     b && b.getAttribute("aria-current") !== "true" && b.click();
   });
-  var PLACES = [], at = -1, moving = !1, noteT = 0;
+  var restoring = !1, noteT = 0;
   function here() {
-    return VIEW ? VIEW === "reviews" ? { v: VIEW, sub: document.querySelector("#view-reviews .rx")?.dataset.rx || "review" } : VIEW === "cards" ? { v: VIEW, sub: typeof CD < "u" && CD?.cur || "" } : { v: VIEW, sub: "" } : null;
+    if (!VIEW) return null;
+    if (VIEW === "reviews") {
+      let rx = document.querySelector("#view-reviews .rx")?.dataset.rx;
+      return rx ? { v: VIEW, sub: rx } : null;
+    }
+    return VIEW === "cards" ? { v: VIEW, sub: typeof CD < "u" && CD?.cur || "" } : { v: VIEW, sub: "" };
   }
-  var same = (a, b) => !!a && a.v === b.v && a.sub === b.sub;
+  var entry = () => history.state?.cbp ?? null;
+  function write(p, how) {
+    let url = location.pathname + location.search + placeHash(p);
+    how === "push" ? history.pushState({ cbp: p }, "", url) : history.replaceState({ ...history.state || {}, cbp: p }, "", url);
+  }
   function note() {
     clearTimeout(noteT), noteT = window.setTimeout(() => {
       let p = here();
-      moving || !p || same(PLACES[at], p) || (PLACES[at]?.v === "cards" && p.v === "cards" && !PLACES[at].sub ? PLACES[at] = p : (PLACES.splice(at + 1), PLACES.push(p), PLACES.length > 60 && PLACES.shift(), at = PLACES.length - 1));
+      if (!p) return;
+      let how = entryFor(entry(), p, restoring);
+      how !== "none" && write(p, how);
     }, 0);
   }
   BUS.on("view", note);
   BUS.on("place", note);
-  function step(d) {
-    let i = at + d, p = PLACES[i];
-    if (!p) return !1;
-    if (!VIEWS.includes(p.v))
-      return PLACES.splice(i, 1), i < at && at--, step(d);
-    at = i, moving = !0;
+  function land(p) {
+    restoring = !0;
     try {
-      sfx("tap");
-    } catch {
-    }
-    try {
-      p.v === "cards" && p.sub && typeof openCard == "function" && !(typeof cardOf == "function" && cardOf(p.sub)?.dropped) ? openCard(p.sub, void 0, { write: !1 }) : p.v !== VIEW && setView(p.v);
+      SETTINGS.close(!0), document.querySelectorAll("dialog[open]").forEach((d) => d.close()), p.v === "cards" && p.sub && typeof openCard == "function" && !(typeof cardOf == "function" && cardOf(p.sub)?.dropped) ? openCard(p.sub, void 0, { write: !1 }) : p.v !== VIEW && setView(p.v);
       let rx = window.RX_go;
-      p.v === "reviews" && p.sub && rx && rx(p.sub);
+      p.v === "reviews" && rx && rx(p.sub || "review");
     } finally {
-      window.setTimeout(() => moving = !1, 0);
+      window.setTimeout(() => restoring = !1, 0);
     }
-    return !0;
   }
-  addEventListener(
-    "keydown",
-    (e) => {
-      let d = KEYS2.is(e, "back") ? -1 : KEYS2.is(e, "forward") ? 1 : 0;
-      if (!d) return;
-      e.preventDefault();
-      let t = e.target;
-      e.repeat || t?.closest?.(TYPING2) || document.querySelector("dialog[open]") || step(d);
-    },
-    !0
-  );
-  var SW = swipe(), REDUCED2 = matchMedia("(prefers-reduced-motion: reduce)"), viewEl = () => VIEW ? document.getElementById("view-" + VIEW) : null;
-  function scrollsX(t) {
-    let root = document.documentElement;
-    if (root.scrollWidth > root.clientWidth + 1) return !0;
-    for (let n = t; n && n !== document.body && n !== root; n = n.parentElement) {
-      if (n.scrollWidth <= n.clientWidth + 1) continue;
-      let o = getComputedStyle(n).overflowX;
-      if (o === "auto" || o === "scroll") return !0;
+  addEventListener("popstate", (e) => {
+    let p = e.state?.cbp ?? parsePlace(location.hash);
+    if (!VIEWS.includes(p.v)) {
+      let h = here();
+      h && write(h, "replace");
+      return;
     }
-    return !1;
-  }
-  var leanEl = null, leanT = 0;
-  function lean(px) {
-    let v = viewEl();
-    leanEl && leanEl !== v && (leanEl.style.translate = ""), leanEl = v, v && !REDUCED2.matches && (v.style.translate = px ? `${px}px 0` : "");
-  }
-  function unlean() {
-    let v = leanEl;
-    if (leanEl = null, !v || !v.style.translate) return;
-    let from = v.style.translate;
-    v.style.translate = "", v.animate([{ translate: from }, { translate: "0 0" }], { duration: 180, easing: "ease-out" });
-  }
-  addEventListener(
-    "wheel",
-    (e) => {
-      if (e.ctrlKey) return;
-      let k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerWidth : 1, dx = e.deltaX * k, dy = e.deltaY * k, t = e.target, blocked = Math.abs(dx) > Math.abs(dy) && (e.defaultPrevented || !!document.querySelector("dialog[open]") || KEYS2.typing(t) || !!t?.closest?.("#tutor") || scrollsX(t)), f = SW.feed(dx, dy, e.timeStamp, blocked);
-      if (f.mine) {
-        if (e.preventDefault(), clearTimeout(leanT), leanT = window.setTimeout(unlean, SW.quiet), !f.d) return lean(f.acc ? -Math.sign(f.acc) * Math.min(Math.abs(f.acc) / SW.need, 1) * 10 : 0);
-        lean(0), leanEl = null, step(f.d) && window.setTimeout(() => {
-          let v = viewEl();
-          if (!v) return;
-          let x = (f.d < 0 ? -1 : 1) * 16;
-          v.animate(REDUCED2.matches ? [{ opacity: 0.6 }, { opacity: 1 }] : [{ translate: `${x}px 0`, opacity: 0.6 }, { translate: "0 0", opacity: 1 }], { duration: 220, easing: "cubic-bezier(.22,.9,.24,1)" });
-        }, 0);
+    if (!samePlace(here(), p)) {
+      try {
+        sfx("tap");
+      } catch {
       }
-    },
-    { passive: !1 }
-  );
+      land(p);
+    }
+  });
+  function start() {
+    let q2 = new URLSearchParams(location.search).get("view"), p = parsePlace(location.hash || (q2 ? "#" + q2 : ""));
+    if (p.v === "reviews")
+      try {
+        sessionStorage.setItem("cbp-rx", p.sub || "review");
+      } catch {
+      }
+    p.v === "cards" && p.sub && typeof CD < "u" && CD && (CD.cur = CD.open = p.sub, CD.pend = { opt: { write: !1 } }), setView(p.v, !0);
+  }
+  Object.assign(window, { GO_start: start });
 
   // site/src/cbp/habit.ts
   var habit_exports = {};
@@ -887,6 +863,7 @@
     MILESTONES: () => MILESTONES,
     addDays: () => addDays,
     blank: () => blank,
+    columns: () => columns,
     dayOf: () => dayOf,
     goal: () => goal,
     han: () => han,
@@ -904,12 +881,21 @@
     let need = Math.max(1, streak + (todayDone ? 0 : 1));
     return MILESTONES.find((m) => m >= need) ?? Math.ceil(need / 100) * 100;
   }
-  var P = (s) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)), K = (ms) => new Date(ms).toISOString().slice(0, 10), addDays = (s, n) => K(P(s) + n * 864e5), monday = (s) => addDays(s, -((new Date(P(s)).getUTCDay() + 6) % 7)), dayOf = (ms, tzMin = 480, rollover = 4) => K(ms + tzMin * 6e4 - rollover * 36e5);
+  var P = (s) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)), K = (ms) => new Date(ms).toISOString().slice(0, 10), addDays = (s, n) => K(P(s) + n * 864e5), monday = (s) => addDays(s, -((new Date(P(s)).getUTCDay() + 6) % 7));
+  function columns(year, end) {
+    let out = [], col = null;
+    for (let d = `${year}-01-01`; d <= end && d.startsWith(String(year)); d = addDays(d, 1)) {
+      let row2 = (new Date(P(d)).getUTCDay() + 6) % 7, month = +d.slice(5, 7) - 1;
+      (!col || row2 === 0 || d.endsWith("-01")) && (col = Array(7).fill(null), out.push({ month, first: d.endsWith("-01"), days: col })), col[row2] = d;
+    }
+    return out;
+  }
+  var dayOf = (ms, tzMin = 480, rollover = 4) => K(ms + tzMin * 6e4 - rollover * 36e5);
   function walk(days, today) {
-    let out = {}, start = Object.keys(days).filter((k) => k <= today && days[k] && days[k].chars > 0).sort()[0];
-    if (!start) return { days: out, streak: 0, start: null, low: !1 };
+    let out = {}, start2 = Object.keys(days).filter((k) => k <= today && days[k] && days[k].chars > 0).sort()[0];
+    if (!start2) return { days: out, streak: 0, start: null, low: !1 };
     let prev = "pre", restWeek = "";
-    for (let k = start; k <= today; k = addDays(k, 1)) {
+    for (let k = start2; k <= today; k = addDays(k, 1)) {
       let d = days[k] ?? blank(), low = prev === "miss", st;
       met(d, low) ? st = "done" : k === today ? st = "open" : restWeek !== monday(k) && (prev === "done" || prev === "rest") ? (st = "rest", restWeek = monday(k)) : st = active(d) ? "partial" : "miss", out[k] = { st, low, deep: st === "done" && d.test }, prev = st === "partial" ? "miss" : st;
     }
@@ -922,7 +908,7 @@
         break;
       }
     }
-    return { days: out, streak, start, low: out[today]?.low ?? !1 };
+    return { days: out, streak, start: start2, low: out[today]?.low ?? !1 };
   }
   function reviewDays(cards, day, today) {
     let count = /* @__PURE__ */ new Map(), diff = /* @__PURE__ */ new Map(), mark3 = (a, b) => {
@@ -962,7 +948,7 @@
 
   // site/src/cbp/kit/editor.ts
   var BIT = { b: 1, i: 2, ul: 4, hl: 8 }, isChar = (p) => !!p && "c" in p, escT = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"), isSp = (p) => isChar(p) && (p.c === " " || p.c === "\xA0"), edge = (p) => !p || "br" in p, hardSpace = (out, k) => edge(out[k - 1]) || edge(out[k + 1]) || isSp(out[k - 1]), escA = (t) => t.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
-  function write(out) {
+  function write2(out) {
     let h = "", i = 0;
     for (; i < out.length; ) {
       let p = out[i];
@@ -984,15 +970,15 @@
   }
   var BLOCK = /^(DIV|P|LI|UL|OL|H[1-6]|BLOCKQUOTE)$/;
   function read(f) {
-    let out = [], at2 = /* @__PURE__ */ new Map(), end = /* @__PURE__ */ new Map(), walk2 = (node, fl, sty) => {
+    let out = [], at = /* @__PURE__ */ new Map(), end = /* @__PURE__ */ new Map(), walk2 = (node, fl, sty) => {
       for (let n of node.childNodes) {
         if (n.nodeType === 3) {
-          at2.set(n, out.length);
+          at.set(n, out.length);
           let v = n.nodeValue ?? "";
           for (let k = 0; k < v.length; k++) out.push({ c: v[k], f: fl, s: sty });
         } else if (n.nodeType === 1) {
           let el2 = n, t = el2.tagName, last = out[out.length - 1];
-          if (BLOCK.test(t) && out.length && !(last && "br" in last) && out.push({ br: 1 }), at2.set(n, out.length), t === "BR") out.push({ br: 1 });
+          if (BLOCK.test(t) && out.length && !(last && "br" in last) && out.push({ br: 1 }), at.set(n, out.length), t === "BR") out.push({ br: 1 });
           else if (t === "IMG") out.push({ img: { src: el2.getAttribute("src") ?? "", from: el2.dataset.from } });
           else {
             let f2 = fl, s2 = sty, st = el2.style;
@@ -1002,7 +988,7 @@
         end.set(n, out.length);
       }
     };
-    return walk2(f, 0, ""), { out, at: at2, end };
+    return walk2(f, 0, ""), { out, at, end };
   }
   function index(f, m, node, off2) {
     if (node.nodeType === 3) return (m.at.get(node) ?? 0) + off2;
@@ -1094,14 +1080,14 @@
       if (kind === "type" && h.k === "type" && now - h.t < 1e3) return void (h.t = now);
       h.u.push({ html: f.innerHTML, sel: selOf(f) }), h.u.length > 200 && h.u.shift(), h.r = [], h.k = kind, h.t = now;
     }
-    function step2(f, from, to) {
+    function step(f, from, to) {
       let h = hist(f), x = h[from].pop();
       x && (h[to].push({ html: f.innerHTML, sel: selOf(f) }), h.k = "", f.innerHTML = x.html, x.sel && select(f, ...x.sel), changed2(f));
     }
     let pend = null, ed = {
       snap,
-      undo: (f) => step2(f, "u", "r"),
-      redo: (f) => step2(f, "r", "u"),
+      undo: (f) => step(f, "u", "r"),
+      redo: (f) => step(f, "r", "u"),
       forget: (f) => H.delete(f),
       reset: () => pend = null,
       toggle(f, kind) {
@@ -1115,7 +1101,7 @@
           p.on & bit ? p.on &= ~bit : p.off & bit ? p.off &= ~bit : had ? p.off |= bit : p.on |= bit, pend = p.on || p.off ? p : null;
           return;
         }
-        snap(f, "format"), f.innerHTML = write(toggleRange(out, a, b, kind)), select(f, a, b), changed2(f);
+        snap(f, "format"), f.innerHTML = write2(toggleRange(out, a, b, kind)), select(f, a, b), changed2(f);
       }
     };
     function typed(f) {
@@ -1128,7 +1114,7 @@
         let q2 = out[k];
         isChar(q2) && (q2.f = (q2.f | p.on) & ~p.off);
       }
-      f.innerHTML = write(out), select(f, c), pend = null;
+      f.innerHTML = write2(out), select(f, c), pend = null;
     }
     on2("beforeinput", (e) => {
       let f = fieldIn(e.target);
@@ -1188,7 +1174,7 @@
     for (let i = ROOTS.length - 1; i >= 0; i--) !ROOTS[i].root.isConnected && ROOTS[i].root !== root && ROOTS.splice(i, 1);
     return ed;
   }
-  var EDITOR = { attach, clean, write, toggleRange, BIT };
+  var EDITOR = { attach, clean, write: write2, toggleRange, BIT };
 
   // site/src/cbp/kit/known.ts
   var HAN4 = /[㐀-䶿一-鿿豈-﫿]/, cache = /* @__PURE__ */ new WeakMap();
@@ -1205,10 +1191,47 @@
   }
   var KNOWN = { of, needsPinyin };
 
+  // site/src/cbp/tries.ts
+  var tries_exports = {};
+  __export(tries_exports, {
+    bare: () => bare,
+    credit: () => credit,
+    itemFor: () => itemFor,
+    markKey: () => markKey,
+    record: () => record,
+    same: () => same,
+    stateOf: () => stateOf
+  });
+  function markKey(m) {
+    let h = 2166136261;
+    for (let c of String(m.mine ?? "") + "" + String(m.nat ?? "")) h = Math.imul(h ^ c.codePointAt(0), 16777619);
+    return "m" + (h >>> 0).toString(36);
+  }
+  var bare = (s) => String(s ?? "").normalize("NFKC").replace(/[\s\p{P}\p{S}]+/gu, "").toLowerCase(), same = (attempt, fix) => !!bare(attempt) && bare(attempt) === bare(fix), stateOf = (tries, m) => {
+    let v = tries?.[markKey(m)];
+    return v === "right" || v === "wrong" || v === "shown" ? v : void 0;
+  };
+  function record(tries, m, t) {
+    let cur = { ...tries ?? {} }, k = markKey(m);
+    return (!cur[k] || cur[k] === "shown" && t !== "shown") && (cur[k] = t), cur;
+  }
+  var pkey = (p) => String(p ?? "").toLowerCase().replace(/[\s.,;:!?，。、；：！？()（）"“”'‘’「」…-]+/g, "");
+  function itemFor(items, m) {
+    let open = items.filter((x) => x && !x.done && !x.removed), mine2 = String(m.mine ?? "").trim();
+    return open.find((x) => Number(x.day) === Number(m.day) && String(x.mine ?? "").trim() === mine2) ?? (m.p ? open.find((x) => x.p && pkey(x.p) === pkey(m.p)) : void 0);
+  }
+  function credit(x, day, s, ok, now = (/* @__PURE__ */ new Date()).toISOString()) {
+    let tried = [.../* @__PURE__ */ new Set([...x.tried ?? [], day])].slice(-20);
+    if (!ok) return { tried };
+    let uses = [...(x.uses ?? []).filter((y) => y.day !== day), { day, s }].slice(-6), data = { uses, tried };
+    return new Set(uses.map((y) => y.day)).size >= 3 && Object.assign(data, { done: !0, doneAt: now, proof: { day, s }, retired: !0 }), data;
+  }
+
   // site/src/cbp/kit/main.ts
   Object.assign(window, { EDITOR, KNOWN });
   Object.assign(window, { SOUND, HOLD, RUBY, KEYS: KEYS2, SETTINGS });
   Object.assign(window, { HABIT: habit_exports });
+  Object.assign(window, { TRIES: tries_exports });
   new MutationObserver((recs) => {
     for (let r of recs)
       for (let n of r.addedNodes) {

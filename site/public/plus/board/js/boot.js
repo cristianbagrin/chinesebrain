@@ -49,7 +49,8 @@ try{history.scrollRestoration='manual';}catch(e){}
   const back=()=>{if(his||VIEW!=='today'||performance.now()>until){removeEventListener('scroll',back);return;}if(scrollY>0)scrollTo(0,0);};
   addEventListener('scroll',back,{passive:true});
 })();
-setView((location.hash||'').slice(1)||new URLSearchParams(location.search).get('view')||'',true);
+// the address's place (#reviews/browse, #cards/進行; kit/go.ts), else Today
+if(typeof GO_start==='function') GO_start(); else setView((location.hash||'').slice(1).split('/')[0]||new URLSearchParams(location.search).get('view')||'',true);
 requestAnimationFrame(()=>{moveThumb();requestAnimationFrame(()=>TABS.classList.add('ready'));});
 try{render(SNAPSHOT,'saved');document.getElementById('note').hidden=true;}catch(e){console.error(e);}
 (async()=>{
