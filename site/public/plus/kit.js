@@ -886,7 +886,7 @@
     let out = [], col = null;
     for (let d = `${year}-01-01`; d <= end && d.startsWith(String(year)); d = addDays(d, 1)) {
       let row2 = (new Date(P(d)).getUTCDay() + 6) % 7, month = +d.slice(5, 7) - 1;
-      (!col || row2 === 0 || d.endsWith("-01")) && (col = Array(7).fill(null), out.push({ month, first: d.endsWith("-01"), days: col })), col[row2] = d;
+      (!col || row2 === 0 || d.endsWith("-01")) && (col && row2 === 0 && d.endsWith("-01") && out.push({ month, first: !1, days: Array(7).fill(null) }), col = Array(7).fill(null), out.push({ month, first: d.endsWith("-01"), days: col })), col[row2] = d;
     }
     return out;
   }

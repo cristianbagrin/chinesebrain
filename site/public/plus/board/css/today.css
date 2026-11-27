@@ -130,7 +130,8 @@ li:nth-child(even)>.hc-s .hc-t::after{rotate:1.5deg}
 .hm-full{--hm-max:calc(30px * var(--k))}
 /* no weekday letters (his call, 2026-11-26): the columns are weeks, that's enough; the month names are the one small
    caption on the board (--fs-xs). Today's gold ring sticks out of its cell, so the grid keeps room for it on the right. */
-/* months: every month starts its own column (HABIT.columns); where a 1st falls mid-week the edge steps, no extra gap.
+/* months: every month starts its own column (HABIT.columns); where a 1st falls mid-week the edge steps, no extra gap; a 1st on a
+   Monday would leave a straight, flush edge, so that one gets an empty column.
    Each month's name sits over its first column. */
 .hm-in{--p:min(var(--hm-max),calc((100cqw - var(--hm-ring)) / var(--w)));--gap:max(2px,calc(var(--p) * .2));--c:calc(var(--p) - var(--gap));
   display:grid;grid-template-columns:auto;grid-template-rows:auto auto;row-gap:var(--s2)}

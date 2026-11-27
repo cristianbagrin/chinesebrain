@@ -43,13 +43,15 @@ export const addDays = (s: string, n: number) => K(P(s) + n * 864e5);
 export const monday = (s: string) => addDays(s, -((new Date(P(s)).getUTCDay() + 6) % 7));
 /** The heatmap's columns for a year, Jan 1 to `end` (inclusive): one column a week, Monday on top, and every month starts
  *  its own column. When a month begins mid-week, that week's days of the month before stay in their column (the rest of
- *  it empty) and the new month's days begin in the next column at their own weekday rows. A slot is a day or null. */
+ *  it empty) and the new month's days begin in the next column at their own weekday rows. A month that begins on a Monday
+ *  would sit flush against the one before, so an empty column goes between them. A slot is a day or null. */
 export function columns(year: number, end: string): { month: number; first: boolean; days: (string | null)[] }[] {
   const out: { month: number; first: boolean; days: (string | null)[] }[] = [];
   let col: (string | null)[] | null = null;
   for (let d = `${year}-01-01`; d <= end && d.startsWith(String(year)); d = addDays(d, 1)) {
     const row = (new Date(P(d)).getUTCDay() + 6) % 7, month = +d.slice(5, 7) - 1;
     if (!col || row === 0 || d.endsWith('-01')) {
+      if (col && row === 0 && d.endsWith('-01')) out.push({ month, first: false, days: Array(7).fill(null) });
       col = Array(7).fill(null);
       out.push({ month, first: d.endsWith('-01'), days: col });
     }

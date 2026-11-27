@@ -252,8 +252,10 @@ test('heatmap columns: every month starts its own column, at its own weekday row
   assert.deepEqual(C[at('2026-10-31')].days, ['2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31', null]);
   assert.deepEqual(C[at('2026-11-01')].days, [null, null, null, null, null, null, '2026-11-01']);
   assert.deepEqual(C[at('2026-11-02')].days.slice(0, 1), ['2026-11-02']);
-  // a month that starts on a Monday adds no column (Jun 1 2026)
-  assert.equal(at('2026-06-01'), at('2026-05-31') + 1);
+  // a month that starts on a Monday would sit flush against May: one empty column between them (Jun 1 2026)
+  assert.equal(at('2026-06-01'), at('2026-05-31') + 2);
+  assert.deepEqual(C[at('2026-05-31') + 1].days, Array(7).fill(null));
+  assert.equal(C.filter((c) => c.days.every((d) => !d)).length, 1);
   assert.deepEqual(C[at('2026-05-31')].days.slice(6), ['2026-05-31']);
   // Jan 1 (a Thursday) starts the year at its own row; the last column ends on the given day
   assert.deepEqual(C[0].days.slice(0, 4), [null, null, null, '2026-01-01']);

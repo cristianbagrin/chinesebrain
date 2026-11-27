@@ -83,8 +83,8 @@ function HB_tip(d,k,s){
 // cap: at most this many columns (the latest), so a narrow Today keeps cells big enough to read
 function HB_heat(full,m,W0,cap){
   const tk=essayToday(), T=P(tk), S=W0.days, y=T.getFullYear();
-  // a column a week, and every month starts its own column (HABIT.columns): no gaps, the edge between two months steps
-  // where the 1st falls mid-week
+  // a column a week, and every month starts its own column (HABIT.columns): the edge between two months steps where the
+  // 1st falls mid-week, and an empty column parts them where it would be flush (a 1st on a Monday)
   const all=HABIT.columns(y,full?y+'-12-31':tk), from=cap&&!full?Math.max(0,all.length-cap):0, C=all.slice(from), n=C.length;
   const cells=[], heads=[];
   C.forEach((c,ci)=>{
