@@ -1,12 +1,12 @@
 /* ---------- the test (board/test). Owner: today agent
    The one boxed thing on Today: a gold-edged card with no name, the gold band on top. Pips, the prompt, his dictated
    answer; the model answer right after he answers, then Next; at the end the results as dots.
-   Cancel = leaving the answer box (no button): the unsent attempt goes (its text, the clock), nothing saved is touched,
-   and coming back starts that question's clock afresh. The answer box is contenteditable, not a textarea: Chinese
+   Leaving the answer box (no button) resets only the clock: what he dictated stays (per question, in memory and the local
+   draft), nothing saved is touched, and coming back starts that question's clock afresh. The answer box is contenteditable, not a textarea: Chinese
    Brain's hover reads text nodes, which a textarea doesn't have (the same reason as the writing sheet).
    Done after the last answer: the results flash as dots, then the card folds away and Today closes up under it. ---------- */
 let TEST=null, DBH=null, SAMPLE, writes=0, chain=Promise.resolve();
-const Q={view:null,t0:null,grading:{},heardShown:{}};
+const Q={view:null,t0:null,grading:{},heardShown:{},draft:{}};
 const RES={pass:'Clean',partial:'Partial',fail:'Missed',none:'No evidence'};
 const testOpen=()=>TEST&&Array.isArray(TEST.items)&&TEST.items.length&&!TEST.filed;
 function steps(){
@@ -147,10 +147,10 @@ function verdictHTML(s){
     ${it.choices&&!s.retry?`<ol class="q-choices done">${it.choices.map((c,i)=>`<li class="${i===it.key?'right':''}${c===a.answer&&i!==it.key?' wrong':''}">${zh(c)}</li>`).join('')}</ol>`:''}
     ${a.why?`<p class="q-why">${zh(a.why)}</p>`:''}</div>`;
 }
-// the unsent attempt goes: the text, the clock (the next focus, Listen or keystroke starts a fresh one)
-function QZ_cancel(ta,btn,clock){
+// the unsent timing goes, never his typing (the next focus, Listen or keystroke starts a fresh clock)
+const QZ_dk=id=>'qd:'+(TEST&&TEST.id)+':'+id;
+function QZ_cancel(clock){
   clearTimeout(Q.timer); clearTimeout(Q.heard); Q.t0=null;
-  setText(ta,''); btn.disabled=true;
   clock.classList.remove('run','late'); clock.querySelector('i').style.animationDelay='';
 }
 // one pip per step, the same markup everywhere
@@ -197,6 +197,7 @@ function renderQuiz(){
       <div class="q-clock" id="q-clock"><i></i></div></div>
       <div class="q-row"><button class="btn" id="q-check" type="button" disabled>Check</button></div></div>`;
     const ta=editable(document.getElementById('q-ans-'+cur.id)), btn=document.getElementById('q-check'), clock=document.getElementById('q-clock');
+    {const d=Q.draft[curId]||lsGet(QZ_dk(curId))||''; if(d){setText(ta,d);btn.disabled=false;}}
     if(it.secs&&!cur.retry) clock.querySelector('i').style.animationDuration=(+it.secs)+'s';
     // t0 may sit in the future: the reading allowance comes first, then the 20 s clock runs
     const arm=()=>{const e=(Date.now()-Q.t0)/1000;clearTimeout(Q.timer);
@@ -249,12 +250,13 @@ function renderQuiz(){
       document.addEventListener('keydown',QZ_keys);
       return;
     }
-    ta.addEventListener('input',()=>{const v=getText(ta);if(!v&&ta.innerHTML)ta.innerHTML='';btn.disabled=!v.trim();start();});
+    ta.addEventListener('input',()=>{const v=getText(ta);if(!v&&ta.innerHTML)ta.innerHTML='';btn.disabled=!v.trim();Q.draft[curId]=v;lsSet(QZ_dk(curId),v);start();});
     btn.onclick=()=>{
       const v=getText(ta).trim(); if(!v) return;
       // the box can outlive a re-render (a grade or a save echo only touches the pips): read the step fresh
       const cur=steps().find(x=>x.id===curId); if(!cur) return;
       cur.a.answer=v; cur.a.secs=Q.t0?Math.max(1,Math.round((Date.now()-Q.t0)/1000)):null; cur.a.at=K(today());
+      delete Q.draft[curId]; lsSet(QZ_dk(curId),'');
       const all=steps().every(x=>x.a.answer);
       if(all) TEST.done=K(today());
       sfx('tap'); save(); Q.view=cur.id; renderQuiz(); grade(cur);
@@ -268,7 +270,7 @@ function renderQuiz(){
     ta.addEventListener('blur',()=>setTimeout(()=>{
       if(!ta.isConnected||!document.hasFocus()||el.contains(document.activeElement)) return;
       const s=steps().find(x=>x.id===curId); if(!s||s.a.answer) return;
-      QZ_cancel(ta,btn,clock);
+      QZ_cancel(clock);
     },0));
     if(Q.auto&&!hear){Q.auto=false;ta.focus({preventScroll:true});}
     return;

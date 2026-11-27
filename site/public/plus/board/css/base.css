@@ -106,7 +106,7 @@ p{text-wrap:pretty}
 @media (min-width:1600px){.bar-in{padding-left:max(16px,env(safe-area-inset-left,0px),64px);padding-right:max(16px,env(safe-area-inset-right,0px),64px)}}
 .seg{position:relative;display:inline-flex;gap:var(--s5);height:var(--bar);align-items:stretch}
 .seg button{position:relative;border:0;background:none;padding:0 2px;font-size:var(--fs-m);font-weight:450;color:var(--ink-3);cursor:pointer;transition:color .2s}
-.seg button:hover{color:var(--ink-2)}
+@media (hover:hover){.seg button:hover{color:var(--ink-2)}}
 .seg button[aria-selected="true"]{color:var(--ink)}
 .seg .thumb{display:none} /* the current tab is just ink (Nov 27: no underline) */
 .dot{position:absolute;top:16px;right:-9px;width:7px;height:7px;border-radius:50%;background:var(--red)}
@@ -119,7 +119,8 @@ p{text-wrap:pretty}
 /* on a phone the countdown is just the number: TOCFL is the one countdown */
 @media (max-width:440px){.toc>.s:nth-child(2){display:none}}
 .snd,.labbtn{border:0;background:none;width:38px;height:38px;display:grid;place-items:center;border-radius:10px;color:var(--ink-3);cursor:pointer;flex:none;transition:color .15s,background .15s}
-.snd:hover,.labbtn:hover,.labbtn[aria-expanded="true"]{background:var(--wash);color:var(--ink-2)}
+@media (hover:hover){.snd:hover,.labbtn:hover{background:var(--wash);color:var(--ink-2)}}
+.labbtn[aria-expanded="true"]{background:var(--wash);color:var(--ink-2)}
 .snd:active,.labbtn:active{transform:scale(.92)}
 @media (prefers-reduced-transparency:reduce){.appbar{background:var(--bg);-webkit-backdrop-filter:none;backdrop-filter:none}}
 
@@ -129,11 +130,11 @@ p{text-wrap:pretty}
 
 /* buttons: ink pill for the one action, quiet text buttons for the rest */
 .btn{display:inline-flex;align-items:center;gap:var(--s2);border:0;background:var(--ink);color:var(--on-ink);border-radius:999px;padding:10px 22px;font-size:var(--fs-s);font-weight:550;cursor:pointer;transition:transform .15s,opacity .15s}
-.btn:hover:not(:disabled){transform:translateY(-1px)}
+@media (hover:hover){.btn:hover:not(:disabled){transform:translateY(-1px)}}
 .btn:active:not(:disabled){transform:scale(.97)}
 .btn:disabled{opacity:.3;cursor:default}
 .btn-q{display:inline-flex;align-items:center;gap:var(--s2);border:0;background:none;color:var(--ink-2);border-radius:999px;padding:8px 14px;font-size:var(--fs-s);font-weight:500;cursor:pointer;transition:background .15s,color .15s}
-.btn-q:hover{background:var(--wash);color:var(--ink)}
+@media (hover:hover){.btn-q:hover{background:var(--wash);color:var(--ink)}}
 .btn-q:active{transform:scale(.97)}
 
 /* an icon button: 36px round, ink-3, a wash on hover (the × of every dialog and pane, ‹ ›, pin) */
@@ -149,7 +150,7 @@ p{text-wrap:pretty}
 .empty b,.empty-t{display:block;font-size:var(--fs-l);font-weight:500;color:var(--ink-2);margin-bottom:var(--s2)}
 
 /* Brain's seal: one shape for the 改 stamp and any other seal */
-.seal{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:6px;background:var(--red);color:var(--on-ink);font:700 15px/1 "LXGW WenKai TC","Noto Sans TC",sans-serif;transform:rotate(-6deg);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.28)}
+.seal{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:6px;background:var(--red);color:var(--on-ink);font:700 calc(15px * var(--k))/1 "LXGW WenKai TC","Noto Sans TC",sans-serif;transform:rotate(-6deg);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.28)}
 
 /* undo toast */
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:20;display:flex;align-items:center;gap:14px;background:var(--ink);color:var(--on-ink);border-radius:999px;padding:9px 9px 9px 18px;font-size:var(--fs-s);font-weight:500;box-shadow:var(--sh-pop);transform:translate(-50%,0);animation:toastin .32s var(--spring)}

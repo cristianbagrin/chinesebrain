@@ -507,7 +507,7 @@ document.addEventListener('keydown', (e) => {
     sfx('tap');
     return up ? hide() : show();
   }
-  if (up && !sub && !listening && !e.isComposing) {
+  if (up && !sub && !listening && !e.isComposing && e.keyCode !== 229) {
     // Escape empties the search before it closes the window (the dialog's own cancel would close it)
     if (e.key === 'Escape' && q) {
       e.preventDefault();

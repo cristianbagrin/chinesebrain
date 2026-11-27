@@ -21,7 +21,8 @@
 .es-row{position:relative}
 .es-ri{position:relative;display:grid;grid-template-columns:22px minmax(0,1fr);gap:0 var(--s3);align-items:start;padding:10px 12px;margin:0 -12px;border-radius:var(--r-s);transition:background .15s}
 .es-row.jump .es-ri{cursor:pointer}
-.es-ri:hover,.es-ri:focus-within{background:var(--wash)}
+@media (hover:hover){.es-ri:hover{background:var(--wash)}}
+.es-ri:focus-within{background:var(--wash)}
 .es-t{min-width:0;display:grid;gap:2px;justify-items:start}
 .es-t>*{max-width:100%}
 .es-w{font-family:var(--zh);font-weight:400;font-size:max(var(--fs-zh),var(--es-imp,21px));line-height:var(--lh-zh);color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere;outline:0;border-radius:4px;min-height:1.5em;cursor:text}
@@ -33,25 +34,29 @@
 .es-o .es-en{font:inherit}
 /* the box: Notion's to-do checkbox; ticked, it fills and the tick draws itself */
 .es-box{position:relative;display:grid;place-items:center;width:18px;height:18px;margin-top:.42em;border-radius:3px;border:1.5px solid var(--ink-3);background:var(--surface);color:var(--on-ink);cursor:pointer;padding:0;transition:background .15s,border-color .15s,transform .12s}
+.es-box::before{content:"";position:absolute;inset:-11px}
 .es-box svg{width:14px;height:14px;stroke-dasharray:13;stroke-dashoffset:13;transition:stroke-dashoffset .22s var(--ease) .05s}
-.es-box:hover{background:var(--wash)}
+@media (hover:hover){.es-box:hover{background:var(--wash)}}
 .es-box:active{transform:scale(.88)}
 .es-box.on{background:var(--green);border-color:var(--green)}
 .es-box.on svg{stroke-dashoffset:0}
-.es-box.on:hover{background:var(--green-deep);border-color:var(--green-deep)}
+@media (hover:hover){.es-box.on:hover{background:var(--green-deep);border-color:var(--green-deep)}}
 .es-acts{position:absolute;top:9px;right:8px;display:flex;align-items:center;gap:2px;padding-left:24px;background:linear-gradient(90deg,transparent,var(--wash) 20px);opacity:0;pointer-events:none;transition:opacity .15s}
-.es-ri:hover .es-acts{opacity:1;pointer-events:auto}
+@media (hover:hover){.es-ri:hover .es-acts{opacity:1;pointer-events:auto}}
 /* while he types in the text, the hover actions step aside (not on a click on × itself) */
 .es-ri:has([data-f]:focus) .es-acts{opacity:0;pointer-events:none}
-.es-ab{border:0;background:none;width:28px;height:28px;display:grid;place-items:center;border-radius:6px;color:var(--ink-3);cursor:pointer}
-.es-ab:hover{background:var(--wash-2);color:var(--ink)}
+.es-ab::before{content:"";position:absolute;inset:-6px}
+.es-ab{position:relative;border:0;background:none;width:28px;height:28px;display:grid;place-items:center;border-radius:6px;color:var(--ink-3);cursor:pointer}
+@media (hover:hover){.es-ab:hover{background:var(--wash-2);color:var(--ink)}}
 
 /* the gutter: + inserts below, the grip drags */
 .es-gut{position:absolute;right:calc(100% - 6px);top:11px;display:flex;align-items:center;opacity:0;transition:opacity .15s}
-.es-ri:hover .es-gut,.es-row.drag .es-gut{opacity:1}
+@media (hover:hover){.es-ri:hover .es-gut,.es-row.drag .es-gut{opacity:1}}
 .es-plus,.es-grip{border:0;background:none;padding:0;width:18px;height:24px;display:grid;place-items:center;color:var(--ink-4);border-radius:5px;cursor:pointer}
+.es-plus,.es-grip{position:relative}
+.es-plus::before,.es-grip::before{content:"";position:absolute;inset:-8px -11px}
 .es-grip{cursor:grab;touch-action:none}
-.es-plus:hover,.es-grip:hover{background:var(--wash-2);color:var(--ink-2)}
+@media (hover:hover){.es-plus:hover,.es-grip:hover{background:var(--wash-2);color:var(--ink-2)}}
 .es-row.drag{z-index:5}
 .es-row.drag .es-ri{background:var(--surface);box-shadow:var(--sh-pop);transform:scale(1.015);transition:box-shadow .2s,transform .2s}
 .es-row.drag .es-grip{cursor:grabbing}
@@ -67,13 +72,13 @@
 
 .im-new{display:flex;align-items:center;gap:var(--s3);width:calc(100% + 24px);margin:2px -12px 0;padding:8px 12px;border:0;background:none;border-radius:var(--r-s);font-size:var(--fs-s);color:var(--ink-3);cursor:pointer;text-align:left;transition:background .15s,color .15s}
 .im-new span{width:22px;text-align:center;font-size:var(--fs-l);line-height:1;font-weight:300}
-.im-new:hover{background:var(--wash);color:var(--ink-2)}
+@media (hover:hover){.im-new:hover{background:var(--wash);color:var(--ink-2)}}
 .im-empty{margin:0;padding:10px 0 4px 34px;font-size:var(--fs-s);color:var(--ink-3)}
 .im-err{color:var(--red);padding-left:0}
 .im-fold{display:inline-flex;align-items:center;gap:8px;margin-top:var(--s6);padding:6px 0;border:0;background:none;font-size:var(--fs-s);color:var(--ink-3);cursor:pointer}
 .im-fold svg{transition:transform .2s var(--ease)}
 .im-fold[aria-expanded="true"] svg{transform:rotate(90deg)}
-.im-fold:hover{color:var(--ink-2)}
+@media (hover:hover){.im-fold:hover{color:var(--ink-2)}}
 .im-n{color:var(--ink-4);font-variant-numeric:tabular-nums}
 .im-done{margin-top:var(--s2)}
 

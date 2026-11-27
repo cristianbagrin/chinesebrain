@@ -17,7 +17,7 @@ function renderNext(D){
   // words he has carded on the board leave the list at once (cards.js); the 10 pm task files them
   NU.list=(typeof NU_pool==='function'?NU_pool():D.nextUp||[]).map(([w,py,g,l])=>{const [gl,ex]=NU_split(g);return {w,py,gl,ex,l:LANES[l]?l:'life'};});
   const top=NU.list.slice(0,5);
-  NU_EL.innerHTML=`<div class="nu-top">${top.map((q,i)=>`<div class="nu-row${q.ex?' has-ex':''}" data-i="${i}"${q.ex?' tabindex="0"':''}>
+  NU_EL.innerHTML=`<div class="nu-top">${top.map((q,i)=>`<div class="nu-row${q.ex?' has-ex':''}" data-i="${i}" tabindex="0" role="button">
       <span class="nu-w zh" lang="zh-Hant">${esc(q.w)}</span>
       <span class="nu-m"><span class="nu-py">${esc(q.py)}</span><span class="nu-gl">${zh(q.gl)}</span></span></div>`).join('')}</div>
     <div class="nu-pop" id="nu-pop" role="tooltip" hidden></div>`;
@@ -65,6 +65,12 @@ NU_EL.addEventListener('click',e=>{
 });
 document.addEventListener('click',e=>{if(NU.pin&&!e.target.closest('#next [data-i]')) NU_hide();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&NU.cur) NU_hide();});
+// a row is a button for the keyboard: Enter or Space opens its card (the same click a tap makes)
+NU_EL.addEventListener('keydown',e=>{
+  if((e.key!=='Enter'&&e.key!==' ')||e.isComposing||e.keyCode===229||e.defaultPrevented) return;
+  const t=e.target.closest&&e.target.closest('.nu-row'); if(!t||t!==e.target) return;
+  e.preventDefault(); t.click();
+});
 let NU_W=innerWidth; addEventListener('resize',()=>{if(innerWidth!==NU_W){NU_W=innerWidth;if(NU.cur)NU_hide();}});
 BUS.on('leave',()=>NU_hide());
 BUS.on('data',D=>renderNext(D));

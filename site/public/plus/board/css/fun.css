@@ -12,15 +12,18 @@ html.cd-on .fun-fx{z-index:65}
 .fo{position:relative;padding-top:calc(190px * var(--k))}
 .fo-row{position:relative;height:calc(var(--fs-s) * 1.4 + var(--s1));margin-top:var(--s1)}
 .fo-m{position:absolute;top:0;text-align:center;font-size:var(--fs-s);color:var(--ink-3);padding-top:var(--s1);cursor:default;-webkit-tap-highlight-color:transparent}
-/* the month's note: plain text under its name while the pointer is on its tree (not a floating box over the trees) */
-.fo-note{position:absolute;left:50%;top:100%;display:grid;justify-items:center;gap:1px;padding-top:var(--s1);white-space:nowrap;
-  font-size:var(--fs-s);line-height:1.35;color:var(--ink-2);opacity:0;transform:translate(-50%,-3px);transition:opacity .18s,transform .18s var(--ease);pointer-events:none}
+/* the month's note: the popover shell (--surface, --r, --sh-pop, .16s fade) under its name, opened by a click, a tap or Enter, never by hover */
+.fo-note{position:absolute;left:50%;top:100%;z-index:30;margin-top:var(--s1);display:grid;justify-items:start;gap:1px;padding:var(--s3) var(--s4);white-space:nowrap;text-align:left;background:var(--surface);border-radius:var(--r);box-shadow:var(--sh-pop);
+  font-size:var(--fs-s);line-height:1.35;color:var(--ink-2);opacity:0;visibility:hidden;transform:translate(-50%,-3px);transition:opacity .16s,transform .16s var(--ease),visibility 0s .16s;pointer-events:none}
 .fo-note span:first-child{font-family:var(--zh);color:var(--ink)}
-.fo-m:hover .fo-note,.fo-m.on .fo-note{opacity:1;transform:translate(-50%,0)}
-.fo-m:first-child .fo-note{left:0;transform:translate(0,-3px);justify-items:start}
-.fo-m:first-child:hover .fo-note,.fo-m:first-child.on .fo-note{transform:none}
-.fo-m:last-child .fo-note{left:auto;right:0;transform:translate(0,-3px);justify-items:end}
-.fo-m:last-child:hover .fo-note,.fo-m:last-child.on .fo-note{transform:none}
+.fo-m.on .fo-note{opacity:1;visibility:visible;transform:translate(-50%,0);transition-delay:0s}
+.fo-m:first-child .fo-note{left:0;transform:translate(0,-3px)}
+.fo-m:first-child.on .fo-note{transform:none}
+.fo-m:last-child .fo-note{left:auto;right:0;transform:translate(0,-3px)}
+.fo-m:last-child.on .fo-note{transform:none}
+.fo-m[tabindex]{cursor:pointer}
+.fo-m:focus-visible{outline:calc(2px * var(--k)) solid var(--ink-3);outline-offset:calc(-2px * var(--k));border-radius:var(--r-s)}
+@media (prefers-reduced-motion:reduce){.fo-note,.fo-m:first-child .fo-note,.fo-m:last-child .fo-note{transform:none}.fo-m:not(:first-child):not(:last-child) .fo-note{transform:translate(-50%,0)}}
 .fo-m.now{color:var(--ink-2)}
 .fo-m.later{opacity:.55}
 /* the whole column above the label shows the month's note (the sway and the swish answer only the tree itself) */

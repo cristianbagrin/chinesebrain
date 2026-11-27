@@ -54,6 +54,7 @@ PANE.innerHTML = `<div class="tu-top">
   </div>
   <div class="tu-scroll"><div class="tu">
     <div class="tu-log" aria-live="polite"></div>
+    <div class="tu-err" role="alert" hidden><p></p><button type="button" class="btn-q">Retry</button></div>
     <button type="button" class="tu-card" hidden>Card it</button>
   </div></div>
   <div class="tu-dock">
@@ -69,6 +70,7 @@ FAB.setAttribute('aria-label', 'Tutor');
 FAB.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v8.5A1.5 1.5 0 0 1 19 17h-7.5L7 20.5V17H5a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 5 5.5z"/></svg>';
 document.body.append(PANE, FAB);
 const LOG = $('.tu-log', PANE), FORM = $<HTMLFormElement>('.tu-in', PANE), BOX = $<HTMLTextAreaElement>('textarea', PANE);
+const ERR = $('.tu-err', PANE);
 const CARD = $<HTMLButtonElement>('.tu-card', PANE), SCROLL = $('.tu-scroll', PANE), PINB = $('.tu-pin', PANE);
 // the box grows with what he types, up to a few lines, and shrinks back when it's sent
 function fit() {
@@ -353,14 +355,21 @@ async function save() {
 }
 async function turn() {
   if (!talk) return;
+  const t = talk;
   busy = true;
+  ERR.hidden = true;
   paint();
+  // his line is kept before the call; a failure shows outside the conversation (never saved, never sent to Claude) and can be retried
+  if (t.msgs.length) await save();
   try {
-    const r = await api('tutor', { messages: talk.msgs, mode: talk.mode ?? 'scene', id: talk.id });
-    talk.msgs.push({ role: 'assistant', content: r.text });
+    const r = await api('tutor', { messages: t.msgs, mode: t.mode ?? 'scene', id: t.id });
+    t.msgs.push({ role: 'assistant', content: r.text });
     save();
   } catch (e) {
-    talk.msgs.push({ role: 'assistant', content: `(${(e as Error).message})` });
+    if (talk === t) {
+      ERR.firstElementChild!.textContent = (e as Error).message;
+      ERR.hidden = false;
+    }
   } finally {
     busy = false;
     paint();
@@ -400,15 +409,17 @@ FORM.addEventListener('submit', (e) => {
   turn();
 });
 BOX.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
     e.preventDefault();
     FORM.requestSubmit();
   }
 });
-$('.tu-new', PANE).addEventListener('click', () => !busy && fresh());
+$('button', ERR).addEventListener('click', () => !busy && turn());
+$('.tu-new', PANE).addEventListener('click', () => !busy && ((ERR.hidden = true), fresh()));
 $('.tu-mode', PANE).addEventListener('click', (e) => {
   const m = (e.target as HTMLElement).closest<HTMLElement>('[data-mode]')?.dataset.mode as Mode | undefined;
   if (!m || m === mode || busy) return;
+  ERR.hidden = true;
   mode = m;
   try {
     localStorage.setItem('tutor-mode', m);

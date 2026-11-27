@@ -168,3 +168,4 @@ li:nth-child(even)>.hc-s .hc-t::after{rotate:1.5deg}
 .hb-th{font-size:var(--fs-s);font-weight:500;color:var(--ink-3)}
 .hb-tl{display:flex;align-items:center;gap:var(--s2);color:var(--ink);font-size:var(--fs-m)}
 .hb-tl.q{color:var(--ink-3)}
+.hm-c:focus-visible{outline:calc(2px * var(--k)) solid var(--ink-3);outline-offset:calc(2px * var(--k))}

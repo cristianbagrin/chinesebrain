@@ -14,6 +14,7 @@ import { SETTINGS } from './settings.ts';
 import './go.ts';
 // Habit: the habit's rules (day done, rest day, never miss twice, reviews a day), shared with the server
 import * as HABIT from '../habit.ts';
+import * as SPAN from './span.ts';
 // (end Habit)
 // EssRev: the one rich-text editor for a card's fields (Cards' Add and Reviews' Edit), editor.ts
 import { EDITOR } from './editor.ts';
@@ -24,7 +25,7 @@ Object.assign(window, { EDITOR, KNOWN });
 
 Object.assign(window, { SOUND, HOLD, RUBY, KEYS, SETTINGS });
 // Habit
-Object.assign(window, { HABIT });
+Object.assign(window, { HABIT, SPAN });
 // (end Habit)
 // Essay marks as prompts first: the answer check and each mark's outcome (tries.ts), for essays.js
 import * as TRIES from '../tries.ts';

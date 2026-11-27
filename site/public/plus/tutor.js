@@ -30,6 +30,7 @@
   </div>
   <div class="tu-scroll"><div class="tu">
     <div class="tu-log" aria-live="polite"></div>
+    <div class="tu-err" role="alert" hidden><p></p><button type="button" class="btn-q">Retry</button></div>
     <button type="button" class="tu-card" hidden>Card it</button>
   </div></div>
   <div class="tu-dock">
@@ -44,7 +45,7 @@
   FAB.setAttribute("aria-label", "Tutor");
   FAB.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v8.5A1.5 1.5 0 0 1 19 17h-7.5L7 20.5V17H5a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 5 5.5z"/></svg>';
   document.body.append(PANE, FAB);
-  var LOG = $(".tu-log", PANE), FORM = $(".tu-in", PANE), BOX = $("textarea", PANE), CARD = $(".tu-card", PANE), SCROLL = $(".tu-scroll", PANE), PINB = $(".tu-pin", PANE);
+  var LOG = $(".tu-log", PANE), FORM = $(".tu-in", PANE), BOX = $("textarea", PANE), ERR = $(".tu-err", PANE), CARD = $(".tu-card", PANE), SCROLL = $(".tu-scroll", PANE), PINB = $(".tu-pin", PANE);
   function fit() {
     BOX.style.height = "auto", BOX.style.height = `${Math.min(BOX.scrollHeight, innerHeight * 0.4)}px`, FORM.classList.toggle("empty", !BOX.value.trim());
   }
@@ -219,16 +220,16 @@
     talk && await api("db", { col: "tutor", id: talk.id, op: "set", data: talk }).catch(() => null);
   }
   async function turn() {
-    if (talk) {
-      busy = !0, paint();
-      try {
-        let r = await api("tutor", { messages: talk.msgs, mode: talk.mode ?? "scene", id: talk.id });
-        talk.msgs.push({ role: "assistant", content: r.text }), save();
-      } catch (e) {
-        talk.msgs.push({ role: "assistant", content: `(${e.message})` });
-      } finally {
-        busy = !1, paint(), isOpen() && FINE.matches && BOX.focus({ preventScroll: !0 });
-      }
+    if (!talk) return;
+    let t = talk;
+    busy = !0, ERR.hidden = !0, paint(), t.msgs.length && await save();
+    try {
+      let r = await api("tutor", { messages: t.msgs, mode: t.mode ?? "scene", id: t.id });
+      t.msgs.push({ role: "assistant", content: r.text }), save();
+    } catch (e) {
+      talk === t && (ERR.firstElementChild.textContent = e.message, ERR.hidden = !1);
+    } finally {
+      busy = !1, paint(), isOpen() && FINE.matches && BOX.focus({ preventScroll: !0 });
     }
   }
   async function fresh() {
@@ -253,13 +254,14 @@
     !t || busy || !talk || (BOX.value = "", fit(), talk.msgs.push({ role: "user", content: t }), turn());
   });
   BOX.addEventListener("keydown", (e) => {
-    e.key === "Enter" && !e.shiftKey && !e.isComposing && (e.preventDefault(), FORM.requestSubmit());
+    e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229 && (e.preventDefault(), FORM.requestSubmit());
   });
-  $(".tu-new", PANE).addEventListener("click", () => !busy && fresh());
+  $("button", ERR).addEventListener("click", () => !busy && turn());
+  $(".tu-new", PANE).addEventListener("click", () => !busy && (ERR.hidden = !0, fresh()));
   $(".tu-mode", PANE).addEventListener("click", (e) => {
     let m = e.target.closest("[data-mode]")?.dataset.mode;
     if (!(!m || m === mode || busy)) {
-      mode = m;
+      ERR.hidden = !0, mode = m;
       try {
         localStorage.setItem("tutor-mode", m);
       } catch {

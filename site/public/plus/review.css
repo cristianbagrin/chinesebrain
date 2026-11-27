@@ -14,7 +14,7 @@
    big): the Sentence and Word at --fs-zh, the other fields at --fs-m, on the text-rhythm line heights */
 .rv-f{min-height:44px;padding:10px 14px;border-radius:var(--r);background:var(--wash);color:var(--ink);font-family:var(--zh);font-size:var(--fs-m);line-height:var(--lh);
   outline:none;overflow-wrap:anywhere;cursor:text;box-shadow:inset 0 0 0 1px transparent;transition:background-color .15s ease,box-shadow .15s ease}
-.rv-f:hover{background:var(--wash-2)}
+@media (hover:hover){.rv-f:hover{background:var(--wash-2)}}
 .rv-f:focus{background:var(--surface);box-shadow:inset 0 0 0 1.5px var(--ink-4),0 1px 2px var(--shade)}
 .rv-f.zh{font-size:var(--fs-zh);line-height:var(--lh-zh)}
 .rv-chinese .rv-f{padding-right:56px;min-height:56px}
@@ -29,7 +29,7 @@
   -webkit-user-drag:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 /* a picture shows whole, at its own shape (a tall one stays tall), never cropped */
 .rv-picture .rv-f img{height:auto;width:auto;max-height:220px;max-width:100%;object-fit:contain;margin:3px 2px}
-.rv-f img:hover{outline:2px solid var(--ink-4);outline-offset:1px}
+@media (hover:hover){.rv-f img:hover{outline:2px solid var(--ink-4);outline-offset:1px}}
 .rv-f img.rv-sel{outline:2.5px solid var(--ink);outline-offset:1px}
 /* the Word field while Option shows it: dashed, so it reads as "extra" */
 html.opt-on .rv-word:not(.kept) .rv-f{box-shadow:inset 0 0 0 1.5px var(--ink-4)}
@@ -50,7 +50,7 @@ html.rv-dragging,html.rv-dragging *{cursor:grabbing!important;user-select:none;-
 .rv-say{position:absolute;right:10px;bottom:14px;width:36px;height:36px;border-radius:50%;border:0;
   display:grid;place-items:center;padding:0;background:var(--surface);color:var(--ink-3);cursor:pointer;box-shadow:0 0 0 1px var(--hair);
   transition:transform .12s var(--rv-ease),background-color .15s ease,color .15s ease}
-.rv-say:hover{color:var(--ink)}
+@media (hover:hover){.rv-say:hover{color:var(--ink)}}
 .rv-say:active{transform:scale(.94)}
 .rv-say.on{background:var(--ink);color:var(--on-ink);box-shadow:none}
 .rv-say.busy{color:transparent;background:var(--surface)}
@@ -64,7 +64,7 @@ html.rv-dragging,html.rv-dragging *{cursor:grabbing!important;user-select:none;-
 .rv-tile img{width:100%;height:100%;object-fit:contain;display:block;-webkit-user-drag:element}
 .rv-tile.drawn{background:#fff}
 .rv-tile.drawn img{object-fit:contain}
-.rv-tile:hover{box-shadow:0 0 0 1px var(--ink-4)}
+@media (hover:hover){.rv-tile:hover{box-shadow:0 0 0 1px var(--ink-4)}}
 .rv-tile:active{transform:scale(.96)}
 .rv-tile:focus-visible{box-shadow:0 0 0 2px var(--ink)}
 .rv-tile[aria-pressed=true]{box-shadow:0 0 0 2.5px var(--ink)}
@@ -73,7 +73,7 @@ html.rv-dragging,html.rv-dragging *{cursor:grabbing!important;user-select:none;-
 .rv-tile.wait{cursor:default;animation:rv-pulse 1.4s ease-in-out infinite;box-shadow:none}
 .rv-mt{border:0;padding:10px;text-decoration:none;font:500 var(--fs-s)/1.3 var(--latin);color:var(--ink-2);background:none;box-shadow:inset 0 0 0 1.5px var(--hair);
   display:grid;place-items:center;text-align:center;animation:none}
-.rv-mt:hover:not(:disabled){background:var(--wash);color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--ink-4)}
+@media (hover:hover){.rv-mt:hover:not(:disabled){background:var(--wash);color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--ink-4)}}
 .rv-mt:disabled{cursor:default;color:var(--ink-4);animation:rv-pulse 1.4s ease-in-out infinite}
 
 /* ---------- Add: always in reach at the foot of the column ---------- */

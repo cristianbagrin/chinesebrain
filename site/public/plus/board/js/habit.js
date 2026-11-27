@@ -85,25 +85,27 @@ function HB_heat(full,m,W0,cap){
   const tk=essayToday(), T=P(tk), S=W0.days, y=T.getFullYear();
   // a column a week, and every month starts its own column (HABIT.columns): the edge between two months steps where the
   // 1st falls mid-week, and an empty column parts them where it would be flush (a 1st on a Monday)
-  const all=HABIT.columns(y,full?y+'-12-31':tk), from=cap&&!full?Math.max(0,all.length-cap):0, C=all.slice(from), n=C.length;
+  // across the turn of a year: Today reaches back into the last year when this one has fewer weeks than fit; Progress shows
+  // the twelve months ending now in January and February (kit/span.ts)
+  const H=SPAN.heat(tk,full,cap), all=H.cols, from=cap&&!full?Math.max(0,all.length-cap):0, C=all.slice(from), n=C.length, thisY=ci=>from+ci>=H.n0;
   const cells=[], heads=[];
   C.forEach((c,ci)=>{
-    if(c.first){const d1=P(c.days.find(Boolean));heads.push(`<span style="grid-column:${ci+1}" data-c="${ci}"${c.month===T.getMonth()?' class="now"':d1>T?' class="later"':''}>${MO[c.month]}</span>`);}
+    if(c.first){const d1=P(c.days.find(Boolean));heads.push(`<span style="grid-column:${ci+1}" data-c="${ci}"${thisY(ci)&&c.month===T.getMonth()?' class="now"':d1>T?' class="later"':''}>${MO[c.month]}</span>`);}
     c.days.forEach(k=>{
       if(!k||k>tk){cells.push('<i class="hm-c off" aria-hidden="true"></i>');return;}
       const d=m[k]||HABIT.blank(), sv=S[k], st=sv?sv.st:(d.rv||d.cards||d.test)?'partial':'pre';
       const cls=st==='done'?(sv.deep?'deep':'done'):st==='open'?'open':st;
       const tip=HB_tip(d,k,sv), pop=k===tk&&st==='done'&&HB.pop;
-      cells.push(`<i class="hm-c ${cls}${k===tk?' today':''}${pop?' pop':''}"${tip?` data-tip="${esc(tip)}"`:''}></i>`);
+      cells.push(`<i class="hm-c ${cls}${k===tk?' today':''}${pop?' pop':''}"${tip?` data-tip="${esc(tip)}" tabindex="-1" role="button" aria-label="${esc(k===tk?'Today':fmtDate(P(k)))}"`:''}></i>`);
     });
   });
   // a shortened year starts mid-month: its first column gets the month's name anyway, unless the next month's name is
   // right beside it
   const c1=+((heads[0]||'').match(/data-c="(\d+)"/)||[])[1];
-  if(n&&(!heads.length||c1>2)&&!C[0].first) heads.unshift(`<span style="grid-column:1"${C[0].month===T.getMonth()?' class="now"':''}>${MO[C[0].month]}</span>`);
-  return `<div class="hm-in" style="--w:${n};--wt:${all.length}" data-cols="${n}" data-y="${y}">
+  if(n&&(!heads.length||c1>2)&&!C[0].first) heads.unshift(`<span style="grid-column:1"${thisY(0)&&C[0].month===T.getMonth()?' class="now"':''}>${MO[C[0].month]}</span>`);
+  return `<div class="hm-in" style="--w:${n};--wt:${all.length}" data-cols="${n}" data-y="${y}" data-mr="${esc(JSON.stringify(H.ranges))}">
     <div class="hm-mo" aria-hidden="true">${heads.join('')}</div>
-    <div class="hm-g" role="img" aria-label="Every day this year">${cells.join('')}</div></div>`;
+    <div class="hm-g" role="group" aria-label="Every day this year">${cells.join('')}</div></div>`;
 }
 
 function HB_state(){
@@ -125,6 +127,9 @@ function HB_render(el,full,st){
   let html='';
   try{const {m,w}=st||HB_state();html=HB_heat(!!full,m,w,full?0:HB_cap(el));}catch(e){console.error(e);}
   el.innerHTML=`<div class="hm ${full?'hm-full':'hm-today'}">${html}</div>`;
+  // one tab stop for the days (arrows move between them, Enter opens the tip): today's, else the last one with a tip
+  const tabs=el.querySelectorAll('.hm-c[data-tip]'), stop=el.querySelector('.hm-c.today[data-tip]')||tabs[tabs.length-1];
+  if(stop) stop.tabIndex=0;
 }
 
 /* ---------- Today: the streak ring and the day's steps (#habit-steps) ----------
@@ -357,6 +362,19 @@ HB_pushState().then(s=>{HBP.state=s;SETTINGS.redraw();});
   function hide(){if(cur)cur.classList.remove('hb-hot');cur=null;tip.hidden=true;}
   document.addEventListener('click',e=>{const el=find(e);if(el){if(el===cur)hide();else show(el);}else if(cur)hide();});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&cur)hide();});
+  // the days of the heatmap: arrows (a day up or down, a week left or right), Home and End, Enter or Space shows the tip
+  document.addEventListener('keydown',e=>{
+    const c=e.target.closest&&e.target.closest('.hm-c[data-tip]'); if(!c||e.isComposing||e.keyCode===229||e.altKey||e.ctrlKey||e.metaKey) return;
+    if(e.key==='Enter'||e.key===' '){e.preventDefault();c.click();return;}
+    const g=c.parentNode, all=[...g.children], at=all.indexOf(c);
+    const step={ArrowUp:-1,ArrowDown:1,ArrowLeft:-7,ArrowRight:7}[e.key];
+    let to=null;
+    if(step){for(let i=at+step;i>=0&&i<all.length;i+=step)if(all[i].hasAttribute('data-tip')){to=all[i];break;}}
+    else if(e.key==='Home'||e.key==='End'){const t=all.filter(x=>x.hasAttribute('data-tip'));to=e.key==='Home'?t[0]:t[t.length-1];}
+    else return;
+    e.preventDefault();
+    if(to&&to!==c){c.tabIndex=-1;to.tabIndex=0;to.focus();}
+  });
   addEventListener('scroll',()=>{if(cur)hide();},{passive:true});
   addEventListener('resize',()=>{if(cur)hide();});
   BUS.on('leave',hide);
