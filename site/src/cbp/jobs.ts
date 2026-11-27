@@ -41,6 +41,59 @@ const part = (md: string, a: string, b: string) => {
 };
 const pad = (d: number) => `d${String(d).padStart(3, '0')}`;
 
+/** One run of a job at a time: the claim is taken before the job starts and given back when it ends, thrown or not
+ *  (what it did is kept by its own meta, `job.<name>.*`, so a job that threw is tried again on its next day). A claim
+ *  older than an hour belongs to a run that died, and is taken over. */
+async function claimed<T>(env: Env, name: string, f: () => Promise<T>): Promise<T | null> {
+  const k = `job.${name}.claim`, now = Date.now();
+  const r = await env.CBP.prepare('INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v WHERE CAST(meta.v AS INTEGER) < ?').bind(k, String(now), now - 3600e3).run();
+  if (!(r as { meta?: { changes?: number } } | null)?.meta?.changes) return null;
+  try {
+    return await f();
+  } finally {
+    await env.CBP.prepare('DELETE FROM meta WHERE k = ? AND v = ?').bind(k, String(now)).run();
+  }
+}
+
+/** The Monday of the week `day` falls in (the weekly pass runs once a week, on the first of Mon–Wed that works). */
+export function mondayOf(day: string) {
+  return E.plus(day, -((new Date(day + 'T00:00:00Z').getUTCDay() + 6) % 7));
+}
+
+/** The weekly pass's To improve drops: the fresh items Opus didn't keep, but only when its `keep` names at least one of
+ *  them (an empty or unmatched answer drops nothing). */
+export function weeklyDrops(fresh: string[], keep: unknown) {
+  const kept = new Set((Array.isArray(keep) ? keep : []).map(String).filter((id) => fresh.includes(id)).slice(0, 5));
+  return kept.size ? fresh.filter((id) => !kept.has(id)) : [];
+}
+
+/** history.md with the month's Measurements line, unless a line for that month is already there. */
+export function addMeasure(h: string, month: string, line: string) {
+  return h.includes(`\n- **${month}, calendar month**`) ? h : MD.appendUnder(h, 'Measurements (append-only)', line);
+}
+
+/** Opus's "### This month": its own heading first, and no other heading inside (which would swallow what follows). */
+export function thisMonthOk(tm: string) {
+  const lines = tm.trim().split('\n');
+  return lines[0].startsWith('### This month') && !lines.slice(1).some((l) => /^(### |## )/.test(l));
+}
+
+/** The Watch list body with Opus's list lines in place of the current ones. The paragraph before the list (its rules)
+ *  and the paragraphs after it (Taiwan usage, Typing slips) stay exactly as they are; Opus sends only the "- " lines.
+ *  null when the answer isn't a list, or is longer than the list now (+200). */
+export function watchListBody(body: string, answer: string) {
+  const lines = body.split('\n');
+  const first = lines.findIndex((l) => l.startsWith('- '));
+  const last = lines.reduce((k, l, n) => (l.startsWith('- ') ? n : k), -1);
+  if (first < 0) return null;
+  const head = lines.slice(0, first), tail = lines.slice(last + 1);
+  const kept = new Set([...head, ...tail].map((l) => l.trim()).filter(Boolean));
+  const list = answer.split('\n').map((l) => l.trimEnd()).filter((l) => l.trim() && !kept.has(l.trim()));
+  if (!list.length || !list.every((l) => /^- \S/.test(l))) return null;
+  if (list.join('\n').length > lines.slice(first, last + 1).join('\n').length + 200) return null;
+  return [...head, ...list, ...tail].join('\n');
+}
+
 // ---------- every hour: one essay, its marks and its bookkeeping ----------
 // The marks come back as JSON that code checks and repairs (essays.ts validate) before anything is saved; pinyin and
 // meanings for the words he lacked come from the dictionary (look.ts), not from the answer.
@@ -130,7 +183,6 @@ export async function essay(env: Env) {
       continue;
     }
     const today = taipeiToday();
-    for (const w of planJson(e, v.marks, out.uses, reviews, improve, today)) await putDoc(env, w.col, w.id, w.data, w.op);
     const said = [`DAY ${day}: ${v.marks.length} marks${v.dropped.length ? ` (${v.dropped.length} dropped: ${v.dropped.join('; ').slice(0, 300)})` : ''}`];
     const [lex, gl] = await Promise.all([lexicon(env as never), glossary(env as never)]).catch(() => [null, null] as const);
     // a mistake marked again: a card from his own sentence, corrected, at the top of Next up (essays.ts fixCards)
@@ -192,6 +244,10 @@ export async function essay(env: Env) {
       // the queue and the known words changed: Next up follows
       return out2.join(' · ');
     }));
+    // the review doc only after the bookkeeping is in, and last: it is what marks this essay done, so a failure
+    // before here leaves the essay for the next run instead of skipping its bookkeeping
+    const writes = planJson(e, v.marks, out.uses, reviews, improve, today);
+    for (const w of [...writes.filter((x) => x.col !== 'reviews'), ...writes.filter((x) => x.col === 'reviews')]) await putDoc(env, w.col, w.id, w.data, w.op);
     await putDoc(env, 'board', 'data', E.boardPayload(await loadFiles(env as never), today) as never, 'update');
     return report(env, 'essay', said.filter(Boolean));
   }
@@ -201,9 +257,14 @@ export async function essay(env: Env) {
 }
 
 // ---------- Sunday night: the week ----------
-export async function weekly(env: Env, o: { force?: boolean } = {}) {
+export function weekly(env: Env, o: { force?: boolean } = {}) {
+  return claimed(env, 'weekly', () => weeklyRun(env, o));
+}
+async function weeklyRun(env: Env, o: { force?: boolean }) {
   const today = taipeiToday();
-  if (!o.force && (await meta(env, 'job.weekly.day')) === today) return null;
+  // once a week: tried Monday to Wednesday (worker.js), done for the week once it ran on or after this Monday
+  const ran = await meta(env, 'job.weekly.day');
+  if (!o.force && ran && E.cmp(ran, mondayOf(today)) >= 0) return null;
   // the essays marked since the last pass (the marker line in chinese.md says up to which DAY); an essay whose day
   // isn't over yet (Sunday's) waits for next week
   const files = await loadFiles(env as never);
@@ -238,10 +299,9 @@ ${fresh.map(([id, x]) => `${id} · ${x.mine} → ${x.nat}`).join('\n') || '(none
 The week:
 ${week}`;
     const out = json((await ai.text(env, OPUS, p, { effort: 'medium', job: 'weekly' })).text);
-    const keep = new Set((Array.isArray(out.keep) ? out.keep : []).map(String).slice(0, 5));
-    const drop = fresh.filter(([id]) => !keep.has(id));
-    if (fresh.length > 5 || keep.size) for (const [id] of drop) await putDoc(env, 'improve', id, { removed: new Date().toISOString(), removedBy: 'weekly' }, 'update');
-    if (drop.length && (fresh.length > 5 || keep.size)) said.push(`To improve: kept ${fresh.length - drop.length} of ${fresh.length} new`);
+    const drop = weeklyDrops(fresh.map(([id]) => id), out.keep);
+    for (const id of drop) await putDoc(env, 'improve', id, { removed: new Date().toISOString(), removedBy: 'weekly' }, 'update');
+    if (drop.length) said.push(`To improve: kept ${fresh.length - drop.length} of ${fresh.length} new`);
     if (typeof out.essayTarget === 'string' && out.essayTarget.trim()) {
       await putDoc(env, 'board', 'data', { essayTarget: out.essayTarget.trim() }, 'update');
       said.push(`target: ${out.essayTarget.trim()}`);
@@ -280,7 +340,10 @@ async function checks(env: Env, files: E.Files, today: string) {
   return out;
 }
 
-export async function monthly(env: Env, o: { force?: boolean } = {}) {
+export function monthly(env: Env, o: { force?: boolean } = {}) {
+  return claimed(env, 'monthly', () => monthlyRun(env, o));
+}
+async function monthlyRun(env: Env, o: { force?: boolean }) {
   const today = taipeiToday();
   const m = E.plus(today.slice(0, 7) + '-01', -1).slice(0, 7); // the month that just ended
   if (!o.force && (await meta(env, 'job.monthly.month')) === m) return null;
@@ -306,9 +369,11 @@ export async function monthly(env: Env, o: { force?: boolean } = {}) {
   const kinds = Object.entries(by).map(([k, [p, g]]) => `${k} ${p}/${g}`).join(', ');
   const measure = `- **${m}, calendar month** · cards **${cards}** · tests **${tests[0]}/${tests[1]}** clean: ${kinds || 'none'}${med !== null ? ` · median answer **${med} s**` : ''} · essay rows ${w.filter((r) => r.result === 'pass').length} clean, ${w.filter((r) => r.result !== 'pass').length} misses · known-words.txt **${total}** at month end · retest table ${E.table(rows).length} items`;
   said.push(`months[${m}] frozen: ${cards} cards, ${tests[0]}/${tests[1]} tests, ${total} words`);
+  // the Log as it is now, for Opus: its past lines go into history.md just below
+  const log = part(files.get(E.MEMORY) ?? '', '## 4 · Log', '');
   await change(env as never, (f) => {
-    // Measurements, and the Log's past lines moved into history.md (Part 4 keeps the marker and Waiting lines)
-    let h = MD.appendUnder(f.get('history.md') ?? '', 'Measurements (append-only)', measure);
+    // Measurements (once a month), and the Log's past lines moved into history.md (Part 4 keeps the marker and Waiting lines)
+    let h = addMeasure(f.get('history.md') ?? '', m, measure);
     let md = f.get(E.MEMORY) ?? '';
     const i = md.indexOf('## 4 · Log');
     if (i >= 0) {
@@ -348,7 +413,7 @@ export async function monthly(env: Env, o: { force?: boolean } = {}) {
 {"thisMonth": string, "watchList": string, "history": string, "lessons": string, "proposal": string}
 
 - thisMonth: the whole "### This month" section for ${E.plus(today, 0).slice(0, 7)}, heading line included (like the current one: "### This month · Month N, <dates>: "<a short name>""), then a two-line read of the month that ended and 3–6 concrete numbered items for the new one, from the numbers and the log below. Keep the items that still run; drop finished ones.
-- watchList: the whole body of the "### Watch list" section (no heading): each line its pattern, the fix and its models, with only its latest dates; drop a line with no new miss for a month (it is in the log rows below if it had one); keep the Taiwan usage and Typing slips paragraphs exactly as they are. Never longer than now.
+- watchList: only the Watch list's "- " lines (no heading, not the paragraph above them, not the Taiwan usage and Typing slips paragraphs: those stay as they are): each line its pattern, the fix and its models, with only its latest dates; drop a line with no new miss for a month (it is in the log rows below if it had one). Never longer than now.
 - history: lines to append to history.md's evidence section: the dated evidence you took out of the Watch list, one line per pattern ("- pattern: dates and sentences"). "" if none.
 - lessons: the whole body of monthly-test.md's "## Lessons" (no heading), dated lines: repeated lessons merged into one, ones that no longer apply dropped. "" to leave it as it is.
 - proposal: if the log shows a rule in Parts 1 or 2 failing, one short paragraph proposing the change (he decides); else "".
@@ -360,7 +425,7 @@ Part 3 now:
 ${part(md, '## 3 · Where he is', '## 4 · Log')}
 
 Part 4, the log:
-${part(md, '## 4 · Log', '')}
+${log}
 
 monthly-test.md's Lessons now:
 ${part(files.get('monthly-test.md') ?? '', '## Lessons', '## Runs')}
@@ -371,14 +436,14 @@ ${rows.filter((r) => r.date.slice(0, 7) === m && (E.TEST_KINDS.includes(r.kind) 
   await change(env as never, (f) => {
     let md2 = f.get(E.MEMORY) ?? '';
     const tm = String(out.thisMonth ?? '').trim();
-    if (tm.startsWith('### This month')) {
+    if (thisMonthOk(tm)) {
       md2 = MD.replaceSection(md2, 'This month', tm);
       said.push('This month rewritten');
     }
-    const wl = String(out.watchList ?? '').trim();
     const old = MD.section(md2, 'Watch list');
-    if (old && wl && wl.length <= old.body.length + 200 && wl.split('\n').filter((l) => l.trim()).every((l) => /^(- |\*\*)/.test(l)) && wl.includes('**Typing slips**')) {
-      md2 = md2.slice(0, old.bodyStart) + wl + '\n\n' + md2.slice(old.stop);
+    const wl = old ? watchListBody(old.body, String(out.watchList ?? '')) : null;
+    if (old && wl !== null) {
+      md2 = md2.slice(0, old.bodyStart) + wl + md2.slice(old.stop);
       said.push(`Watch list ${old.body.length} → ${wl.length} characters`);
     }
     f.set(E.MEMORY, md2);
@@ -403,10 +468,12 @@ const WD: Record<string, number> = { 日: 0, 天: 0, 一: 1, 二: 2, 三: 3, 四
 /** Dates in a test's Chinese with a weekday beside them (11月28日（六）, 11/28 星期六) that don't match the calendar. */
 export function weekdayProblems(text: string, today: string) {
   const out: string[] = [];
-  for (const m of text.matchAll(/(\d{1,2})[月/](\d{1,2})[日號]?\s*[（(]?\s*(?:星期|週|禮拜)?([一二三四五六日天])[)）]?/g)) {
-    const [mo, d] = [Number(m[1]), Number(m[2])];
+  // a weekday counts only right after （ ( 星期 週 禮拜, so the 日 of 12月12日舉行 is never read as Sunday
+  for (const m of text.matchAll(/(\d{1,2})[月/](\d{1,2})[日號]?\s*(?:[（(]\s*(?:星期|週|禮拜)?|星期|週|禮拜)([一二三四五六日天])/g)) {
+    const [mo, d] = [Number(m[1]), Number(m[2])], now = Number(today.slice(5, 7));
     let y = Number(today.slice(0, 4));
-    if (mo < Number(today.slice(5, 7)) - 6) y++;
+    if (mo < now - 6) y++; // December naming January: next year
+    else if (mo > now + 6) y--; // January naming December: last year
     const wd = new Date(Date.UTC(y, mo - 1, d)).getUTCDay();
     if (WD[m[3]] !== wd) out.push(`${m[0]} is a ${'日一二三四五六'[wd]}, not ${m[3]}`);
   }
@@ -423,7 +490,10 @@ async function look(env: Env, url: string) {
   return { type: 'image' as const, source: { type: 'base64' as const, media_type: o.httpMetadata?.contentType ?? 'image/jpeg', data: btoa(bin) } };
 }
 
-export async function monthlyTest(env: Env, o: { force?: boolean } = {}) {
+export function monthlyTest(env: Env, o: { force?: boolean } = {}) {
+  return claimed(env, 'mtest', () => monthlyTestRun(env, o));
+}
+async function monthlyTestRun(env: Env, o: { force?: boolean }) {
   const today = taipeiToday(), month = today.slice(0, 7);
   if (!o.force && (await meta(env, 'job.mtest.month')) === month) return null;
   // a build that fails (Opus's test refused three times) is tried again at most twice in the month
@@ -466,8 +536,14 @@ Reply with only {"title": string, "items": [...]}, each item with label, kind, t
   let doc: { title?: string; items?: Record<string, unknown>[] } | null = null;
   let problems: string[] = [];
   for (let tries = 0; tries < 3 && (!doc || problems.length); tries++) {
-    doc = json((await ai.text(env, OPUS, write(problems), { effort: 'medium', maxTokens: 20000, job: 'monthly-test' })).text);
-    problems = [...E.testProblems(files, doc as never, true), ...weekdayProblems(JSON.stringify(doc), today)];
+    // an answer that can't be read (or a call that failed) counts as a try, like the essay's
+    try {
+      doc = json((await ai.text(env, OPUS, write(problems), { effort: 'medium', maxTokens: 20000, job: 'monthly-test' })).text);
+      problems = [...E.testProblems(files, doc as never, true), ...weekdayProblems(JSON.stringify(doc), today)];
+    } catch (x) {
+      if (x instanceof ai.Quota) throw x;
+      problems = [`your answer could not be used: ${String((x as Error).message).slice(0, 200)}`];
+    }
   }
   if (!doc || problems.length) return failed([`! not sent: ${problems.join('; ')}`]);
   doc.items = (doc.items ?? []).slice(0, 8);
