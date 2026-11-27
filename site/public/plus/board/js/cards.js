@@ -463,7 +463,7 @@ function CD_paintAll(){
   CD_EL.querySelector('.cd-left').innerHTML=p.left; CD_EL.querySelector('.cd-colR').innerHTML=p.right;
   thr.innerHTML=threadHTML(d); thr.hidden=!(d.chat||[]).length;
   const moved=CD_SH.dataset.w!==w; CD_SH.dataset.w=w;
-  // a new word on screen: a place for Back and Forward (kit/go.ts)
+  // a new word on screen: an entry in the browser's history (kit/go.ts)
   if(moved) BUS.emit('place');
   CD_MAIN.scrollTop=top;
   thr.scrollTop=b&&b.chat&&stick?thr.scrollHeight:ttop;

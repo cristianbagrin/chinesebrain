@@ -1,8 +1,6 @@
 /* The shared parts (site/src/cbp/kit): the Settings window, press and hold, pinyin over characters, keys. Owner: lead.
    Type comes from base.css's tokens; nothing here is smaller than --fs-s. */
 :root[data-text-size="larger"]{--k:1.05}
-/* two fingers sideways go back and forward inside Plus (kit/go.ts), never out of it */
-html{overscroll-behavior-x:none}
 
 /* ---------- Settings (kit/settings.ts): a window in the middle of the screen, a sheet from the bottom on a phone.
    The pattern for every dialog in Plus: a native modal <dialog class="st">, a quiet dim behind, the page's ground inside,

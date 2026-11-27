@@ -4,11 +4,11 @@
    for any key a page used first: this listens last, on window, and lets a handled key (defaultPrevented) be (KEYS.free). */
 import { KEYS } from './keys.ts';
 import { SETTINGS } from './settings.ts';
-import { swipe } from './swipe.ts';
+import { type Place, placeHash, parsePlace, samePlace, entryFor } from './place.ts';
 
 declare const VIEWS: string[];
 declare const VIEW: string;
-declare function setView(v: string): void;
+declare function setView(v: string, first?: boolean): void;
 declare function sfx(k: string): void;
 
 const TO: [string, string, string?][] = [
@@ -38,142 +38,89 @@ addEventListener('keydown', (e) => {
   if (b && b.getAttribute('aria-current') !== 'true') b.click();
 });
 
-/* Back and Forward (KEYS 'back' ⌘[ and 'forward' ⌘], his to change): the pages he was on, the way a browser keeps them,
-   inside Plus. A place is a page, plus where on it: Reviews' Review, Browse or Card designs; the word on the Cards page.
-   Pages say they moved with BUS 'view' (core.js) and 'place' (review/main.ts, cards.js); one tick later the place is
-   noted, so a page and its inner place count as one step. The browser's own ⌘[ and ⌘] (leave the app) never run here.
-   While he types in a field or a dialog is open the keys do nothing. */
+/* Back and Forward are the browser's own (place.ts): each place he goes to (a page; Reviews' Review, Browse or Card
+   designs; the word on the Cards page) is an entry in the browser's history with its address (#reviews/browse,
+   #cards/進行), so its buttons, ⌘[ ⌘] and two fingers on a trackpad go through his places with the browser's own
+   animation, and a reload or a link lands on the place. Pages say they moved with BUS 'view' (core.js) and 'place'
+   (review/main.ts, cards.js); one tick later the place is written down, so a page and its inner place are one entry.
+   Dialogs (Settings, Edit, the Tutor pane) are no entries: Back closes an open one and goes back a place. */
 declare const BUS: { on(e: string, f: (...a: any[]) => void): void };
-declare const CD: { cur?: string | null } | undefined;
+declare const CD: { cur?: string | null; open?: string | null; pend?: unknown } | undefined;
 declare function openCard(word: string, src?: string, opt?: { write?: boolean }): void;
 declare function cardOf(word: string): { dropped?: boolean } | null | undefined;
-type Place = { v: string; sub: string };
-const PLACES: Place[] = [];
-let at = -1;
-let moving = false;
+let restoring = false;
 let noteT = 0;
 function here(): Place | null {
   if (!VIEW) return null;
-  if (VIEW === 'reviews') return { v: VIEW, sub: document.querySelector<HTMLElement>('#view-reviews .rx')?.dataset.rx || 'review' };
+  if (VIEW === 'reviews') {
+    // the tab not drawn yet: its place comes once it is (go() in review/main.ts)
+    const rx = document.querySelector<HTMLElement>('#view-reviews .rx')?.dataset.rx;
+    return rx ? { v: VIEW, sub: rx } : null;
+  }
   if (VIEW === 'cards') return { v: VIEW, sub: (typeof CD !== 'undefined' && CD?.cur) || '' };
   return { v: VIEW, sub: '' };
 }
-const same = (a: Place | undefined, b: Place) => !!a && a.v === b.v && a.sub === b.sub;
+const entry = (): Place | null => (history.state as { cbp?: Place } | null)?.cbp ?? null;
+function write(p: Place, how: 'replace' | 'push') {
+  const url = location.pathname + location.search + placeHash(p);
+  if (how === 'push') history.pushState({ cbp: p }, '', url);
+  else history.replaceState({ ...(history.state || {}), cbp: p }, '', url);
+}
 function note() {
   clearTimeout(noteT);
   noteT = window.setTimeout(() => {
     const p = here();
-    if (moving || !p || same(PLACES[at], p)) return;
-    // the Cards page's first paint has no word yet: that place becomes the word's
-    if (PLACES[at]?.v === 'cards' && p.v === 'cards' && !PLACES[at].sub) PLACES[at] = p;
-    else {
-      PLACES.splice(at + 1);
-      PLACES.push(p);
-      if (PLACES.length > 60) PLACES.shift();
-      at = PLACES.length - 1;
-    }
+    if (!p) return;
+    const how = entryFor(entry(), p, restoring);
+    if (how !== 'none') write(p, how);
   }, 0);
 }
 BUS.on('view', note);
 BUS.on('place', note);
-function step(d: number): boolean {
-  const i = at + d;
-  const p = PLACES[i];
-  if (!p) return false;
-  if (!VIEWS.includes(p.v)) {
-    // a page that's gone (a switch went off): skip it
-    PLACES.splice(i, 1);
-    if (i < at) at--;
-    return step(d);
-  }
-  at = i;
-  moving = true;
+function land(p: Place) {
+  restoring = true;
   try {
-    sfx('tap');
-  } catch {}
-  try {
+    SETTINGS.close(true);
+    document.querySelectorAll<HTMLDialogElement>('dialog[open]').forEach((d) => d.close());
     if (p.v === 'cards' && p.sub && typeof openCard === 'function' && !(typeof cardOf === 'function' && cardOf(p.sub)?.dropped)) openCard(p.sub, undefined, { write: false });
     else if (p.v !== VIEW) setView(p.v);
     const rx = (window as unknown as { RX_go?: (v: string) => void }).RX_go;
-    if (p.v === 'reviews' && p.sub && rx) rx(p.sub);
+    if (p.v === 'reviews' && rx) rx(p.sub || 'review');
   } finally {
-    // the moves above note themselves a tick later; they aren't new places
-    window.setTimeout(() => (moving = false), 0);
+    // the moves above write themselves down a tick later, over this entry, not as new ones
+    window.setTimeout(() => (restoring = false), 0);
   }
-  return true;
 }
-addEventListener(
-  'keydown',
-  (e) => {
-    const d = KEYS.is(e, 'back') ? -1 : KEYS.is(e, 'forward') ? 1 : 0;
-    if (!d) return;
-    // never the browser's: it would leave Plus
-    e.preventDefault();
-    const t = e.target as HTMLElement | null;
-    if (e.repeat || t?.closest?.(TYPING) || document.querySelector('dialog[open]')) return;
-    step(d);
-  },
-  true,
-);
+addEventListener('popstate', (e) => {
+  const st = (e.state as { cbp?: Place } | null)?.cbp;
+  const p = st ?? parsePlace(location.hash);
+  // a link to "#" or an address that isn't a place: stay where he is
+  if (!VIEWS.includes(p.v)) {
+    const h = here();
+    if (h) write(h, 'replace');
+    return;
+  }
+  if (samePlace(here(), p)) return;
+  try {
+    sfx('tap');
+  } catch {}
+  land(p);
+});
 
-/* The same steps by two fingers sideways on a trackpad (swipe.ts): fingers right, back; left, forward. Never over a dialog,
-   a field, the Tutor pane (its own swipe sends it away) or anything that scrolls sideways (the Cards page's word tabs,
-   Browse's table on a phone, an essay sheet), and never when the page itself is wider than the window. The browser's
-   own swipe (leave Plus) is off on the page (kit.css: overscroll-behavior-x). While the fingers move the page leans a
-   little their way; a step brings the next place in from that side. Reduced motion: only a fade. */
-const SW = swipe();
-const REDUCED = matchMedia('(prefers-reduced-motion: reduce)');
-const viewEl = () => (VIEW ? document.getElementById('view-' + VIEW) : null);
-function scrollsX(t: Element | null) {
-  const root = document.documentElement;
-  if (root.scrollWidth > root.clientWidth + 1) return true;
-  for (let n = t; n && n !== document.body && n !== root; n = n.parentElement) {
-    if (n.scrollWidth <= n.clientWidth + 1) continue;
-    const o = getComputedStyle(n).overflowX;
-    if (o === 'auto' || o === 'scroll') return true;
+/* The first page (boot.js): the address's place (#cards/進行, #reviews/browse, or ?view=), else Today. Reviews opens on
+   its part through sessionStorage 'cbp-rx' (review/main.ts reads it once the collection is ready). */
+function start() {
+  const q = new URLSearchParams(location.search).get('view');
+  const p = parsePlace(location.hash || (q ? '#' + q : ''));
+  if (p.v === 'reviews')
+    try {
+      sessionStorage.setItem('cbp-rx', p.sub || 'review');
+    } catch {}
+  if (p.v === 'cards' && p.sub && typeof CD !== 'undefined' && CD) {
+    // shown, not written: a reload is no reason to spend on a card
+    CD.cur = CD.open = p.sub;
+    CD.pend = { opt: { write: false } };
   }
-  return false;
+  setView(p.v, true);
 }
-let leanEl: HTMLElement | null = null, leanT = 0;
-function lean(px: number) {
-  const v = viewEl();
-  if (leanEl && leanEl !== v) leanEl.style.translate = '';
-  leanEl = v;
-  if (v && !REDUCED.matches) v.style.translate = px ? `${px}px 0` : '';
-}
-function unlean() {
-  const v = leanEl;
-  leanEl = null;
-  if (!v || !v.style.translate) return;
-  const from = v.style.translate;
-  v.style.translate = '';
-  v.animate([{ translate: from }, { translate: '0 0' }], { duration: 180, easing: 'ease-out' });
-}
-addEventListener(
-  'wheel',
-  (e) => {
-    if (e.ctrlKey) return; // a pinch
-    const k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerWidth : 1;
-    const dx = e.deltaX * k, dy = e.deltaY * k;
-    const t = e.target as Element | null;
-    const side = Math.abs(dx) > Math.abs(dy);
-    const blocked = side && (e.defaultPrevented || !!document.querySelector('dialog[open]') || KEYS.typing(t) || !!t?.closest?.('#tutor') || scrollsX(t));
-    const f = SW.feed(dx, dy, e.timeStamp, blocked);
-    if (!f.mine) return;
-    e.preventDefault();
-    clearTimeout(leanT);
-    leanT = window.setTimeout(unlean, SW.quiet);
-    if (!f.d) return lean(f.acc ? -Math.sign(f.acc) * Math.min(Math.abs(f.acc) / SW.need, 1) * 10 : 0);
-    lean(0);
-    leanEl = null;
-    if (!step(f.d)) return;
-    // the next place comes in from the side the fingers went (after the page has switched)
-    window.setTimeout(() => {
-      const v = viewEl();
-      if (!v) return;
-      const x = (f.d < 0 ? -1 : 1) * 16;
-      v.animate(REDUCED.matches ? [{ opacity: 0.6 }, { opacity: 1 }] : [{ translate: `${x}px 0`, opacity: 0.6 }, { translate: '0 0', opacity: 1 }], { duration: 220, easing: 'cubic-bezier(.22,.9,.24,1)' });
-    }, 0);
-  },
-  { passive: false },
-);
+Object.assign(window, { GO_start: start });
