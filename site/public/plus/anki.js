@@ -1396,7 +1396,7 @@ ${pairPrompt(a, b, p.why, learnOf(p))}`;
           break;
       l.innerHTML = out.join("") || '<p class="cb-none">Nothing matches.</p>';
     };
-    paintL(), inp.oninput = paintL, inp.onkeydown = (e) => e.key === "Enter" && (e.preventDefault(), $(".cb-r", l)?.click()), l.onclick = async (e) => {
+    paintL(), inp.oninput = paintL, inp.onkeydown = (e) => e.key === "Enter" && !e.isComposing && e.keyCode !== 229 && (e.preventDefault(), $(".cb-r", l)?.click()), l.onclick = async (e) => {
       let r = e.target.closest(".cb-r");
       r && (closePick(), sfx("tap"), await combine(f.nid, Number(r.dataset.n), r.dataset.why ?? ""));
     }, document.body.append(pop);

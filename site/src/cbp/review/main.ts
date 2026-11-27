@@ -938,7 +938,7 @@ function pickPartner(btn: HTMLElement, f: Flagged, after: () => void) {
   };
   paintL();
   inp.oninput = paintL;
-  inp.onkeydown = (e) => e.key === 'Enter' && (e.preventDefault(), $<HTMLElement>('.cb-r', l)?.click());
+  inp.onkeydown = (e) => e.key === 'Enter' && !e.isComposing && e.keyCode !== 229 && (e.preventDefault(), $<HTMLElement>('.cb-r', l)?.click());
   l.onclick = async (e) => {
     const r = (e.target as HTMLElement).closest<HTMLElement>('.cb-r');
     if (!r) return;
