@@ -102,7 +102,28 @@ export function kwGet(l: string[], i: number): [string, string, string] {
   return [p[0], p[1], p[2]];
 }
 export const kwTotal = (l: string[]) => l.filter((x) => x.trim() && !x.startsWith('#')).length;
-export const kwSave = (files: Files, l: string[]) => files.set(KW, l.join('\n') + '\n');
+/** When Plus itself last changed each word's status (ms), kept 60 days: the newer change wins against his
+ *  Chinese Brain marks, to the minute, not by whole days (merge, and writeBack in nightly.ts). */
+export const KW_TIMES = 'known-words-times.json';
+export const kwTimes = (files: Files): Record<string, number> => {
+  try {
+    return JSON.parse(files.get(KW_TIMES) ?? '{}');
+  } catch {
+    return {};
+  }
+};
+/** known-words.txt saved; every word whose status Plus changed is stamped `at` (null: a change brought in from
+ *  Chinese Brain, which carries its own time). */
+export function kwSave(files: Files, l: string[], at: number | null = Date.now()) {
+  const old = files.has(KW) ? kwStatus(loadKw(files)) : new Map<string, [string, string]>();
+  files.set(KW, l.join('\n') + '\n');
+  if (at === null) return;
+  const now = kwStatus(l), times = kwTimes(files);
+  let changed = false;
+  for (const w of new Set([...old.keys(), ...now.keys()])) if (old.get(w)?.[0] !== now.get(w)?.[0]) (times[w] = at), (changed = true);
+  for (const [w, t] of Object.entries(times)) if (t < at - 60 * 86_400_000) (delete times[w], (changed = true));
+  if (changed) files.set(KW_TIMES, JSON.stringify(times));
+}
 export function kwStatus(l: string[]) {
   const out = new Map<string, [string, string]>();
   for (const i of kwIndex(l).values()) {
@@ -194,6 +215,8 @@ export function appendLog(files: Files, rows: Partial<Row>[]) {
 export class Item {
   active = false; due: string | null = null; streak = 0; fails = 0;
   tries: string[] = []; lastTest: string | null = null; burst = false; retired: string | null = null; form = '';
+  /** Opened by a listening drill or a TOCFL item he failed: a recognition problem, retested as a reading item. */
+  read = false;
   name: string;
   constructor(name: string) {
     this.name = name;
@@ -202,9 +225,11 @@ export class Item {
     this.active = true; this.retired = null; this.due = plus(d, 3); this.streak = 0;
     this.fails = res === 'fail' && tested ? 1 : 0;
     this.tries = tested ? [res[0]] : [];
-    this.burst = false;
+    this.burst = false; this.read = false;
   }
 }
+/** A target that is a word (a listening or TOCFL item's target can be "TOCFL reading", "listening"). */
+const isWord = (t: string) => /[㐀-鿿]/.test(t);
 const sortRows = (a: Row, b: Row) => cmp(a.date, b.date) || a.i - b.i;
 export function schedule(rows: Row[]) {
   const items = new Map<string, Item>();
@@ -260,10 +285,11 @@ export function schedule(rows: Row[]) {
         x.fails = res === 'fail' ? x.fails + 1 : 0;
         x.burst = x.fails >= 3;
       }
-    } else if (WRITING_KINDS.includes(k) && ['partial', 'fail'].includes(res)) {
+    } else if ((WRITING_KINDS.includes(k) && ['partial', 'fail'].includes(res)) || (EXTRA_KINDS.includes(k) && res === 'fail' && isWord(e.target))) {
       if (x.lastTest && cmp(d, x.lastTest) < 0) continue;
       if (x.active) { x.due = minStr(x.due!, plus(d, 3)); x.streak = 0; }
       else x.activate(d, res, false);
+      if (EXTRA_KINDS.includes(k)) x.read = true;
     }
   }
   return items;
@@ -409,6 +435,20 @@ export function sprintCap(files: Files, path: string) {
   const m = files.get(path)!.match(/Retest cap: (\d+)/);
   return m ? parseInt(m[1]) : 1;
 }
+/** How many retests a test takes: the sprint's "Retest cap: N" while one is on, else 3 (the board and the nightly alike). */
+export function retestCap(files: Files, today: string) {
+  const sp = sprintFile(files, today);
+  return sp ? sprintCap(files, sp) : 3;
+}
+/** The sprint's R words (read only: tested as a written line, never said), while a sprint is on. */
+export function sprintReadOnly(files: Files, today: string) {
+  const sp = sprintFile(files, today), out = new Set<string>();
+  if (sp) for (const l of lines(files.get(sp)!)) {
+    const m = l.match(/^\d+\.\s+(.+?) · .+? · .+? · R\b/u);
+    if (m) out.add(key(m[1]));
+  }
+  return out;
+}
 export function sprintWords(files: Files, path: string): [number, string, string, string, boolean][] {
   const out: [number, string, string, string, boolean][] = [];
   lines(files.get(path)!).forEach((l, i) => {
@@ -463,7 +503,7 @@ export function rank(files: Files, q: Queue, today: string) {
 }
 
 // ---------- Chinese Brain exports and the Anki snapshot ----------
-export type BrainRow = { word: string; now: string; was: string; date: string; pinyin: string; meaning: string; sentence: string; source: string; saved: string };
+export type BrainRow = { word: string; now: string; was: string; date: string; pinyin: string; meaning: string; sentence: string; source: string; saved: string; at: number };
 export function readExport(text: string): [BrainRow[], string, boolean] {
   const rows: BrainRow[] = [];
   let edate: string | null = null, full = false;
@@ -476,8 +516,8 @@ export function readExport(text: string): [BrainRow[], string, boolean] {
       continue;
     }
     if (!l.trim() || l.startsWith('word\t')) continue;
-    const p = [...l.split('\t'), ...Array(9).fill('')];
-    rows.push({ word: p[0].trim(), now: p[1].trim() || '-', was: p[2].trim() || '-', date: p[3].trim(), pinyin: p[4], meaning: p[5], sentence: p[6], source: p[7], saved: p[8] });
+    const p = [...l.split('\t'), ...Array(10).fill('')];
+    rows.push({ word: p[0].trim(), now: p[1].trim() || '-', was: p[2].trim() || '-', date: p[3].trim(), pinyin: p[4], meaning: p[5], sentence: p[6], source: p[7], saved: p[8], at: Number(p[9]) || 0 });
   }
   return [rows, edate ?? '0000-00-00', full];
 }
@@ -521,7 +561,7 @@ export function testPlanText(files: Files, today: string, allItems = false) {
   }
   const t = table(rows);
   const sp = sprintFile(files, today);
-  const cap = allItems ? null : sp ? sprintCap(files, sp) : 3;
+  const cap = allItems ? null : retestCap(files, today);
   const due = t.filter((x) => cmp(x.due!, today) <= 0);
   const burst = due.filter((x) => x.burst);
   if (burst.length && !allItems) {
@@ -547,38 +587,83 @@ export function testPlanText(files: Files, today: string, allItems = false) {
   return out.join('\n') + '\n';
 }
 
-/** The daily test's plan: due retests (oldest overdue first), L words still short of three situations (each with the
- *  situations it has, so the next one is different: lateral), one word that just reached three (harder: vertical), the
- *  cards since the last test. short: after 3+ missed days, the most overdue retests only. */
-export function dailyPlan(files: Files, today: string, o: { short?: boolean } = {}) {
-  const rows = readLog(files), out: string[] = [];
+/** One item of the daily test, decided by code before the writer sees it. `mode` read: a written line he reads
+ *  (`read`), never something he says (a sprint R word, a word he failed to recognize); say: a situation he answers. */
+export type Slot = { what: 'burst' | 'retest' | 'learning' | 'tocfl' | 'listen' | 'card' | 'holds'; kind: string; target: string; mode: 'say' | 'read' | 'choice' | 'hear'; note: string };
+
+/** The daily test's items, in priority order and trimmed to TEST_ITEMS here, so the writer gets only what fits:
+ *  a burst first (3 items), the due retests (oldest first, up to the retest cap), L words still short of three
+ *  situations (each with the situations it has, so the next one differs), the TOCFL items and a listening drill,
+ *  the cards since the last test, a word that just reached three (a level up), a second listening drill if room is
+ *  left. short: after 3+ missed days, the most overdue retests only. */
+export function planItems(files: Files, today: string, o: { short?: boolean } = {}) {
+  const rows = readLog(files), out: Slot[] = [], room = () => TEST_ITEMS - out.length;
+  const st = kwStatus(loadKw(files)), reading = sprintReadOnly(files, today);
+  const mode = (w: string, read = false): Slot['mode'] => (read || reading.has(key(w)) ? 'read' : 'say');
+  const kindOf = (w: string) => (isWord(w) ? 'old' : 'leak');
   const t = table(rows), due = t.filter((x) => cmp(x.due!, today) <= 0);
   const burst = due.find((x) => x.burst);
-  if (burst && !o.short) out.push(`BURST: ${burst.name} failed three tests in a row: give it 3 of the items, fast situations that each need its right form (${burst.form}).`);
-  const cap = o.short ? 4 : 5;
-  out.push(due.length ? `Retests due (oldest first${due.length > cap ? `; the first ${cap}, the rest wait` : ''}):` : 'No retests due.');
-  for (const x of due.slice(0, cap)) out.push(`  ${x.name} · due ${x.due} · tries ${x.tries.slice(-4).join('') || '-'} · right form: ${x.form || '?'}`);
-  if (o.short) {
-    out.push('A comeback after missed days: only these, nothing new, no listening or TOCFL items. Easy to finish.');
-    return out.join('\n') + '\n';
-  }
-  const st = kwStatus(loadKw(files));
+  if (burst && !o.short) for (let i = 0; i < 3; i++) out.push({ what: 'burst', kind: 'burst', target: burst.name, mode: 'say', note: `failed three tests in a row: a fast situation that needs its right form (${burst.form || '?'})${i ? `, unlike the other burst items` : ''}` });
+  for (const x of due.filter((x) => x !== burst).slice(0, Math.min(retestCap(files, today), room())))
+    out.push({ what: 'retest', kind: kindOf(x.name), target: x.name, mode: mode(x.name, x.read), note: `due ${x.due} · tries ${x.tries.slice(-4).join('') || '-'} · right form: ${x.form || '?'}${x.read ? ' · he missed it in a listening or TOCFL item' : ''}` });
+  if (o.short) return out;
   const taught = new Set([...ankiTargets(files), ...rows.filter((r) => r.kind === 'card').map((r) => key(r.target))]);
   const names = new Set(t.map((x) => x.name));
   const since = new Set(cardsSinceTest(rows).map(key));
   const lw = [...st].filter(([w, [s, d]]) => s === 'L' && taught.has(w) && !names.has(w) && !since.has(w) && cmp(d, plus(today, -2)) <= 0)
     .map(([w, [, d]]) => ({ w, d, sit: situations(rows, w, d) })).sort((a, b) => a.sit.length - b.sit.length || cmp(a.d, b.d));
-  if (lw.length) {
-    out.push(`Words he is learning, toward ${SITUATIONS} different situations each (a new situation at the same level, unlike the ones he already had):`);
-    for (const x of lw.slice(0, 3)) out.push(`  ${x.w} · ${x.sit.length}/${SITUATIONS}${x.sit.length ? ` · already: ${x.sit.join(', ')}` : ''}`);
-  }
+  for (const x of lw.slice(0, Math.min(3, room())))
+    out.push({ what: 'learning', kind: 'old', target: x.w, mode: mode(x.w), note: `${x.sit.length}/${SITUATIONS} situations${x.sit.length ? ` · already: ${x.sit.join(', ')}; a new situation at the same level, unlike those` : ''}` });
+  const tocfl = cmp(today, TOCFL_DATE) <= 0 ? 3 : 2;
+  for (let i = 0; i < tocfl && room(); i++) out.push({ what: 'tocfl', kind: 'tocfl', target: '', mode: 'choice', note: 'a TOCFL Band B item (see the TOCFL rules)' });
+  if (room()) out.push({ what: 'listen', kind: 'listen', target: '', mode: 'hear', note: 'a listening drill (see the listening rules)' });
+  for (const w of [...since].filter((w) => st.get(w)?.[0] !== 'K').slice(0, room()))
+    out.push({ what: 'card', kind: 'new', target: w, mode: mode(w), note: 'carded since the last test' });
   const held = [...st].filter(([, [s, d]]) => s === 'K' && cmp(d, plus(today, -30)) >= 0).map(([w]) => w)
     .filter((w) => situations(rows, w, plus(today, -60)).length >= SITUATIONS);
-  if (held.length) out.push(`A word that holds (one item, a level up: a harder situation, a competing word, a longer answer): ${held[held.length - 1]}`);
-  out.push('Cards since the last test: ' + ([...since].filter((w) => st.get(w)?.[0] !== 'K').join(' · ') || 'none'));
+  if (held.length && room()) out.push({ what: 'holds', kind: 'old', target: held[held.length - 1], mode: mode(held[held.length - 1]), note: 'a word that holds: a level up (a harder situation, a competing word, a longer answer)' });
+  if (room()) out.push({ what: 'listen', kind: 'listen', target: '', mode: 'hear', note: 'a second listening drill' });
+  return out;
+}
+
+/** The plan as the writer reads it: one numbered line per item, each to be written, in this order. */
+export function planText(files: Files, today: string, slots: Slot[], o: { short?: boolean } = {}) {
+  const rows = readLog(files), due = table(rows).filter((x) => cmp(x.due!, today) <= 0);
+  const shown = slots.filter((s) => s.what === 'retest').length;
+  const how: Record<Slot['mode'], string> = {
+    say: 'SAY: a situation he answers in Chinese',
+    read: 'READ: a `read` item, a short written line (a notice, a news sentence, a message) holding the target, the ask "Tell me in English exactly what it says"; never a situation he answers by speaking',
+    choice: 'TOCFL: kind tocfl, four choices',
+    hear: 'LISTEN: kind listen, an exchange in hear',
+  };
+  const out = [`Exactly ${slots.length} item(s), one for each numbered line, in this order. Every line must be in the test; add nothing else. Use each line's kind and target exactly as written (a blank target: pick one of the plan's words where it fits, else "TOCFL reading", "TOCFL listening" or "listening").`];
+  slots.forEach((s, i) => out.push(`${i + 1}. ${s.what} · kind ${s.kind} · target ${s.target || '(blank)'} · ${how[s.mode]} · ${s.note}`));
+  if (due.length > shown) out.push(`(${due.length - shown} more retest(s) due wait for the next test.)`);
+  if (o.short) out.push('A comeback after missed days: only these, nothing new, no listening or TOCFL items. Easy to finish.');
   const sp = sprintFile(files, today);
-  if (sp) out.push(`Sprint on (${sp}): ${sprintRule(files, sp, 'Tests') || 'see its file'}`);
+  if (sp) out.push(`Sprint on (${sp}): READ lines are its R words (read only). ${sprintRule(files, sp, 'Tests') || ''}`.trim());
   return out.join('\n') + '\n';
+}
+
+export function dailyPlan(files: Files, today: string, o: { short?: boolean } = {}) {
+  return planText(files, today, planItems(files, today, o), o);
+}
+
+/** What a written test leaves out of its plan (nothing: []): a planned target missing, an R word or a word he
+ *  failed to recognize written as something he says, a retest given a kind that doesn't move its schedule. */
+export function planProblems(slots: Slot[], doc: TestDoc) {
+  const items = [...(doc.items ?? [])], problems: string[] = [];
+  for (const s of slots) {
+    if (!s.target) continue;
+    const i = items.findIndex((it) => key(String(it.target ?? '')) === key(s.target) && TEST_KINDS.includes(String(it.kind)));
+    if (i < 0) {
+      problems.push(`plan item ${s.target} (${s.what}) is missing, or its kind isn't one of ${TEST_KINDS.join(', ')}`);
+      continue;
+    }
+    const [it] = items.splice(i, 1);
+    if (s.mode === 'read' && !it.read) problems.push(`${s.target} must be a READ item (a written line in \`read\`)`);
+  }
+  return problems;
 }
 
 /** Every field the board reads from board/data that the engine owns. */
@@ -666,7 +751,8 @@ export function situations(rows: Row[], word: string, from: string) {
   const out = new Set<string>();
   for (const r of rows) {
     if (r.result !== 'pass' || key(r.target) !== word || cmp(r.date, from) < 0) continue;
-    const src = ITEM_KINDS.includes(r.kind) ? 'test' : WRITING_KINDS.includes(r.kind) ? (r.kind === 'free' && /^tutor/.test(r.note) ? 'tutor' : r.kind) : null;
+    // a listening drill or a TOCFL choice shows he recognized it, not that he can use it: logged, not counted
+    const src = TEST_KINDS.includes(r.kind) ? 'test' : WRITING_KINDS.includes(r.kind) ? (r.kind === 'free' && /^tutor/.test(r.note) ? 'tutor' : r.kind) : null;
     if (src) out.add(`${src} ${r.date}`);
   }
   return [...out].sort();
@@ -723,6 +809,7 @@ export function merge(files: Files, exports: string[], today: string) {
   const cutoff = plus(today, -14);
   const before = kwTotal(l);
   const repeated = new Set<string>();
+  const times = kwTimes(files);
   for (const text of exports) {
     const [rows, edate, full] = readExport(text);
     for (const r of rows) {
@@ -732,7 +819,8 @@ export function merge(files: Files, exports: string[], today: string) {
       if (r.saved.trim()) log.saved.push(`${w} (${now})`);
       const idx = kwIndex(l), k = key(w);
       const have = idx.has(k) ? kwGet(l, idx.get(k)!) : null;
-      if (have && cmp(have[2], date) > 0) {
+      // the newer change wins: to the minute when both times are known, else by day (a tie goes to Chinese Brain)
+      if (have && (times[k] && r.at ? times[k] > r.at : cmp(have[2], date) > 0)) {
         if (have[1] !== now) log.file_newer.push(`${have[0]}: file ${have[1]} (${have[2]}), Chinese Brain ${now} (${date})`);
         continue;
       }
@@ -772,7 +860,7 @@ export function merge(files: Files, exports: string[], today: string) {
       }
     }
   }
-  kwSave(files, l);
+  kwSave(files, l, null); // his own marks: their times are his, not Plus's
   q.save(files, today);
   const out = [`known-words.txt: ${before} → ${kwTotal(l)} entries`];
   for (const [k, v] of Object.entries(log)) if (v.length) out.push(`${k}: ${[...new Set(v)].join(' · ')}`);

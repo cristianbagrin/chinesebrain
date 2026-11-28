@@ -10,10 +10,10 @@
 import * as E from './engine.ts';
 import * as ai from './ai.ts';
 import { modelFor } from './settings.ts';
-import { exportText, type Item } from './brain.ts';
+import { exportText, backPlan, taiForms, newForm, type Item } from './brain.ts';
 import { plan as marksPlan, essayToday, norm } from './essays.ts';
 import { loadFiles, listDocs, getDoc, hex, today as taipeiToday } from './plus.ts';
-import { keepMedia } from './cards.ts';
+import { keepMedia, lexicon } from './cards.ts';
 
 /** The jobs and their models: tests are graded by Sonnet (his pick), written and essays corrected by Opus. */
 // the defaults; Settings › AI can change the grader, the test writer and the essay marker (settings.ts, saved to his account)
@@ -94,19 +94,18 @@ export async function writeBack(env: Env, brain: Brain, files: E.Files, day: str
   const st = E.kwStatus(E.loadKw(files));
   const want = [...st].filter(([, [s, d]]) => (s === 'K' || s === 'L') && E.cmp(d, from) >= 0).slice(0, 400);
   if (!want.length) return void (await setMeta(env, 'brain_back_day', day).run());
-  const recs = await brain.get(want.map(([w]) => w));
+  // every 台/臺 form of each word: the extension keeps the dictionary's headword (臺北), Plus writes 台
+  const forms = [...new Set(want.flatMap(([w]) => taiForms(w)))];
+  const recs: Record<string, BrainWord | null> = {};
+  for (let i = 0; i < forms.length; i += 400) Object.assign(recs, await brain.get(forms.slice(i, i + 400)));
+  const lex = forms.length > want.length ? await lexicon(env as never).catch(() => null) : null;
+  const plan = backPlan(want, recs, E.kwTimes(files));
   const q = E.loadQueue(files);
-  const out: BrainWord[] = [];
-  for (const [w, [s, d]] of want) {
-    const status = s === 'K' ? 'known' : 'learning';
-    const rec = recs[w];
-    // the day CBP set it, from the start of that day in Taipei: his own mark later than that wins
-    const at = Date.parse(d + 'T00:00:00+08:00');
-    if (rec && (rec.s === status || rec.updated >= at)) continue;
+  const out: BrainWord[] = plan.map(({ w, status, rec }) => {
+    if (rec) return { ...rec, s: status, updated: now, hist: [...(rec.hist ?? []), { t: now, s: status }] };
     const e = q.find(w)[1] as { pinyin?: string; gloss?: string } | undefined;
-    out.push(rec ? { ...rec, s: status, updated: now, hist: [...(rec.hist ?? []), { t: now, s: status }] }
-      : { w, s: status, ...(e?.pinyin ? { p: e.pinyin } : {}), ...(e?.gloss ? { g: e.gloss } : {}), added: now, updated: now, hist: [{ t: now, s: status }], looks: 0, ctx: [] });
-  }
+    return { w: newForm(w, (f) => !!lex?.has(f)), s: status, ...(e?.pinyin ? { p: e.pinyin } : {}), ...(e?.gloss ? { g: e.gloss } : {}), added: now, updated: now, hist: [{ t: now, s: status }], looks: 0, ctx: [] };
+  });
   if (dry) return void said.push(...out.map((x) => `${x.w} → ${x.s}${recs[x.w] ? ` (was ${recs[x.w]!.s}, set ${new Date(recs[x.w]!.updated).toISOString().slice(0, 10)})` : ' (new)'}`));
   if (out.length) {
     const r = (await brain.put(out)) as { fail?: { message: string } };
@@ -116,12 +115,16 @@ export async function writeBack(env: Env, brain: Brain, files: E.Files, day: str
   await setMeta(env, 'brain_back_day', day).run();
 }
 
+/** The files the merge of his Chinese Brain marks writes: the brain cursor moves only when none was refused. */
+export const MERGE_FILES = [E.KW, E.KW_TIMES, E.LN];
+export const cursorMayAdvance = (refused: string[]) => !refused.some((n) => MERGE_FILES.includes(n) || n.startsWith('imported/'));
+
 const meta = async (env: Env, k: string) => (await env.CBP.prepare('SELECT v FROM meta WHERE k = ?').bind(k).first<{ v: string }>())?.v ?? null;
 const setMeta = (env: Env, k: string, v: string) => env.CBP.prepare('INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v').bind(k, v);
 
 // ---------- writing back ----------
 /** The files that changed, written only where nobody else changed them since they were read (else reported). */
-async function saveFiles(env: Env, before: E.Files, after: E.Files, said: string[]) {
+export async function saveFiles(env: Env, before: E.Files, after: E.Files, said: string[], refused: string[] = []) {
   const at = Date.now(), stmts: Stmt[] = [];
   const shas = new Map((await env.CBP.prepare('SELECT name, sha FROM files').all<{ name: string; sha: string }>()).results.map((r) => [r.name, r.sha]));
   for (const [name, text] of after) {
@@ -129,6 +132,7 @@ async function saveFiles(env: Env, before: E.Files, after: E.Files, said: string
     if (was === text) continue;
     if ((shas.get(name) ?? null) !== (was === undefined ? null : await hex(was))) {
       said.push(`! ${name} changed while the nightly ran: not written (runs again tomorrow)`);
+      refused.push(name);
       continue;
     }
     if (was !== undefined) stmts.push(env.CBP.prepare('INSERT INTO history (col, id, data, at) VALUES (?, ?, ?, ?)').bind('file', name, was, at));
@@ -194,7 +198,6 @@ function testPrompt(files: E.Files, today: string, plan: string, problems?: stri
   const learning = [...st].filter(([, [s]]) => s === 'L').map(([w]) => w).join(' ');
   const rows = E.readLog(files).filter((r) => E.TEST_KINDS.includes(r.kind)).slice(-40).map((r) => `${r.date}\t${r.target}\t${r.result}\t${r.note}`).join('\n');
   const sp = E.sprintFile(files, today);
-  const tocfl = E.cmp(today, E.TOCFL_DATE) <= 0 ? 3 : 2;
   const short = /A comeback after missed days/.test(plan);
   return `You write Chris's Chinese test for today. One comes every day and should take him about ten minutes; it goes straight onto his page and nobody checks it first, so follow every rule.
 
@@ -202,7 +205,7 @@ ${part('### Tests', '### Voice')}
 
 ${part('### Voice', '### Hard rules')}
 
-What this test must cover (from the test log, in order):
+Today's test, item by item (code chose and counted these from the test log; write every numbered line, nothing more):
 ${plan}
 ${sp ? `\nThe sprint on now (${sp}):\n${files.get(sp)}\n` : ''}
 Where he is now:
@@ -214,9 +217,9 @@ Words he is learning (L): ${learning}
 His last test results (date, target, result, his answer → natural), so no scenario repeats one he already passed:
 ${rows}
 
-${short ? 'This is a comeback test after days he missed: one item per retest in the plan, nothing else (no listening drill, no TOCFL item). Keep each ask simple.\n\n' : `Today's test, 8 to 11 items in all: one item per plan line (retests, the learning words, the word that holds, the cards since the last test), then:
-- 1 or 2 listening drills (kind "listen"). hear: a 2–3 line exchange between two people, each line on its own line starting with the speaker's voice letter and a colon ("f: …", "m: …", "g: …"; two different voices), everyday Taiwan speech at his level, built around one of the plan's words where it fits (target: that word, else "listening"). ask: an English question about what was said, which he answers in Chinese. Each drill has one echo trap and one paraphrase: the ask states or offers something that repeats a word he heard but is wrong, and the right answer is said in the exchange in other words than the ask uses (他說不行 in the exchange, "did he agree?" in the ask). check: what shows he understood; an answer that just repeats the echoed word is a fail. Never hint at the trap in the ask (no "careful", no second question pointing at it).
-- ${tocfl} TOCFL Band B items (kind "tocfl"; his TOCFL is ${E.TOCFL_DATE}), in the exam's format: single choice, four options in Traditional characters, a question in Chinese as the exam asks it. Mix the types: a cloze (read: a short paragraph, 60–120 characters, with one blank written （　）; ask: 請選出最適合的詞), reading comprehension (read: a notice, message, ad or short article of 60–150 characters; ask: a question about it), listening (hear: a dialogue in the voice-letter format above, or one speaker's short passage; ask: the question; the choices are shown on screen). Write your own; never copy a real exam's question. The three wrong choices always include a near-word (a word like the right one in characters or meaning that is wrong here: 經過/經驗, 本來/原來) and an echo (repeats a word from the passage but says something it doesn't). Fields: choices (the four), key (the right one's index 0–3, varied), target (one of the plan's words when the item tests it, else "TOCFL reading" or "TOCFL listening"), model (the right choice), check (why it's right and what each trap is), explain (one short English line he sees after answering), label, kind.
+${short ? 'This is a comeback test after days he missed: one item per retest in the plan, nothing else (no listening drill, no TOCFL item). Keep each ask simple.\n\n' : `One item per numbered plan line, no more, no fewer. A READ line is a reading item, never a situation he answers by speaking. How to write the LISTEN and TOCFL lines:
+- A listening drill (kind "listen"). hear: a 2–3 line exchange between two people, each line on its own line starting with the speaker's voice letter and a colon ("f: …", "m: …", "g: …"; two different voices), everyday Taiwan speech at his level, built around one of the plan's words where it fits (target: that word, else "listening"). ask: an English question about what was said, which he answers in Chinese. Each drill has one echo trap and one paraphrase: the ask states or offers something that repeats a word he heard but is wrong, and the right answer is said in the exchange in other words than the ask uses (他說不行 in the exchange, "did he agree?" in the ask). check: what shows he understood; an answer that just repeats the echoed word is a fail. Never hint at the trap in the ask (no "careful", no second question pointing at it).
+- A TOCFL Band B item (kind "tocfl"; his TOCFL is ${E.TOCFL_DATE}), in the exam's format: single choice, four options in Traditional characters, a question in Chinese as the exam asks it. Mix the types: a cloze (read: a short paragraph, 60–120 characters, with one blank written （　）; ask: 請選出最適合的詞), reading comprehension (read: a notice, message, ad or short article of 60–150 characters; ask: a question about it), listening (hear: a dialogue in the voice-letter format above, or one speaker's short passage; ask: the question; the choices are shown on screen). Write your own; never copy a real exam's question. The three wrong choices always include a near-word (a word like the right one in characters or meaning that is wrong here: 經過/經驗, 本來/原來) and an echo (repeats a word from the passage but says something it doesn't). Fields: choices (the four), key (the right one's index 0–3, varied), target (one of the plan's words when the item tests it, else "TOCFL reading" or "TOCFL listening"), model (the right choice), check (why it's right and what each trap is), explain (one short English line he sees after answering), label, kind.
 `}Mix the targets so he has to choose: where two targets (or a target and a word he knows) compete for the same slot (又 / 再, 經過 / 路過, 過 / 了), put them in different situations next to each other, each one's situation making only one of them right. Vary the situations: a message someone sends him, a question a local asks, something he's standing in front of. One item per target, as far as they fit; keep at least one word-order item.
 
 Each item is a JSON object:
@@ -293,16 +296,21 @@ export async function media(env: Env, doc: { items?: Record<string, unknown>[] }
 /** Write the next test, check it the way words.py send did (twice at most), voice it. */
 export async function writeTest(env: Env, files: E.Files, today: string, said: string[], o: { refresh?: { id: string; missed: number }; force?: boolean } = {}) {
   const short = (o.refresh?.missed ?? 0) >= E.COMEBACK_AFTER;
-  const plan = E.dailyPlan(files, today, { short });
+  const slots = E.planItems(files, today, { short });
+  const plan = E.planText(files, today, slots, { short });
   let problems: string[] = [];
   for (let tries = 0; tries < 2; tries++) {
     const out = json((await ai.text(env, await modelFor(env, 'test-model'), testPrompt(files, today, plan, problems), { effort: 'medium', maxTokens: 24000, job: 'daily test' })).text);
     const doc: { items: Record<string, unknown>[]; id?: string; missed?: number } = { items: Array.isArray(out.items) ? out.items : [] };
     problems = E.testProblems(files, doc, !!o.refresh || !!o.force);
-    if (problems.length) {
+    // the plan left out or bent: refused once; on the last try a test still goes out, with what it missed reported
+    const missed = E.planProblems(slots, doc);
+    if (problems.length || (missed.length && tries === 0)) {
+      problems = [...problems, ...missed];
       said.push(`(first try refused: ${problems.join('; ')})`);
       continue;
     }
+    if (missed.length) said.push(`! the test leaves out of its plan: ${missed.join('; ')}`);
     // a test he didn't open is replaced in place: the same id, today's items, how many days it has waited
     if (o.refresh) Object.assign(doc, { id: o.refresh.id, missed: o.refresh.missed });
     const sent = E.sendTest(files, doc, today);
@@ -398,15 +406,19 @@ export async function nightly(env: Env, brain: Brain | null, o: { day?: string; 
   // write it all
   files.delete(E.BOARD_DATA);
   before.delete(E.BOARD_DATA);
-  const changed = await saveFiles(env, before, files, said);
+  const refused: string[] = [];
+  const changed = await saveFiles(env, before, files, said, refused);
   if (testUpdate) await putDoc(env, 'board', 'test', testUpdate, 'update');
   if (sent) await putDoc(env, 'board', 'test', sent as never);
   if (kit) await putDoc(env, 'board', 'cardkit', kit as never);
   files.set(E.BOARD_DATA, JSON.stringify(boardData));
   const kept = ((boardData as { answers?: { day: string }[] }).answers ?? []).filter((x) => E.cmp(x.day, E.plus(day, -7)) > 0);
   await putDoc(env, 'board', 'data', { ...E.boardPayload(files, day), ...(answers.length || kept.length ? { answers: [...answers, ...kept].slice(0, 12) } : {}) } as never, 'update');
-  if (brain) await env.CBP.batch([setMeta(env, 'brain_seq', String(seq)), setMeta(env, 'brain_at', String(now))]);
-  if (brain) await writeBack(env, brain, files, day, now, said).catch((e) => said.push(`! Chinese Brain not written back: ${(e as Error).message}`));
+  // the marks count as read only once the merge is written: else the same ones come again tomorrow
+  const merged = cursorMayAdvance(refused);
+  if (brain && merged) await env.CBP.batch([setMeta(env, 'brain_seq', String(seq)), setMeta(env, 'brain_at', String(now))]);
+  else if (brain) said.push('! Chinese Brain marks not saved: they are read again tomorrow');
+  if (brain && !refused.includes(E.KW)) await writeBack(env, brain, files, day, now, said).catch((e) => said.push(`! Chinese Brain not written back: ${(e as Error).message}`));
   said.push(`${changed} file(s) written`);
   await snapshot(env, day).catch((e) => said.push(`! snapshot: ${(e as Error).message}`));
   await env.CBP.batch([setMeta(env, 'nightly', JSON.stringify({ day, at: Date.now(), said }))]);
