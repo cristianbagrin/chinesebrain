@@ -42,10 +42,14 @@ html:has(#view-cards:not([hidden])) .appbar.lift{box-shadow:none}
 .cd-tx{position:absolute;right:8px;top:calc(50% - 10px);font:inherit;font-style:normal;font-size:var(--fs-m);line-height:1;width:20px;height:20px;display:grid;place-items:center;border-radius:50%;border:0;background:none;padding:0;cursor:pointer;color:var(--ink-4);transition:background .15s,color .15s}
 .cd-tx:hover{background:var(--wash-2);color:var(--ink)}
 .cd-anyw{flex:none;margin-left:6px}
-.cd-anyw input{width:7.5em;font:inherit;font-size:var(--fs-l);font-family:var(--zh);background:transparent;border:0;border-radius:999px;padding:8px 16px;outline:none;color:var(--ink);
+/* a fixed height and no vertical padding: the text is centered by the box itself, whichever font is showing. While it's
+   empty the input takes the placeholder's font: a placeholder drawn smaller than its input sits on the big font's
+   baseline, low in the pill (2026-11-28). Widths are in the Chinese size, so they don't change when it fills. */
+.cd-anyw input{width:calc(var(--fs-l) * 7.5);height:calc(40px * var(--k));box-sizing:border-box;font:inherit;font-size:var(--fs-l);font-family:var(--zh);line-height:normal;background:transparent;border:0;border-radius:999px;padding:0 16px;outline:none;color:var(--ink);
   box-shadow:inset 0 0 0 1px var(--hair);transition:box-shadow .15s,background .15s,width .2s var(--ease)}
-.cd-anyw input::placeholder{font-family:var(--ui);font-size:var(--fs-s);color:var(--ink-4)}
-.cd-anyw input:focus{width:10em;background:var(--surface);box-shadow:inset 0 0 0 1.5px var(--ink-4)}
+.cd-anyw input:placeholder-shown{font-family:var(--ui);font-size:var(--fs-s)}
+.cd-anyw input::placeholder{color:var(--ink-4)}
+.cd-anyw input:focus{width:calc(var(--fs-l) * 10);background:var(--surface);box-shadow:inset 0 0 0 1.5px var(--ink-4)}
 .cd-nav[hidden]{display:none}
 .cd-nav{display:inline-flex;gap:2px}
 .cd-ib{font:inherit;font-size:var(--fs-xl);line-height:1;width:40px;height:40px;border:0;border-radius:50%;background:none;color:var(--ink-2);cursor:pointer;transition:background .15s,transform .12s var(--ease)}
@@ -191,7 +195,7 @@ html:has(#view-cards:not([hidden])) .appbar.lift{box-shadow:none}
 @media (max-width:640px){
   .cd-nav,.cd-img{display:none}
   .cd-w{font-size:calc(48px * var(--k))}
-  .cd-anyw input{width:5.5em}
+  .cd-anyw input{width:calc(var(--fs-l) * 5.5)}
 }
 
 /* a finger leaves no hover behind (iPhone keeps :hover on what was last tapped) */

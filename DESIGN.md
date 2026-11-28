@@ -54,6 +54,13 @@ Reasons marked *inferred* weren't said by Chris; check them with him before lean
 - **One segmented control: a `--wash` pill, 3px inside, options `--fs-s` 500 `--ink-3` padded 5px 14px, the chosen
   one `--surface` + `--sh-1` in ink.** One switch: Settings' `.st-tg` (Essays' My version is the same, a size down).
 - **No hover tooltips (`title=`), no explanatory labels or counters.** Few words; a control over a sentence.
+- **Text sits in the middle of its box, checked by code, not by eye.** A one-line control gets a fixed height and no
+  vertical padding, so the box centers the text whatever the font. A placeholder is never a different size or font from
+  its input: while empty, the input itself takes the placeholder's font (`:placeholder-shown`). Before finishing any UI
+  change, run `scripts/align-check.js` on every page you touched, desktop and phone width; an empty list passes.
+  Why: "this is not aligned properly… you keep repeating this mistake… such a basic mistake" (Any word's placeholder,
+  drawn smaller than the input, sat on the Chinese font's baseline, low in the pill).
+  <!-- 2026-11-28 -->
 
 ## Pages
 
