@@ -731,7 +731,7 @@ async function plusMachine(request, env, url) {
     if (url.pathname === '/api/plus/push/pull') return json(await plus.pull(env, await request.json()));
     if (url.pathname === '/api/plus/push/switch') return json(await plus.switchOver(env));
     if (url.pathname === '/api/plus/push/clean') return json(await cards.clean(env));
-    if (url.pathname === '/api/plus/push/shrink') return json(await cards.shrinkKept(env, { dry: url.searchParams.get('dry') === '1', limit: Number(url.searchParams.get('limit')) || undefined }));
+    if (url.pathname === '/api/plus/push/shrink') return json(await cards.shrinkKept(env, { dry: url.searchParams.get('dry') === '1', limit: Number(url.searchParams.get('limit')) || undefined, after: url.searchParams.get('after') ?? undefined }));
     // Cards: the word's mark moves from <u> to <mark>, once (src/cbp/cards.ts markWord; ?dry=1 counts only)
     if (url.pathname === '/api/plus/push/mark-word') return json(await cards.markWord(env, url.searchParams.get('dry') === '1'));
     // (end Cards)

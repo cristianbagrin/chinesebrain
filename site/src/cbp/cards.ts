@@ -108,7 +108,7 @@ export async function shrink(env: Env, bytes: ArrayBuffer, type: string): Promis
 /** POST push/shrink (?dry=1, ?limit=N): the big pictures already kept, made small in place. The name (and so every
  *  card pointing at it) stays; the bytes become a WebP and its type says so. The original goes to `orig/` first, which
  *  the daily sweep never touches, so any of them can be put back. */
-export async function shrinkKept(env: Env, o: { dry?: boolean; limit?: number } = {}) {
+export async function shrinkKept(env: Env, o: { dry?: boolean; limit?: number; after?: string } = {}) {
   const limit = o.limit ?? 60;
   const big: { key: string; size: number }[] = [];
   let cursor: string | undefined;
@@ -118,8 +118,10 @@ export async function shrinkKept(env: Env, o: { dry?: boolean; limit?: number } 
     cursor = l.truncated ? l.cursor : undefined;
   } while (cursor);
   if (o.dry) return { big: big.length, mb: Math.round(big.reduce((s, x) => s + x.size, 0) / 1e5) / 10 };
+  // ?after=<key> picks up past the ones already tried (those that wouldn't shrink stay big and would come first again)
+  const todo = big.sort((a, b) => (a.key < b.key ? -1 : 1)).filter((x) => !o.after || x.key > o.after).slice(0, limit);
   let done = 0, before = 0, after = 0, kept = 0;
-  for (const x of big.slice(0, limit)) {
+  for (const x of todo) {
     const obj = await env.FILES.get(x.key);
     if (!obj) continue;
     const type = obj.httpMetadata?.contentType ?? '';
@@ -130,7 +132,7 @@ export async function shrinkKept(env: Env, o: { dry?: boolean; limit?: number } 
     await env.FILES.put(x.key, small, { httpMetadata: { contentType: 'image/webp' } });
     done++; before += bytes.byteLength; after += small.byteLength;
   }
-  return { big: big.length, done, kept, left: Math.max(0, big.length - limit), mbBefore: Math.round(before / 1e5) / 10, mbAfter: Math.round(after / 1e5) / 10 };
+  return { big: big.length, done, kept, last: todo.at(-1)?.key ?? null, mbBefore: Math.round(before / 1e5) / 10, mbAfter: Math.round(after / 1e5) / 10 };
 }
 export async function media(env: Env, name: string) {
   if (!/^[0-9a-f]{32}\.(jpg|png|webp|gif|svg|mp3|m4a|ogg|wav)$/.test(name)) return new Response('Not found', { status: 404 });

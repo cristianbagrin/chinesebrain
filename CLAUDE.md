@@ -57,7 +57,8 @@
   The board's code lives in `site/public/plus/board` and is edited there now (`scripts/cbp-board.py` copied it from the old folder);
   `plus/runtime.js` stands in for claude.ai's database and `sample`; `plus/review.js` adds his review card beside the study card on
   the Cards page (`site/src/cbp/cards.ts`: pictures from Wikimedia Commons or drawn on Pollinations, Azure voices, media in R2; a daily
-  sweep, `cards.clean`, drops media nothing points to). The Tutor pane (from the right on any page; `plus/tutor.js` from `site/src/cbp/tutor/`, server
+  sweep, `cards.clean`, drops media nothing points to; pictures over 200 KB are kept as a ≤1024px WebP through the
+Cloudflare Images binding, `IMAGES`, 5,000 free a month; `push/shrink` did the old ones in place on Nov 28, originals under `orig/` in R2). The Tutor pane (from the right on any page; `plus/tutor.js` from `site/src/cbp/tutor/`, server
   `tutor.ts`; Scene and Ask modes) is behind `plus.tutor`. Staging has no AI keys: it borrows production's through the `Brains` entrypoint, and its Account
   objects are production's. A Claude session he opens himself reads and writes it through the connector
   at `/mcp/<CBP_MCP_KEY>` (tools in `plus.ts`). `scripts/cbp-push.py` is retired.
