@@ -92,14 +92,16 @@ export async function writeBack(env: Env, brain: Brain, files: E.Files, day: str
   if (!brain.get || !brain.put) return;
   const from = (await meta(env, 'brain_back_day')) ?? E.plus(day, -2);
   const st = E.kwStatus(E.loadKw(files));
-  const want = [...st].filter(([, [s, d]]) => (s === 'K' || s === 'L') && E.cmp(d, from) >= 0).slice(0, 400);
+  // also every L inside its 14-day hold: if the extension marked it K, Plus's L goes back too (backPlan's `hold`)
+  const holdFrom = E.plus(day, -14), hold = new Set([...st].filter(([, [s, d]]) => s === 'L' && E.cmp(d, holdFrom) >= 0).map(([w]) => w));
+  const want = [...st].filter(([w, [s, d]]) => (s === 'K' || s === 'L') && (E.cmp(d, from) >= 0 || hold.has(w))).slice(0, 400);
   if (!want.length) return void (await setMeta(env, 'brain_back_day', day).run());
   // every 台/臺 form of each word: the extension keeps the dictionary's headword (臺北), Plus writes 台
   const forms = [...new Set(want.flatMap(([w]) => taiForms(w)))];
   const recs: Record<string, BrainWord | null> = {};
   for (let i = 0; i < forms.length; i += 400) Object.assign(recs, await brain.get(forms.slice(i, i + 400)));
   const lex = forms.length > want.length ? await lexicon(env as never).catch(() => null) : null;
-  const plan = backPlan(want, recs, E.kwTimes(files));
+  const plan = backPlan(want, recs, E.kwTimes(files), hold);
   const q = E.loadQueue(files);
   const out: BrainWord[] = plan.map(({ w, status, rec }) => {
     if (rec) return { ...rec, s: status, updated: now, hist: [...(rec.hist ?? []), { t: now, s: status }] };

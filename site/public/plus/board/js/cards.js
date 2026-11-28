@@ -110,7 +110,7 @@ function parseCard(t){
     if(/^(char|part|sub)$/.test(k)&&f[0]){const g=/^(\S+?)\s*(\(.*\)|（.*）|\s.+)$/.exec(f[0].trim());if(g){f[0]=g[1];f[1]=((f[1]||'')+' '+g[2].trim()).trim();}}
     if(k==='word'||k==='pinyin'||k==='meaning'||k==='story'||k==='hook'){c[k]=v;last={o:c,k};}
     // Chinese | English (from 2026-11-26: the pinyin comes from code), or Chinese | pinyin | English (older cards)
-    else if(k==='mine'||k==='ex'){const s=f.length>2?{zh:f[0]||'',py:f[1]||'',en:f.slice(2).join(' | ')}:{zh:f[0]||'',py:'',en:f[1]||''};c[k].push(s);last={o:s,k:'en'};}
+    else if(k==='mine'||k==='ex'){const s=f.length>2?{zh:zhPunct(f[0]),py:f[1]||'',en:f.slice(2).join(' | ')}:{zh:zhPunct(f[0]),py:'',en:f[1]||''};c[k].push(s);last={o:s,k:'en'};}
     else if(k==='char'){const x={c:f[0]||'',m:f.slice(1).join(' | '),parts:[],logic:''};c.chars.push(x);last={o:x,k:'m'};}
     else if(k==='part'&&ch){const ask=/^ask$/i.test(f[f.length-1]||'')&&f.length>2;const x={c:f[0]||'',m:(ask?f.slice(1,-1):f.slice(1)).join(' | '),ask,subs:[]};ch.parts.push(x);last={o:x,k:'m'};}
     else if(k==='sub'&&pt){const x={c:f[0]||'',m:f.slice(1).join(' | ')};pt.subs.push(x);last={o:x,k:'m'};}
@@ -121,6 +121,13 @@ function parseCard(t){
   return c;
 }
 const inl=s=>zh(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
+/* Chinese takes full-width punctuation. The model slips into , ? ! : ; often enough that code puts it right: a mark
+   touching a Chinese character becomes its full-width one, and a . after one becomes 。 (3:30 and English stay as they are). */
+const ZHP={',':'，','?':'？','!':'！',':':'：',';':'；'}, HAN='[\u3400-\u9fff\u3000-\u303f\uff00-\uffef]';
+const zhPunct=s=>String(s||'')
+  .replace(new RegExp(`(${HAN})\\s*([,?!:;])\\s*`,'g'),(m,a,p)=>a+ZHP[p])
+  .replace(new RegExp(`\\s*([,?!:;])\\s*(?=${HAN})`,'g'),(m,p)=>ZHP[p])
+  .replace(new RegExp(`(${HAN})\\.(?=\\s|$|${HAN})`,'g'),'$1。');
 
 /* ---------- writing a card ---------- */
 async function makeCard(word,src,opt={}){
@@ -243,7 +250,7 @@ async function writeAhead(){
 
 /* ---------- the Cards page (its own page from 2026-11-22; a window over the board before) ----------
    The word tabs on top: every card waiting to be carded (CD_words), with "Any word" beside them. ‹ › (or ← →) walk the
-   tabs, writing nothing; Enter writes a card not written yet and cards a written one (then the next tab comes up).
+   tabs, writing nothing ("Any word" sits at the right, by the arrows, wherever the tabs end); Enter writes a card not written yet and cards a written one (then the next tab comes up).
    Under the tabs the card, read top to bottom in the order he uses it: the word, the sentences, the characters with
    their stories, what's worth knowing, his follow-ups. Beside it on the right, .cd-side: room for the card he adds
    (Chinese Brain Plus puts its editor there; on claude.ai it stays empty and the card takes the width). */
@@ -251,8 +258,8 @@ const CD_EL=document.createElement('div');
 CD_EL.className='cd-page';
 CD_EL.innerHTML=`<div class="cd-bar">
     <div class="cd-tabs" role="tablist" aria-label="Cards waiting"></div>
-    <form class="cd-anyw"><input type="text" autocomplete="off" lang="zh-Hant" aria-label="Card any word" placeholder="Any word"></form>
     <span class="cd-sp"></span>
+    <form class="cd-anyw"><input type="text" autocomplete="off" lang="zh-Hant" aria-label="Card any word" placeholder="Any word"></form>
     <span class="cd-nav"><button type="button" class="cd-ib" data-act="prev" aria-label="Previous card (←)">‹</button><button type="button" class="cd-ib" data-act="next" aria-label="Next card (→)">›</button></span>
     <a class="cd-btn cd-img" data-act="img" target="_blank" rel="noopener">Images</a>
     <button type="button" class="cd-btn cd-done" data-act="carded" data-cardit></button>
@@ -304,7 +311,8 @@ function charsHTML(c,word,d){
       ${ch.logic?`<p class="cd-logic">${inl(ch.logic)}</p>`:''}</div>`;}).join('');
 }
 // an exchange (A：… B：…) gets one line per speaker, in all three rows
-const turnsOf=s=>String(s||'').split(/\s+(?=B\s*[：:])/);
+// Chinese has no space before "B：", so the turn starts wherever B： does (not inside an English word)
+const turnsOf=s=>String(s||'').split(/\s*(?<![A-Za-z0-9])(?=B\s*[：:])/);
 function sentHTML(list,cls,w){
   return list.map((s,n)=>{
     const key=cls+n+':'+w, on=CD.py.has(key);
@@ -401,19 +409,10 @@ function CD_tabs(){
   return [...CD.hist.filter(x=>!L.includes(x)),...L];
 }
 const CD_past=w=>CD.back>=0&&CD.hist.includes(w)&&!CD_words().includes(w);
-function CD_left(){
-  if(CD.back<0){
-    const h=CD.hist.filter(x=>x!==CD.cur); if(!h.length){CD_step(-1);return;}
-    CD.hist=h; CD.home=CD.cur; CD.back=h.length-1;
-  }else if(CD.back>0) CD.back--;
-  else return;
-  clearTimeout(CD.advT); CD.cur=CD.hist[CD.back]; CD_paintAll(); sfx('tap');
-}
-function CD_right(){
-  if(CD.back<0){CD_step(1);return;}
-  const home=CD.home; CD.back=-1; CD.home=null;
-  const L=CD_words(); CD.cur=home&&L.includes(home)?home:(L[0]||home); CD_paintAll(); sfx('tap');
-}
+// ← → are the tab to the left and right, as he sees them (2026-11-28: the walk back through the last three words got
+// stuck and jumped to tabs he couldn't see; the browser's Back does that job now, each word being its own address)
+function CD_left(){CD_step(-1);}
+function CD_right(){CD_step(1);}
 // why Claude added a second card: from the card it came with
 function CD_whyFor(w){
   const d=cardOf(w)||{}, pw=d.parent||(CD_words().find(x=>x!==w&&CD_kids(x).includes(w)));
@@ -450,9 +449,9 @@ function CD_paintAll(){
   CD_tabEdges();
   const img=CD_EL.querySelector('[data-act="img"]'); img.href=imgURL(w);
   const done=CD_EL.querySelector('.cd-done'); done.setAttribute('aria-pressed',String(!!d.carded)); done.textContent=d.carded?'Carded':'Card it'; done.disabled=!d.text;
-  CD_EL.querySelector('[data-act="prev"]').disabled=CD.back<0?at<=0&&!CD.hist.some(x=>x!==w):CD.back===0;
-  CD_EL.querySelector('[data-act="next"]').disabled=CD.back<0&&(at<0||at>=words.length-1);
-  CD_EL.querySelector('.cd-nav').hidden=words.length<2&&!CD.hist.some(x=>x!==w);
+  CD_EL.querySelector('[data-act="prev"]').disabled=at<=0;
+  CD_EL.querySelector('[data-act="next"]').disabled=at<0||at>=words.length-1;
+  CD_EL.querySelector('.cd-nav').hidden=words.length<2;
   CD_EL.querySelector('.cd-side').hidden=!CD_EL.querySelector('.cd-side').children.length;
   const q=CD_EL.querySelector('.cd-q'), send=CD_EL.querySelector('.cd-send');
   q.placeholder='Ask about '+w; q.disabled=send.disabled=!d.text||!!b;
@@ -557,8 +556,9 @@ function CD_step(dir){
   addEventListener('pointerup',up); addEventListener('pointercancel',e=>{if(g&&e.pointerId===g.id){g=null;set(0,'translate .3s ease');}});
 })();
 // Card it (the button or Enter): stamped, confetti, a toast with Undo; a moment later the next tab comes up
-function CD_cardIt(){
-  const w=CD.cur, d=cardOf(w); if(!d||!d.text) return;
+// the word it cards is the one asked for: Add saves first, and he may be on another tab by the time it lands
+function CD_cardIt(word){
+  const w=word||CD.cur, d=cardOf(w); if(!d||!d.text) return;
   const on=!d.carded; setCarded(w,on);
   if(!on){sfx('unstamp');return;}
   sfx('stamp-known');

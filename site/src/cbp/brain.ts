@@ -50,13 +50,15 @@ type Rec = { w: string; s: string; added?: number; updated: number; hist?: { t: 
 /** Which of Plus's K/L words go back to his account, and onto which record (null: none in any 台/臺 form, a new
  *  one). The newer change wins per word: Plus's change at its time (`times`, ms) when it has one, else from the start
  *  of the day it set it in Taipei; his own status change later than that stays. */
-export function backPlan<T extends Rec>(want: [string, [string, string]][], recs: Record<string, T | null | undefined>, times: Record<string, number>) {
+/** `hold`: the words Plus keeps at L for now though the extension says K (engine.ts merge, the 14-day rule): Plus's L goes
+ *  back even when the extension's mark is newer, so both sides show the same thing (his call, 2026-11-28). */
+export function backPlan<T extends Rec>(want: [string, [string, string]][], recs: Record<string, T | null | undefined>, times: Record<string, number>, hold: Set<string> = new Set()) {
   const out: { w: string; status: 'known' | 'learning'; rec: T | null }[] = [];
   for (const [w, [s, d]] of want) {
     const status = s === 'K' ? 'known' : 'learning';
     const rec = pickRecord(w, recs);
     const at = times[w] ?? Date.parse(d + 'T00:00:00+08:00');
-    if (rec && (rec.s === status || statusAt(rec) >= at)) continue;
+    if (rec && (rec.s === status || (statusAt(rec) >= at && !(status === 'learning' && hold.has(w))))) continue;
     out.push({ w, status, rec });
   }
   return out;

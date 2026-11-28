@@ -148,3 +148,10 @@ test('E4: the brain cursor moves only when the merge was written', async () => {
   assert.equal(cursorMayAdvance(['board/cardkit']), true);
   assert.equal(cursorMayAdvance(['imported/chinese-brain-2026-11-28.tsv']), false);
 });
+
+test('a word held at L (the 14-day rule) sends its L back even when the extension marked K later', () => {
+  const ext = { w: '表示', s: 'known', updated: Date.parse('2026-11-27T12:00:00+08:00'), hist: [{ t: Date.parse('2026-11-27T12:00:00+08:00'), s: 'known' }] };
+  const want: [string, [string, string]][] = [['表示', ['L', '2026-11-20']]];
+  assert.deepEqual(backPlan(want, { 表示: ext as never }, {}), []); // without the hold, the newer K wins
+  assert.deepEqual(backPlan(want, { 表示: ext as never }, {}, new Set(['表示'])).map((x) => x.status), ['learning']);
+});

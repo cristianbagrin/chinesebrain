@@ -133,16 +133,11 @@
     // the first card takes the study card's first sentence; another card the first one no card of the word has yet
     const c = parseCard(d.text), used = new Set(notesOf(w).map((x) => plain(RV.notes[noteId(w, x)].chinese || '')));
     // Combine (the Reviews tab, key "A、B"): the card teaches one word, the harder of the two for him (CBP_learn,
-    // review/main.ts); its Word is that word, and its Sentence both example sentences (each uses both words) with only
-    // that word marked
+    // review/main.ts); its Word is that word, its Sentence one example (each uses both words; 2026-11-28: one, not both),
+    // only that word marked; the other example is the next card's
     const pair = String(w).split('、'), learn = pair.length > 1 ? pairWord(w, c, pair) : '';
     const ww = learn || c.word || w;
     let s = [...c.mine, ...c.ex].map((x) => fromSentence(x, ww)).find((x) => !used.has(plain(x.chinese))) || { chinese: '', py: '' };
-    const both = c.ex.length ? c.ex : c.mine;
-    if (learn && both.length > 1 && !used.size) {
-      const ss = both.map((x) => fromSentence(x, learn));
-      s = { chinese: ss.map((x) => x.chinese).join('<br>'), py: ss.map((x) => x.py).join('\n') };
-    }
     // a card whose sentences came without pinyin: none here (only "- " left), so Add asks for it (pinyinOf)
     if (!/\p{L}/u.test(s.py || '')) s.py = '';
     const st = { n: k, chinese: s.chinese, word: esc(ww), mnemonic: '', type: 'Chinese', picture: '', notes: '', audio: '', audioFor: '', py: s.py, pyFor: s.py ? plain(s.chinese) : '', saved: false };
@@ -588,7 +583,7 @@
     if (!w || RV.saving || !state(w)) return;
     const d = cardOf(w), first = !cardCarded(w) && !!(d && d.text);
     if (!(await save(w))) return;
-    if (first) cardIt(); // stamped, confetti, Undo; it brings the next word up by itself
+    if (first) cardIt(w); // stamped, confetti, Undo; it brings the next word up by itself (the saved word, not the tab he's on now)
     else sfx('save');
     if (stay) {
       clearTimeout(CD.advT);
