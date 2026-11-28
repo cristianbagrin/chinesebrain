@@ -7,7 +7,7 @@ import { plan, anchor, essayToday } from '../site/src/cbp/essays.ts';
 
 const T = (s: string) => Date.parse(s);
 
-test('export: status changes after `since`, with what each word was before', () => {
+test('export: statuses unlike Plus\'s, with the status Plus had', () => {
   const since = T('2026-11-19T07:33:00Z');
   const items = [
     { k: 'w:麻煩', v: { w: '麻煩', s: 'learning', p: 'Má fan', g: 'trouble', updated: T('2026-11-21T03:00:00Z'), hist: [{ t: T('2026-10-01T00:00:00Z'), s: 'fresh' }, { t: T('2026-11-21T03:00:00Z'), s: 'learning' }], ctx: [] } },
@@ -20,10 +20,10 @@ test('export: status changes after `since`, with what each word was before', () 
   const [rows] = readExport(text);
   assert.equal(count, 4);
   const by = Object.fromEntries(rows.map((r) => [r.word, r]));
-  assert.deepEqual([by['麻煩'].now, by['麻煩'].was, by['麻煩'].pinyin], ['L', 'F', 'má fan']);
+  assert.deepEqual([by['麻煩'].now, by['麻煩'].was, by['麻煩'].pinyin], ['L', '-', 'má fan']);
   assert.deepEqual([by['來回'].now, by['來回'].was, by['來回'].date], ['K', '-', '2026-11-23']); // 00:30 in Taipei
   assert.deepEqual([by['不見'].now, by['不見'].was], ['-', 'K']);
-  assert.deepEqual([by['看'].now, by['看'].was, by['看'].saved], ['K', 'K', '我看一下 — let me see']);
+  assert.deepEqual([by['看'].now, by['看'].was, by['看'].saved], ['K', '-', '我看一下 — let me see']); // K there, not in Plus's list
 });
 
 test('a card carded after midnight belongs to the evening before (4 am, his time)', () => {
